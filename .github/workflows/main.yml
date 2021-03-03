@@ -1,0 +1,85 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Build documentation
+
+# Controls when the action will run.
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches: [ main ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+
+    - uses: actions/checkout@v1
+
+    - name: "Prep anaconda"
+      run: echo "ACTIONS_ALLOW_UNSECURE_COMMANDS=true" >> $GITHUB_ENV
+
+# Dependencies may need to be installed via conda instead, since pyemma at least doesn't like pip
+#     - uses: goanpeca/setup-miniconda@v1
+    - uses: conda-incubator/setup-miniconda@v2
+      with:
+          activate-environment: test_env
+          environment-file: environment.yml
+          python-version: 3.6
+          auto-activate-base: false
+
+    - name: "Finish prepping anaconda"
+      run: echo "ACTIONS_ALLOW_UNSECURE_COMMANDS=false" >> $GITHUB_ENV
+
+    # Standard drop-in approach that should work for most people.
+#     - uses: ammaraskar/sphinx-action@master
+#       with:
+#         docs-folder: "docs/"
+    # Example of using a custom build-command.
+#     - uses: ammaraskar/sphinx-action@master
+#       with:
+#         # conda setup requires this special shell
+#         shell: bash -l {0}
+#         pre-build-command: "python -m pip install sphinx_rtd_theme && source ~/.bash_profile && conda activate test_env" # See if this fixes numpy not loading
+#         build-command: "sphinx-build -b html source build"
+#         docs-folder: "docs/"
+
+    - name: "Install sphinx"
+      run: "sudo apt-get update -y && sudo apt-get install python3-sphinx"
+
+    - name: "Render with sphinx"
+      shell: bash -l {0}
+      run: "cd docs && sphinx-build -b html . build && cd .. "
+
+
+
+    # Publish built docs to gh-pages branch.
+    # ===============================
+    - name: Commit documentation changes
+      run: |
+        git clone https://github.com/jdrusso/msm_we.git --branch gh-pages --single-branch gh-pages
+        cp -r docs/build/* gh-pages/
+        cd gh-pages
+        touch .nojekyll
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git commit -m "Update documentation" -a || true
+        # The above command will fail if no changes were present, so we ignore
+        # that.
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        branch: gh-pages
+        directory: gh-pages
+        github_token: ${{ secrets.GITHUB_TOKEN }}
