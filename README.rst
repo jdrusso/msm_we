@@ -9,10 +9,7 @@ msm_we
 .. image:: https://img.shields.io/travis/jdrusso/msm_we.svg
         :target: https://travis-ci.com/jdrusso/msm_we
 
-.. image:: https://readthedocs.org/projects/msm-we/badge/?version=latest
-        :target: https://msm-we.readthedocs.io/en/latest/?badge=latest
-        :alt: Documentation Status
-
+[![Documentation status](https://github.com/jdrusso/msm_we/actions/workflows/main.yml/badge.svg?branch=documentation)](https://github.com/jdrusso/msmWE/actions/workflows/main.yml)
 
 
 
