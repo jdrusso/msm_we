@@ -9,7 +9,7 @@ This means that a history label can be assigned to every trajectory.
 
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
 
    readme
