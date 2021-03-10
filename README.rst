@@ -10,7 +10,7 @@ Code for Markov state modeling of weighted ensemble trajectories.
 
 
 * Free software: MIT license
-* Documentation: https://msm-we.readthedocs.io.
+* Documentation: https://jdrusso.github.io/msm_we/ .
 
 
 Features
