@@ -5,4 +5,4 @@ History
 0.1.0 (2021-03-02)
 ------------------
 
-* First release on PyPI.
+* Initial pre-release of existing code in restructured repo

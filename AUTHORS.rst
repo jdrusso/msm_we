@@ -2,10 +2,11 @@
 Credits
 =======
 
-Development Lead
+Development
 ----------------
 
 * John Russo <russojd@ohsu.edu>
+* Jeremy Copperman
 
 Contributors
 ------------
