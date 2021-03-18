@@ -89,7 +89,7 @@ class modelWE:
 
     """
 
-    def initialize(self, fileSpecifier, refPDBfile, initPDBfile, modelName):
+    def initialize(self, fileSpecifier : str, refPDBfile : str, initPDBfile : str, modelName : str):
         """
         Initialize the model-builder.
 
@@ -204,7 +204,7 @@ class modelWE:
         isTarget = pcoords[:, 0] < self.WEtargetp1
         return isTarget
 
-    def get_iter_data(self, n_iter):
+    def get_iter_data(self, n_iter: int):
         """
         Find the data corresponding to an iteration and update the object's fields with it.
 
@@ -282,17 +282,26 @@ class modelWE:
 
     def get_iterations(self):
         """
+        Updates internal state with the maximum number of iterations, and the number of segments in each section.
 
+        Note
+        ----
+        This updates :code:`numSegments` -- :code:`numSegments` is actually a *list* of the number of segments in each iteration.
         """
+
         numFiles = np.array([])
         numSegments = np.array([])
         iterationList = np.array([])
         nSeg = 1
         n_iter = 1
+
+        # Loop over nSegs
+        # TODO: Not sure I understand the logic in this loop
         while nSeg > 0:
             nSeg = 0
 
             # Iterate through each filename in fileList, and see if it contains the iteration we're looking for
+            # TODO: This loop is pretty common, this should be refactored into a find_iteration() or something
             for iF in range(self.nF):
                 fileName = self.fileList[iF]
                 try:
@@ -317,11 +326,24 @@ class modelWE:
                     "Iteration " + str(n_iter) + " has " + str(nSeg) + " segments...\n"
                 )
 
+
             n_iter = n_iter + 1
+
+        # Warning: These are not defined until this is run for the first time
         self.numSegments = numSegments
         self.maxIter = numSegments.size
 
-    def get_iterations_iters(self, first_iter, last_iter):
+    def get_iterations_iters(self, first_iter: int, last_iter: int):
+        """
+        Updates internal state with the maximum number of iterations, and the number of segments in each section.
+
+        Warning
+        ----
+        This is potentially deprecated or unnecessary. Currently unused.
+
+        """
+
+
         numFiles = np.array([])
         numSegments = np.array([])
         iterationList = np.array([])
@@ -353,6 +375,14 @@ class modelWE:
         self.maxIter = last_iter
 
     def set_topology(self, PDBfile):
+        """
+        Updates internal state with a new topology.
+
+        Parameters
+        ----------
+        PDBfile : str
+            Path to a file containing the PDB with the topology.
+        """
         if PDBfile[-3:] == "dat":
             self.reference_coord = np.loadtxt(PDBfile)
             self.nAtoms = 1
@@ -363,6 +393,16 @@ class modelWE:
             self.nAtoms = struct.topology.n_atoms
 
     def set_basis(self, PDBfile):
+        """
+        Updates internal state with a new basis.
+
+        Parameters
+        ----------
+        PDBfile : str
+            Path to a file containing the PDB with the new basis state.
+        """
+
+
         if PDBfile[-3:] == "dat":
             self.basis_coords = np.loadtxt(PDBfile)
         elif PDBfile[-3:] == "pdb":
@@ -372,7 +412,9 @@ class modelWE:
 
     def get_transition_data(
         self, n_lag
-    ):  # get segment history data at lag time n_lag from current iter
+    ):
+
+        # get segment history data at lag time n_lag from current iter
         if n_lag > self.n_iter:
             sys.stdout.write(
                 "too much lag for iter... n_lag reduced to: " + str(self.n_iter) + "\n"
