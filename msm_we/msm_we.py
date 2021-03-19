@@ -9,6 +9,9 @@ import subprocess
 import h5py
 from scipy.sparse import coo_matrix
 
+import logging
+log = logging.getLogger('msm_we')
+
 # sys.path.append(os.environ["WEST_ROOT"]+'/src')
 # sys.path.append(os.environ["WEST_ROOT"]+'/lib/west_tools')
 # sys.path.append(os.environ["WEST_ROOT"]+'/src/west')
@@ -69,6 +72,15 @@ class modelWE:
 
             **TODO**: This is the STRING "none", *NOT* a NoneType object.
 
+        segindList: list
+            List of segment indices.
+
+            **TODO**: This is a pretty unsatisfying description
+
+
+        n_hist: int
+            Number of steps of history information to use when building transitions
+
 
 
     Danger
@@ -77,8 +89,9 @@ class modelWE:
 
     Todo
     ----
-    In general, this class's methods generally handle data by holding state in the object. I think in general this
-    would benefit from a refactor to be more stateless, rather than shifting things in and out of the object's fields.
+    Stateless refactor
+        In general, this class's methods generally handle data by holding state in the object. I think in general this
+        would benefit from a refactor to be more stateless, rather than shifting things in and out of the object's fields.
 
 
     References
@@ -89,7 +102,9 @@ class modelWE:
 
     """
 
-    def initialize(self, fileSpecifier : str, refPDBfile : str, initPDBfile : str, modelName : str):
+    def initialize(
+        self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
+    ):
         """
         Initialize the model-builder.
 
@@ -114,13 +129,16 @@ class modelWE:
         modelName : string
             Name to use in output filenames.
 
+        Returns
+        -------
+        None
+
 
         Todo
         ----
         Some of this logic should be broken into a constructor, and default arguments handled in the constructor's
         function signature.
         """
-
 
         self.modelName = modelName
         pCommand = "ls " + fileSpecifier
@@ -221,6 +239,10 @@ class modelWE:
         n_iter : int
             Iteration to get data for.
 
+        Returns
+        -------
+        None
+
         Todo
         ----
         May want to rework the logic here, depending on how this is used.
@@ -256,7 +278,9 @@ class modelWE:
 
                     # Iterate over segments in this dataset
                     for iS in range(nS):
-                        # if np.sum(pcoord[iS,self.pcoord_len-1,:])==0.0: #intentionally using this to write in dummy pcoords, this is a good thing to have for post-analysis though!
+                        # if np.sum(pcoord[iS,self.pcoord_len-1,:])==0.0:
+                        # # intentionally using this to write in dummy pcoords,
+                        # # this is a good thing to have for post-analysis though!
                         #    raise ValueError('Sum pcoord is 0, probably middle of WE iteration, not using iteration') f
                         westList = np.append(westList, iF)
                         segindList = np.append(segindList, iS)
@@ -274,7 +298,10 @@ class modelWE:
             except:
                 sys.stdout.write("error in " + fileName + str(sys.exc_info()[0]) + "\n")
         self.westList = westList.astype(int)
+
+        # This is a list of the segment indices
         self.segindList = segindList.astype(int)
+
         self.weightList = weightList
         self.nSeg = nSeg
         self.pcoord0List = pcoord0List
@@ -287,6 +314,10 @@ class modelWE:
         Note
         ----
         This updates :code:`numSegments` -- :code:`numSegments` is actually a *list* of the number of segments in each iteration.
+
+        Returns
+        -------
+        None
         """
 
         numFiles = np.array([])
@@ -326,7 +357,6 @@ class modelWE:
                     "Iteration " + str(n_iter) + " has " + str(nSeg) + " segments...\n"
                 )
 
-
             n_iter = n_iter + 1
 
         # Warning: These are not defined until this is run for the first time
@@ -337,12 +367,20 @@ class modelWE:
         """
         Updates internal state with the maximum number of iterations, and the number of segments in each section.
 
+        Parameters
+        ----------
+        first_iter : int
+        last_iter : int
+
+        Returns
+        -------
+        None
+
         Warning
         ----
         This is potentially deprecated or unnecessary. Currently unused.
 
         """
-
 
         numFiles = np.array([])
         numSegments = np.array([])
@@ -382,6 +420,10 @@ class modelWE:
         ----------
         PDBfile : str
             Path to a file containing the PDB with the topology.
+
+        Returns
+        -------
+        None
         """
         if PDBfile[-3:] == "dat":
             self.reference_coord = np.loadtxt(PDBfile)
@@ -400,8 +442,11 @@ class modelWE:
         ----------
         PDBfile : str
             Path to a file containing the PDB with the new basis state.
-        """
 
+        Returns
+        -------
+        None
+        """
 
         if PDBfile[-3:] == "dat":
             self.basis_coords = np.loadtxt(PDBfile)
@@ -410,9 +455,22 @@ class modelWE:
             self.basis_structure = struct
             self.basis_coords = np.squeeze(struct._xyz)
 
-    def get_transition_data(
-        self, n_lag
-    ):
+    def get_transition_data(self, n_lag):
+        """
+        This function analyzes pairs of coordinates at the current iteration, set by :code:`self.n_iter`, and at some
+            lag in the past, :code:`self.n_iter - n_lag`.
+
+        Segments where a walker was warped (recycled) use the basis coords as the lagged coords.
+
+        Parameters
+        ----------
+        n_lag : int
+            Lag to use for transitions.
+
+        Returns
+        -------
+        None
+        """
 
         # get segment history data at lag time n_lag from current iter
         if n_lag > self.n_iter:
@@ -423,16 +481,34 @@ class modelWE:
         if n_lag >= self.n_hist:
             sys.stdout.write("too much lag for stored history... recalculating...\n")
             self.get_seg_histories(n_lag)
+
         self.n_lag = n_lag
         segindList_lagged = self.seg_histories[:, n_lag]
+
+        # TODO: What exactly is this a list of?
         warpList = self.seg_histories[:, 0:n_lag]  # check for warps
         warpList = np.sum(warpList < 0, 1)
+
+        # Get the weights for the lagged and current iterations
+        # If something was split/merged between n_iter and n_iter-n_lag , then the weights may have changed, so
+        #   check a particular segment's weight.
+        # TODO: Does this effectively get the parent weight if it was split from something else? Then weight_histories
+        #    would need to be tracking parents/children
         weightList_lagged = self.weight_histories[:, n_lag]
+        # TODO: Does this copy need to be made?
         weightList = self.weightList
+
+        # This will become a list of (lagged iter coord, current iter coord)
         coordPairList = np.zeros((self.nSeg, self.nAtoms, 3, 2))
+
         prewarpedStructures = np.zeros((self.nSeg, self.nAtoms, 3))
         nWarped = 0
+
+        # Go through each segment, and get pairs of coordinates at current iter (n_iter) and
+        # lagged iter (n_iter-n_lag)
         for iS in range(self.nSeg):
+            # FIXME: Try statements should encompass the smallest amount of code
+            #  possible - anything could be tripping this
             try:
                 if iS == 0:
                     westFile = self.fileList[self.westList[iS]]
@@ -446,46 +522,80 @@ class modelWE:
                     dset = dataIn[dsetName]
                     coords_lagged = dset[:]
                 elif self.westList[iS] != self.westList[iS - 1]:
+                    # FIXME: I think you can just move this close to an if statement in the beginning, and then remove
+                    #   this whole if/elif. Everything after that close() seems to be duplicated.
                     dataIn.close()
                     westFile = self.fileList[self.westList[iS]]
                     dataIn = h5py.File(westFile, "r")
+
+                    # Load the data for the current iteration
                     dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
                     dset = dataIn[dsetName]
                     coords_current = dset[:]
+
+                    # Load the lagged data for (iteration - n_lag)
                     dsetName = "/iterations/iter_%08d/auxdata/coord" % int(
                         self.n_iter - n_lag
                     )
                     dset = dataIn[dsetName]
                     coords_lagged = dset[:]
+
                 coordPairList[iS, :, :, 1] = coords_current[
                     self.segindList[iS], 1, :, :
                 ]
+
+                # If this segment has no warps, then add the lagged coordinates
+                # TODO: What is coordPairList?
                 if warpList[iS] == 0:
                     coordPairList[iS, :, :, 0] = coords_lagged[
                         segindList_lagged[iS], 0, :, :
                     ]
+
+                # If something was recycled during this segment, then instead of using the lagged cooordinates,
+                #   just use the basis coords.
+                # But, also save the original structure before the warp!
                 elif warpList[iS] > 0:
+
+                    # St
                     prewarpedStructures[nWarped, :, :] = coords_lagged[
                         segindList_lagged[iS], 0, :, :
                     ]
                     coordPairList[iS, :, :, 0] = self.basis_coords
                     nWarped = nWarped + 1
-            except:
+
+            # TODO: What triggers this? When that critical log hits, come update this comment and the main docstring.
+            except Exception as e:
+                log.critical("Document whatever's causing this exception!")
+                log.warning(e)
                 weightList_lagged[iS] = 0.0
                 weightList[
                     iS
                 ] = 0.0  # set transitions without structures to zero weight
+
+        # Squeeze removes axes of length 1 -- this helps with np.where returning nested lists of indices
+        # FIXME: is any of this necessary? This kinda seems like it could be replaced with
+        #  something like indWarped = np.squeeze(np.where(warpList > 0)).astype(int)
         indWarped = np.squeeze(np.where(warpList > 0))
         indWarpedArray = np.empty(nWarped)
         indWarpedArray[0:nWarped] = indWarped
         indWarped = indWarpedArray.astype(int)
+
+        # Get the current and lagged weights
+        # This returns (the wrong? none at all?) weights for segments with warps, which is corrected below
         transitionWeights = weightList.copy()
         departureWeights = weightList_lagged.copy()
+
+        # Get correct weights for segments that warped
         for iW in range(nWarped):
+
+            # The coord pair here is (pre-warped structure, reference topology) instead of
+            #   (lagged struture, current structure)
             coordPair = np.zeros((1, self.nAtoms, 3, 2))
             coordPair[0, :, :, 0] = prewarpedStructures[iW, :, :]
             coordPair[0, :, :, 1] = self.reference_coord
             coordPairList = np.append(coordPairList, coordPair, axis=0)
+
+            # TODO: iterWarped appears to be the iteration the warp happened at
             iterWarped = np.squeeze(np.where(self.seg_histories[indWarped[iW], :] < 0))
             try:
                 nW = np.shape(iterWarped)
@@ -638,6 +748,19 @@ class modelWE:
         self.JdirectTimes = JdirectTimes
 
     def get_seg_histories(self, n_hist):
+        """
+
+        Parameters
+        ----------
+        n_hist : int
+            Number of steps of history information to include.
+
+        Returns
+        -------
+        None
+
+        """
+
         if n_hist > self.n_iter:
             sys.stdout.write(
                 "we have too much history... n_hist reduced to: "
@@ -645,10 +768,18 @@ class modelWE:
                 + "\n"
             )
             n_hist = self.n_iter
+
+        # FIXME: The only other place this is used is in get_transition_data(). May need to see how it's handled there
+        #   i.e. make sure it's initialized
         self.n_hist = n_hist
+
         seg_histories = np.zeros((self.nSeg, self.n_hist + 1))
         weight_histories = np.zeros((self.nSeg, self.n_hist))
+
+        # Loop over all segments
         for iS in range(self.nSeg):
+
+            # Print a message every 100 segments
             if iS % 100 == 0:
                 sys.stdout.write(
                     "        getting history for iteration "
@@ -657,17 +788,27 @@ class modelWE:
                     + str(iS)
                     + "...\n"
                 )
+
+            # Open the relevant datafile for reading
             if iS == 0:
                 westFile = self.fileList[self.westList[iS]]
                 dataIn = h5py.File(westFile, "r")
             elif self.westList[iS] != self.westList[iS - 1]:
+                # If you're past the 0th segment, then close the previous file.
+                # FIXME: Close the file after finished working with it, at the *end* of the loop. As-is, the last loop
+                #       leaves the file open.
                 dataIn.close()
                 westFile = self.fileList[self.westList[iS]]
                 dataIn = h5py.File(westFile, "r")
+
             seg_histories[iS, 0] = self.segindList[iS]
             warped = 0
+
+            # Iterate over history lengths from 1 to n_hist
             for iH in range(1, self.n_hist + 1):
+
                 indCurrentSeg = seg_histories[iS, iH - 1]
+
                 if indCurrentSeg < 0 and warped == 0:
                     sys.stdout.write(
                         "Segment "
@@ -675,13 +816,16 @@ class modelWE:
                         + " warped last iter: History must end NOW!\n"
                     )
                     warped = 1
+
                 elif indCurrentSeg >= 0 and warped == 0:
                     dsetName = "/iterations/iter_%08d/seg_index" % int(
                         self.n_iter - iH + 1
                     )
+
                     dset = dataIn[dsetName]
                     seg_histories[iS, iH] = dset[indCurrentSeg][1]
                     weight_histories[iS, iH - 1] = dset[indCurrentSeg][0]
+
                     if seg_histories[iS, iH] < 0:
                         sys.stdout.write(
                             "            segment "
@@ -692,7 +836,8 @@ class modelWE:
                         )
         self.seg_histories = seg_histories[:, :-1].astype(int)
         self.weight_histories = weight_histories
-        # weight histories and segment histories go in reverse order, so final current iter is first of 0 index
+        # FIXME:
+        #   weight histories and segment histories go in reverse order, so final current iter is first of 0 index
 
     def collect_iter_coordinates(self):  # grab coordinates from WE traj_segs folder
         nS = self.nSeg
