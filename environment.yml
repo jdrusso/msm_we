@@ -4,9 +4,9 @@ channels:
   - defaults
 dependencies:
 #  - python
-#  - numpy
-#  - h5py
-#  - matplotlib
-#  - mdtraj
-#  - pyemma
+ - numpy
+ - h5py
+ - matplotlib
+ - mdtraj
+ - pyemma
   - sphinx_rtd_theme
