@@ -109,7 +109,40 @@ class modelWE:
         Todo
         ----
         Most logic from initialize() should be moved in here.
+
+        Also, comment all of these here. Right now most of them have comments throughout the code.
         """
+
+        self.modelName = None
+        self.fileList = None
+        self.nF = None
+        self.pcoord_ndim = None
+        self.pcoord_len = None
+        self.tau = None
+
+        self.WEtargetp1 = None
+        self.WEbasisp1_min = None
+        self.WEbasisp1_max = None
+        self.dimReduceMethod = None
+
+        self.vamp_lag = None
+        self.vamp_dim = None
+        self.nB = None
+        self.nW = None
+        self.min_walkers = None
+        self.binMethod = None
+        self.allocationMethod = None
+
+        self.coordsExist = None
+
+        self.westList = None
+
+        # This is a list of the segment indices
+        self.segindList = None
+        self.weightList = None
+        self.nSeg = None
+        self.pcoord0List = None
+        self.pcoord1List = None
 
         self.coordPairList = None
         self.transitionWeights = None
