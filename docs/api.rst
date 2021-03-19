@@ -5,7 +5,7 @@ API Reference
 
 .. autosummary::
    :nosignatures:
-   :toctree: stubs
+   :toctree: build/stubs
 
    msm_we.msm_we.modelWE
 
