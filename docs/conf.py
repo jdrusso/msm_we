@@ -31,7 +31,14 @@ import msm_we
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode', 'sphinx.ext.napoleon', 'sphinx.ext.todo']
+extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode', 'sphinx.ext.napoleon',
+              'sphinx.ext.todo', 'sphinx.ext.autosummary']
+autodoc_typehints = 'description'
+# autoclass_content = 'both'
+autodoc_member_order = 'bysource'
+
+# autodoc_default_flags = ['methods']
+autosummary_generate = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -47,7 +54,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'msm_we'
-copyright = "2021, John Russoz"
+copyright = "2021, John Russo"
 author = "John Russo, Jeremy Copperman"
 
 # The version info for the project you're documenting, acts as replacement
@@ -76,6 +83,7 @@ pygments_style = 'sphinx'
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
+todo_link_only = False
 
 
 # -- Options for HTML output -------------------------------------------
@@ -161,5 +169,12 @@ texinfo_documents = [
      'Miscellaneous'),
 ]
 
-
+# # -------- Document __init__ ------------
+# def skip(app, what, name, obj, would_skip, options):
+#     if name == "__init__":
+#         return False
+#     return would_skip
+#
+# def setup(app):
+#     app.connect("autodoc-skip-member", skip)
 
