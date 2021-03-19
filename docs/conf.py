@@ -178,3 +178,13 @@ texinfo_documents = [
 # def setup(app):
 #     app.connect("autodoc-skip-member", skip)
 
+
+# ------------- Custom field ---------------
+import docutils.nodes as n
+
+def run(self):
+    section = n.section(ids=n.make_id('the-html-anchor'))
+    section += n.title('Text', 'Text') # Just add the text twice
+    section += n.any_other_element_that_can_be_in_a_section()
+    sections = [section]
+    return sections
