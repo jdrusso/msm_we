@@ -69,13 +69,13 @@ jobs:
       run: |
         git clone https://github.com/jdrusso/msm_we.git --branch gh-pages --single-branch gh-pages
         cp -r docs/build/* gh-pages/
+        mkdir -p gh-pages/build
+        cp -r docs/build/stubs gh-pages/build
         cd gh-pages
         touch .nojekyll
-#        # -- Hacky! --
-#        # Need to do this because I'm putting stubs in a subdir
-#        mkdir -p build
-#        cp -r stubs build/stubs
-#        # ------------
+        mkdir -p build
+        cp -r stubs/* build/*
+        touch build/test_stub_placement
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add .

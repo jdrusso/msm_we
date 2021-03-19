@@ -1,6 +1,10 @@
 Welcome to msm_we's documentation!
 ======================================
 
+
+Test change
+
+
 This is a package for doing history-augmented MSM (haMSM) analysis on weighted ensemble trajectories.
 
 Weighted ensemble data produced from simulations with recycling boundary conditions are naturally in a directional
