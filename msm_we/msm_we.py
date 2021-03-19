@@ -102,6 +102,19 @@ class modelWE:
 
     """
 
+    def __init__(self):
+        """
+        Work-in-progress init function. For now, just start adding attribute definitions in here.
+
+        Todo
+        ----
+        Most logic from initialize() should be moved in here.
+        """
+
+        self.coordPairList = None
+        self.transitionWeights = None
+        self.departureWeights = None
+
     def initialize(
         self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
     ):
