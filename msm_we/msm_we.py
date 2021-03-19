@@ -41,51 +41,9 @@ class modelWE:
 
     Check out run_msmWE.slurm and run_msmWE_flux.py in scripts folder for an implementation example.
 
-    Attributes
-    ----------
-        modelName: str
-            Name used for storing files
-        fileList: list of str
-            List of all filenames containing data
-        nF: int
-            Number of files in fileList
-
-            **TODO:** Deprecate this, replace with a property that's just len(self.fileList)
-        pcoord_ndim: int
-            Number of dimensions in the progress coordinate
-        pcoord_len: int
-            Number of stored progress coordinates in each iteration, per-segment.
-        tau: float
-            Resampling time for weighted ensemble.
-
-            **TODO**: Units?
-        WEtargetp1: float
-            Progress coordinate value at target.
-
-            **TODO**: The 1 refers to the 1st progress coordinate, since this code assumes 1-D
-        WEbasisp1_min: float
-            Minimum progress coordinate value within the basis state.
-        WEbasisp1_max: float
-            Maximum progress coordinate value within the basis state.
-        dimReduceMethod: str
-            Dimensionality reduction method. Must be one of "pca", "vamp", or "none".
-
-            **TODO**: This is the STRING "none", *NOT* a NoneType object.
-
-        segindList: list
-            List of segment indices.
-
-            **TODO**: This is a pretty unsatisfying description
-
-
-        n_hist: int
-            Number of steps of history information to use when building transitions
-
-
-
     Danger
     -------
-    This code currently, in general, assumes a 1-D progress coordinate.
+    This code currently, in general, appears to assume a 1-D progress coordinate.
 
     Todo
     ----
@@ -108,28 +66,48 @@ class modelWE:
 
         Todo
         ----
-        Most logic from initialize() should be moved in here.
+        - Most logic from initialize() should be moved in here.
 
-        Also, comment all of these here. Right now most of them have comments throughout the code.
+        - Also, comment all of these here. Right now most of them have comments throughout the code.
+
+        - Reorganize these attributes into some meaningful structure
         """
 
         self.modelName = None
+        """str: Name used for storing files"""
         self.fileList = None
+        """list of str: List of all filenames with data"""
         self.nF = None
+        """int: Number of files in :code:`fileList`
+
+        **TODO**: Deprecate this, this could just be a property"""
+
+        self.n_lag = None
         self.pcoord_ndim = None
+        """int: Number of dimensions in the progress coordinate"""
         self.pcoord_len = None
+        """int: Number of stored progress coordinates for each iteration, per-segment."""
         self.tau = None
+        """float: Resampling time for weighted ensemble. (Maybe should be int? Units?)"""
 
         self.WEtargetp1 = None
+        """float: Progress coordinate value at target state."""
         self.WEbasisp1_min = None
+        """float: Minimum progress coordinate value within basis state."""
         self.WEbasisp1_max = None
+        """float: Maximum progress coordinate value within basis state."""
         self.dimReduceMethod = None
+        """str: Dimensionality reduction method. Must be one of "pca", "vamp", or "none" (**NOT** NoneType)"""
 
         self.vamp_lag = None
         self.vamp_dim = None
         self.nB = None
+
         self.nW = None
+
         self.min_walkers = None
+        """str: Test description for minwalkers"""
+
         self.binMethod = None
         self.allocationMethod = None
 
@@ -137,8 +115,19 @@ class modelWE:
 
         self.westList = None
 
-        # This is a list of the segment indices
+        self.reference_structure = None
+        self.reference_coord = None
+        self.basis_structure = None
+        # TODO: This is plural, reference_coord is singular. Intentional? Can you have multiple bases but 1 reference?
+        self.basis_coords = None
+        self.nAtoms = None
+
+        self.numSegments = None
+        self.maxIter = None
+
+        # TODO: Describe segindList better.
         self.segindList = None
+        """list: List of segment indices(?)"""
         self.weightList = None
         self.nSeg = None
         self.pcoord0List = None
@@ -147,6 +136,9 @@ class modelWE:
         self.coordPairList = None
         self.transitionWeights = None
         self.departureWeights = None
+
+        self.n_hist = None
+        """int: Number of steps of history information to use when building transitions."""
 
     def initialize(
         self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
@@ -220,6 +212,7 @@ class modelWE:
             self.get_iter_data(1)
             self.get_iter_coordinates0()
             self.coordsExist = True
+        # TODO: Handle this exception more specifically -- what's the error we expect?
         except:
             sys.stdout.write("problem getting coordinates \n")
             self.coordsExist = False
@@ -653,23 +646,46 @@ class modelWE:
                     + str(nW)
                     + " times\n"
                 )
-            except:
+            # TODO: What exception is this handling? Why would this be tripped?
+            except Exception as e:
+                log.critical(f"Exception was {e}")
+                log.critical("UPDATE THIS EXCEPTION HANDLER!")
+
                 sys.stdout.write(
                     "    segment " + str(indWarped[iW]) + " warped 1 time\n"
                 )
+
+            # The "current" weights are taken at the warp iteration, so the final pair of weights are
+            #   (the lagged weights, the weights at the warp)
             transitionWeights = np.append(
                 transitionWeights, self.weight_histories[indWarped[iW], iterWarped]
             )
             departureWeights = np.append(
                 departureWeights, self.weight_histories[indWarped[iW], n_lag]
             )
+
         self.coordPairList = coordPairList
         self.transitionWeights = transitionWeights
         self.departureWeights = departureWeights
 
     def get_transition_data_lag0(
         self,
-    ):  # get segment history data at lag time n_lag from current iter
+    ):
+        """
+        **TODO: What does this do exactly?**
+
+        Returns
+        -------
+        None
+
+
+
+        Todo
+        ----
+        How is this different from :code:`get_transition_data()`?
+        """
+
+        # get segment history data at lag time n_lag from current iter
         weightList = self.weightList
         coordPairList = np.zeros((self.nSeg, self.nAtoms, 3, 2))
         for iS in range(self.nSeg):
@@ -705,7 +721,23 @@ class modelWE:
 
     def get_warps_from_parent(
         self, first_iter, last_iter
-    ):  # get all warps and weights over set of iterations
+    ):
+        """
+        Get all warps and weights over a range of iterations.
+
+        Parameters
+        ----------
+        first_iter: int
+            First iteration in range.
+        last_iter: int
+            Last iteration in range.
+
+        Returns
+        -------
+        warpedWeights: list
+            List of weights for each warp.
+
+        """
         warpedWeights = []
         for iS in range(first_iter + 1, last_iter + 1):
             self.get_iter_data(iS + 1)
@@ -795,6 +827,7 @@ class modelWE:
 
     def get_seg_histories(self, n_hist):
         """
+        **TODO: What does this do exactly?**
 
         Parameters
         ----------
@@ -883,14 +916,27 @@ class modelWE:
         self.seg_histories = seg_histories[:, :-1].astype(int)
         self.weight_histories = weight_histories
         # FIXME:
-        #   weight histories and segment histories go in reverse order, so final current iter is first of 0 index
+        #   weight histories and segment histories go in reverse order,
+        #   so final current iter is first of 0 index
 
     def collect_iter_coordinates(self):  # grab coordinates from WE traj_segs folder
+        """
+        Goes through the generated trajectory segments, and adds data from the segments to an H5 file.
+
+        Returns
+        -------
+        None
+
+        Todo
+        ----
+        Generalize to different filetypes. This appears to be AMBER specific and relies on loading rst7 files
+        """
         nS = self.nSeg
         westFile = self.fileList[self.westList[0]]
         dataIn = h5py.File(westFile, "a")
         coords = np.zeros((0, 2, self.nAtoms, 3))
         for iS in range(self.nSeg):
+            # FIXME: Replace strings with Pathlib paths
             westFile = self.fileList[self.westList[iS]]
             WEfolder = westFile.replace("west.h5", "")
             trajpath = WEfolder + "traj_segs/%06d/%06d" % (self.n_iter, iS)
@@ -914,6 +960,7 @@ class modelWE:
                             self.n_iter
                         )
                         try:
+                            # TODO: Why exclude the last point?
                             dset = dataIn.create_dataset(
                                 dsetName, np.shape(coords[:-1, :, :, :])
                             )
@@ -926,6 +973,8 @@ class modelWE:
                             dset[:] = coords[:-1, :, :, :]
                             sys.stdout.write(
                                 "coords exist for iteration "
+                                # FIXME: This will always fail *within* the exception handler, since n_iter
+                                #   is not defined.
                                 + str(n_iter)
                                 + " overwritten\n"
                             )
@@ -933,6 +982,8 @@ class modelWE:
                         coords = np.zeros((0, 2, self.nAtoms, 3))
                         coords = np.append(coords, coordT, axis=0)
                         dataIn = h5py.File(westFile, "a")
+
+                    # If it's the last segment, don't exclude the last point (why?)
                     elif iS == nS - 1:
                         dsetName = "/iterations/iter_%08d/auxdata/coord" % int(
                             self.n_iter
