@@ -18,6 +18,27 @@ Features
 
 * TODO
 
+Jargon
+------
+
+======= ===========
+Word     Definition
+======= ===========
+Warp     When a particle is recycled from a sink state to a source state
+------- -----------
+Segment
+======= ===========
+
+
+TODOs
+-----
+*  When does :code:`segindList` not contain a consecutive list of integers from 1 to n_segs?
+*  What triggers the exception being handled in :code:`get_transition_data()`?
+*  What are "warps"? :code:`get_transition_data()`
+    * Warps are recycling events
+*  What exactly is being stored in :code:`seg_histories`?
+
+
 Credits
 -------
 
