@@ -29,6 +29,17 @@ jobs:
     - name: "Prep anaconda"
       run: echo "ACTIONS_ALLOW_UNSECURE_COMMANDS=true" >> $GITHUB_ENV
 
+    - name: Cache conda
+      uses: actions/cache@v2
+      env:
+          # Increase this value to reset cache if etc/example-environment.yml has not changed
+          CACHE_NUMBER: 0
+      with:
+          path: ~/conda_pkgs_dir
+          key:
+            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{
+            hashFiles('etc/example-environment.yml') }}
+            
 # Dependencies may need to be installed via conda instead, since pyemma at least doesn't like pip
 #     - uses: goanpeca/setup-miniconda@v1
     - uses: conda-incubator/setup-miniconda@v2
@@ -40,19 +51,6 @@ jobs:
 
     - name: "Finish prepping anaconda"
       run: echo "ACTIONS_ALLOW_UNSECURE_COMMANDS=false" >> $GITHUB_ENV
-
-    # Standard drop-in approach that should work for most people.
-#     - uses: ammaraskar/sphinx-action@master
-#       with:
-#         docs-folder: "docs/"
-    # Example of using a custom build-command.
-#     - uses: ammaraskar/sphinx-action@master
-#       with:
-#         # conda setup requires this special shell
-#         shell: bash -l {0}
-#         pre-build-command: "python -m pip install sphinx_rtd_theme && source ~/.bash_profile && conda activate test_env" # See if this fixes numpy not loading
-#         build-command: "sphinx-build -b html source build"
-#         docs-folder: "docs/"
 
     - name: "Install sphinx"
       run: "sudo apt-get update -y && sudo apt-get install python3-sphinx"
@@ -74,7 +72,7 @@ jobs:
         cd gh-pages
         touch .nojekyll
         mkdir -p build
-        cp -r stubs/* build/*
+        cp -r stubs/* build/
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add .
