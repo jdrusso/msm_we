@@ -75,7 +75,6 @@ jobs:
         touch .nojekyll
         mkdir -p build
         cp -r stubs/* build/*
-        touch build/test_stub_placement
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add .
