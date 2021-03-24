@@ -137,8 +137,33 @@ class modelWE:
         self.transitionWeights = None
         self.departureWeights = None
 
+        self.n_iter = None
+
+        self.coordinates = None
+        self.ndim = None
+
         self.n_hist = None
         """int: Number of steps of history information to use when building transitions."""
+
+        self.n_clusters = None
+        self.clusters = None
+        self.clusterFile = None
+
+        self.errorWeight = None
+        self.errorCount = None
+        self.fluxMatrixRaw = None
+
+        self.targetRMSD_centers = None
+        """array-like: List of RMSDs corresponding to each cluster."""
+        self.fluxMatrix = None
+        self.indBasis = None
+
+        self.Tmatrix = None
+        self.pSS = None
+        self.lagtime = None
+        self.JtargetSS = None
+
+
 
     def initialize(
         self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
@@ -263,15 +288,15 @@ class modelWE:
 
     def get_iter_data(self, n_iter: int):
         """
-        Find the data corresponding to an iteration and update the object's fields with it.
+        Update state with the data (including pcoord but not including coords) corresponding to an iteration.
 
         Object fields updated with the information from the selected iteration:
-            - self.westList
-            - self.segindList
-            - self.weightList
-            - self.nSeg
-            - self.pcoord0List
-            - self.pcoord1List
+            - `self.westList`
+            - `self.segindList`
+            - `self.weightList`
+            - `self.nSeg`
+            - `self.pcoord0List`
+            - `self.pcoord1List`
 
         Parameters
         ----------
@@ -1012,7 +1037,24 @@ class modelWE:
                     + "\n"
                 )
 
-    def get_iter_coordinates(self):  # get iteration final coordinates
+    def get_iter_coordinates(self):
+        """
+        Updates state with the coordinates from the last iteration (or whichever iteration is in `self.n_iter`)
+
+        Updates:
+            - `self.coordlist`
+            - `self.coordsExist`
+
+        Returns
+        -------
+        None
+
+        Todo
+        ----
+        Take n_iter as a parameter instead of getting the attribute value
+
+        """
+        # get iteration final coordinates
         coordList = np.zeros((self.nSeg, self.nAtoms, 3))
         for iS in range(self.nSeg):
             try:
@@ -1023,6 +1065,7 @@ class modelWE:
                     dset = dataIn[dsetName]
                     coord = dset[:]
                 elif self.westList[iS] != self.westList[iS - 1]:
+                    #TODO: Move this close() outside of the if/elif
                     dataIn.close()
                     westFile = self.fileList[self.westList[iS]]
                     dataIn = h5py.File(westFile, "r")
@@ -1147,7 +1190,24 @@ class modelWE:
             self.trajSet[iS] = traj_iters[iS, last_index[iS] :, :, :]
 
     def dimReduce(self):
-        # here we can put method to reduce dimensionalitya
+        """
+        Dimensionality reduction using the scheme specified in initialization.
+
+        Updates:
+            - `self.coordinates`
+            - `self.ndim`
+
+        Returns
+        -------
+        None
+
+        Todo
+        ----
+        Allow passing custom parameters to the dimensionality reduction schemes.
+
+        Add `else` clause that raises a `NotImplemented` exception
+        """
+
         nC = np.shape(self.coordSet)
         nC = nC[0]
         if self.dimReduceMethod == "pca":
@@ -1215,6 +1275,28 @@ class modelWE:
             return coords
 
     def cluster_coordinates(self, n_clusters):
+        """
+        Use k-means to cluster coordinates into `n_clusters` cluster centers, and saves the resulting cluster object
+        to a file.
+
+        Saved cluster file is named
+        "<`self.model_name`>_clusters_s<`self.first_iter`>_e<`self.last_iter`>_nC<`self.n_clusters`>.h5"
+
+        Updates:
+            - `self.n_clusters`
+            - `self.clusters`
+            - `self.clusterFile`
+
+        Parameters
+        ----------
+        n_clusters: int
+            Number of cluster centers to use.
+
+        Returns
+        -------
+
+        """
+
         self.n_clusters = n_clusters
         nC = np.shape(self.coordSet)
         nC = nC[0]
@@ -1248,6 +1330,22 @@ class modelWE:
         self.clusters.save(self.clusterFile, save_streaming_chain=True)
 
     def load_clusters(self, clusterFile):
+        """
+        Load clusters from a file.
+
+        Updates:
+            - `self.clusters`
+            - `self.n_clusters`
+
+        Parameters
+        ----------
+        clusterFile: str
+            Filename to load clusters from.
+
+        Returns
+        -------
+        None
+        """
         self.clusters = pyemma.load(clusterFile)
         self.n_clusters = np.shape(self.clusters.clustercenters)[0]
 
@@ -1367,11 +1465,42 @@ class modelWE:
         return fluxMatrix
 
     def get_fluxMatrix(self, n_lag, first_iter, last_iter):
+        """
+        Compute the matrix of fluxes at a given lag time, for a range of iterations.
+
+        Checks if a file has been written named
+        "<`self.modelName`>_s<`first_iter`>_e<`last_iter`>_lag<`n_lag`>_clust<`self.n_clusters`>.h5".
+        If this file exists, r
+
+        Updates:
+            - `self.n_lag`
+            - `self.errorWeight`
+            - `self.errorCount`
+            - `self.fluxMatrixRaw`
+
+        Parameters
+        ----------
+        n_lag: int
+            Lag to use.
+        first_iter: int
+            First iteration to use.
+        last_iter: int
+            Last iteration to use.
+
+        Returns
+        -------
+        None
+
+        """
+
         self.n_lag = n_lag
         self.errorWeight = 0.0
         self.errorCount = 0
+
+        # +2 because the basis and target states are the last two indices
         fluxMatrix = np.zeros((self.n_clusters + 2, self.n_clusters + 2))
         nI = 0
+
         fileName = (
             self.modelName
             + "_s"
@@ -1384,29 +1513,50 @@ class modelWE:
             + str(self.n_clusters)
         )
         f = h5py.File(fileName + ".h5", "a")
+
         dsetName = "fluxMatrix"
+
+        # FIXME: name this something descriptive or just use the 'in' statement in the if/elif
         e = dsetName in f
+        # If this data file does not contain a fluxMatrix entry, create it
         if not e:
+            # Create the fluxMatrix dataset
             dsetP = f.create_dataset(dsetName, np.shape(fluxMatrix))
             dsetP[:] = fluxMatrix
+            # FIXME: Maybe just close this file after, I don't think it needs to be opened and closed this much
             f.close()
+
+            # Add up the flux matrices for each iteration to get the flux matrix.
+            # Then, save that matrix to the data file, along with the number of iterations used
+            # FIXME: Duplicated code
             for iS in range(first_iter + 1, last_iter + 1):
                 fluxMatrixI = self.get_iter_fluxMatrix(iS)
                 fluxMatrix = fluxMatrix + fluxMatrixI
                 nI = nI + 1
+
                 f = h5py.File(fileName + ".h5", "a")
                 dsetP = f[dsetName]
                 dsetP[:] = fluxMatrix / nI
                 dsetP.attrs["iter"] = iS
                 f.close()
                 sys.stdout.write("getting fluxMatrix iter: " + str(iS) + "\n")
+
+            # Normalize the flux matrix by the number of iterations that it was calculated with
             fluxMatrix = fluxMatrix / nI
+
+        # If this datafile DOES contain a fluxMatrix entry...
         elif e:
+
+            # Load the existing fluxMatrix
             dsetP = f[dsetName]
             fluxMatrix = dsetP[:]
             nIter = dsetP.attrs["iter"]
             f.close()
             nI = 1
+
+            # If the flux matrix was calculated at an earlier iteration than the current/requested last iteration, then
+            #   recalculate it and update it.
+            # TODO: Check if first_iter changed too? That's not stored anywhere
             if nIter < last_iter:
                 for iS in range(nIter, last_iter + 1):
                     fluxMatrixI = self.get_iter_fluxMatrix(iS)
@@ -1419,28 +1569,54 @@ class modelWE:
                     f.close()
                     sys.stdout.write("getting fluxMatrix iter: " + str(iS) + "\n")
                 fluxMatrix = fluxMatrix / nI
+
         f.close()
+
+        # Update state with the new, updated, or loaded from file fluxMatrix.
         self.fluxMatrixRaw = fluxMatrix
 
-    def organize_fluxMatrix(self):  # processes raw fluxMatrix
+    def organize_fluxMatrix(self):
+        """
+        Do some cleaning on the flux matrix, and update state with the cleaned flux matrix.
+
+        Namely:
+            - Remove bins with no connectivity
+            - Sort along p1 (?)
+
+        Returns
+        -------
+        None
+        """
+
+        # processes raw fluxMatrix
         nT = np.shape(self.coordSet)
         nT = nT[0]
+
+        # Discretize trajectories via clusters
         dtraj = self.clusters.assign(self.reduceCoordinates(self.coordSet))
+
+        # Get the indices of the target and basis clusters
         indTargetCluster = self.n_clusters + 1  # Target at -1
         indBasisCluster = self.n_clusters  # basis at -2
         indBasisOrig = indBasisCluster
+
+        # ----- Unused code ------
         # targetRMSD=self.get_reference_rmsd(self.coordSet[:,:,:])
         # basisRMSD=self.get_basis_rmsd(self.coordSet[:,:,:])
         # indTarget=np.where(targetRMSD<self.target_rmsd)
         # indBasis=np.where(basisRMSD<self.basis_rmsd)
         # dtraj[indTarget]=indTargetCluster
         # dtraj[indBasis]=indBasisCluster
+        # ------------------------
+
         indData = np.ones(self.n_clusters + 2)
         targetRMSD_centers = np.zeros(self.n_clusters + 2)
         # targetRMSD_centers[indTargetCluster]=self.target_rmsd
         targetRMSD_centers[indTargetCluster] = self.WEtargetp1
         # targetRMSD_centers[indBasisCluster]=self.get_reference_rmsd(self.basis_coords)
         targetRMSD_centers[indBasisCluster] = self.WEbasisp1_min
+
+        # Just initialize this to some positive nonzero value to kick off the while loop
         nTraps = 1000
         fluxMatrixTraps = self.fluxMatrixRaw.copy()
         while nTraps > 0:
@@ -1522,22 +1698,51 @@ class modelWE:
             )
 
     def get_Tmatrix(self):
+        """
+        Compute the transition matrix from the flux matrix.
+        Corrects the "target" states to be true sink states.
+
+        Updates:
+            - `self.Tmatrix`
+
+        Returns
+        -------
+        None
+        """
+
+        # Get a copy of the flux matrix
         Mt = self.fluxMatrix.copy()
+        # Get the dimension of the flux matrix
         nR = np.shape(Mt)
+        # Add up the total flux on each row, i.e. from each state
         sM = np.sum(Mt, 1)
+
+        # For each state
         for iR in range(nR[0]):
+            # For positive definite flux, set the matrix elements based on normalized fluxes
             if sM[iR] > 0:
                 Mt[iR, :] = Mt[iR, :] / sM[iR]
+
+            # If the flux is zero, then consider it all self-transition
+            # FIXME: this if can be an elif
             if sM[iR] == 0.0:
                 Mt[iR, iR] = 1.0
-        # make steady state matrix #first sink
+
+        # Make the transition matrix a steady-state matrix
+        # Identify the bins corresponding to target states.
         sinkBins = self.indTargets  # np.where(avBinPnoColor==0.0)
+
+        # Get the number of sink bins
         nsB = np.shape(sinkBins)
         nsB = nsB[0]
+
+        # TODO: The goal here is to correct for the transition probabilities out of the sink state. Not
+        #   sure I fully understand this implementation, but that's the goal.
         sinkRates = np.zeros((1, self.nBins))
         sinkRates[0, self.indBasis] = 1.0 / self.indBasis.size
         Mss = Mt.copy()
         Mss[sinkBins, :] = np.tile(sinkRates, (nsB, 1))
+
         self.Tmatrix = Mss
 
     def get_eqTmatrix(self):
@@ -1557,6 +1762,16 @@ class modelWE:
         self.Tmatrix = Mt
 
     def get_steady_state_algebraic(self):
+        """
+        Compute the steady-state distribution as the eigenvectors of the transition matrix.
+
+        Updates:
+            - `self.pSS`
+
+        Returns
+        -------
+        None
+        """
         n = np.shape(self.Tmatrix)[0]
         w, v = np.linalg.eig(np.transpose(self.Tmatrix))
         pSS = np.real(v[:, np.argmax(np.real(w))])
@@ -1582,12 +1797,29 @@ class modelWE:
                 self.pSS = pSS.copy()
 
     def get_steady_state_target_flux(self):
+        """
+        Get the total flux into the target state(s).
+
+        Updates:
+            - `self.lagtime`
+            - `self.JtargetSS`
+
+        Returns
+        -------
+        None
+        """
+
         Mss = self.Tmatrix
         pSS = np.squeeze(np.array(self.pSS))
+
         self.lagtime = self.tau * (self.n_lag + 1)
+
+        # Get a list of all the states that AREN'T targets, since we want to sum up
         nTargets = self.indTargets.size
         indNotTargets = np.setdiff1d(range(self.nBins), self.indTargets)
+
         Jt = 0.0
+        # Add up the total flux into each of the targets
         for j in range(nTargets):
             jj = self.indTargets[j]
             Jt = Jt + np.sum(
