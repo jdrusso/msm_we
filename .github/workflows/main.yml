@@ -33,7 +33,7 @@ jobs:
       uses: actions/cache@v2
       env:
           # Increase this value to reset cache if etc/example-environment.yml has not changed
-          CACHE_NUMBER: 0
+          CACHE_NUMBER: 1
       with:
           path: ~/conda_pkgs_dir
           key:
@@ -47,7 +47,7 @@ jobs:
           miniconda-version: "latest"
           activate-environment: test_env
           environment-file: environment.yml
-          python-version: 3.6
+          python-version: 3.7
           auto-activate-base: false
           use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
 

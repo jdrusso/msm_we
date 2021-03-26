@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Install miniconda
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86.sh
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 
 conda init bash
