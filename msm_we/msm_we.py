@@ -47,16 +47,22 @@ class modelWE:
 
     Todo
     ----
-    Stateless refactor
-        In general, this class's methods generally handle data by holding state in the object. I think in general this
-        would benefit from a refactor to be more stateless, rather than shifting things in and out of the object's fields.
+    Refactor
+        In general, this class's methods generally handle data by holding state in the object.
+        The functions that update state with the result of a calculation, though, tend to update a lot of state on the way.
+        The state being updated along the way is usually "helper" quantities (an example would be the number of bins
+        or number of walkers, which is computed "along the way" in a number of functions, and the object state updated.)
+
+        I think it would be prudent to refactor these in such a way that these are updated in as few places as possible --
+        one example of this might be setting them as properties, and then updating the value in state as part of that
+        accessor if necessary.
 
 
     References
     --------
     Copperman and Zuckerman,
     *Accelerated estimation of long-timescale kinetics by combining weighted ensemble simulation with Markov model
-    microstates using non-Markovian theory*, **arXiv** (2020).
+    microstategs using non-Markovian theory*, **arXiv** (2020).
 
     """
 
