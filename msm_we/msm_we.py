@@ -10,7 +10,13 @@ import h5py
 from scipy.sparse import coo_matrix
 
 import logging
-log = logging.getLogger('msm_we')
+from rich.logging import RichHandler
+FORMAT = "%(message)s"
+logging.basicConfig(
+    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
+)
+log = logging.getLogger("msm_we")
+log.setLevel(logging.DEBUG)
 
 # sys.path.append(os.environ["WEST_ROOT"]+'/src')
 # sys.path.append(os.environ["WEST_ROOT"]+'/lib/west_tools')
@@ -209,6 +215,8 @@ class modelWE:
         function signature.
         """
 
+        log.debug("Initializing msm_we model")
+
         self.modelName = modelName
         pCommand = "ls " + fileSpecifier
         p = subprocess.Popen(pCommand, stdout=subprocess.PIPE, shell=True)
@@ -222,13 +230,14 @@ class modelWE:
 
         self.pcoord_ndim = 1
         self.pcoord_len = 2
+        # self.pcoord_len = 50
         tau = 10.0e-12
         self.tau = tau
         self.set_topology(refPDBfile)
         self.set_basis(initPDBfile)
-        self.WEtargetp1 = 1.25  # target def on WE p1
-        self.WEbasisp1_min = 12.0  # WE bin where basis structure is mapped
-        self.WEbasisp1_max = 12.5
+        # self.WEtargetp1 = 1.25  # target def on WE p1
+        # self.WEbasisp1_min = 12.0  # WE bin where basis structure is mapped
+        # self.WEbasisp1_max = 12.5
         self.dimReduceMethod = "pca"
         self.vamp_lag = 10
         self.vamp_dim = 10
@@ -240,13 +249,31 @@ class modelWE:
             "adaptive"  # adaptive for dynamic allocation, uniform for equal allocation
         )
         try:
-            self.get_iter_data(1)
+            self.load_iter_data(1)
             self.get_iter_coordinates0()
             self.coordsExist = True
         # TODO: Handle this exception more specifically -- what's the error we expect?
-        except:
+        except Exception as e:
             sys.stdout.write("problem getting coordinates \n")
             self.coordsExist = False
+            # TODO: Raise this until you know what the specific exception to handle is
+            # raise e
+
+        log.debug("msm_we model successfully initialized")
+
+    def initialize_from_h5(self, refPDBfile, initPDBfile, modelName):
+        """
+        Like initialize, but sets state without
+        Parameters
+        ----------
+        refPDBfile
+        initPDBfile
+        modelName
+
+        Returns
+        -------
+
+        """
 
     def is_WE_basis(self, pcoords):
         """
@@ -292,7 +319,7 @@ class modelWE:
         isTarget = pcoords[:, 0] < self.WEtargetp1
         return isTarget
 
-    def get_iter_data(self, n_iter: int):
+    def load_iter_data(self, n_iter: int):
         """
         Update state with the data (including pcoord but not including coords) corresponding to an iteration.
 
@@ -318,16 +345,20 @@ class modelWE:
         May want to rework the logic here, depending on how this is used.
         Seems like some of this iteration can be removed/optimized.
         """
+
+        # log.debug("Getting iteration data")
+
         self.n_iter = n_iter
         westList = np.array([])
         segindList = np.array([])
         weightList = np.array([])
         pcoord0List = np.empty((0, self.pcoord_ndim))
         pcoord1List = np.empty((0, self.pcoord_ndim))
+
         nSeg = 0
 
         # Iterate through each file index, trying to find a file that contains the iteration of interest
-        # TODO: Can replace this with `for if, fileName in enumerate(self.fileList)`
+        # TODO: Can replace this with `for if, fileName in enumerate(self.\\)`
         for iF in range(self.nF):
             fileName = self.fileList[iF]
             try:
@@ -367,6 +398,9 @@ class modelWE:
                 dataIn.close()
             except:
                 sys.stdout.write("error in " + fileName + str(sys.exc_info()[0]) + "\n")
+
+        log.debug(f"Found {nSeg} segments in iteration {n_iter}")
+
         self.westList = westList.astype(int)
 
         # This is a list of the segment indices
@@ -389,6 +423,8 @@ class modelWE:
         -------
         None
         """
+
+        log.debug("Getting number of iterations and segments")
 
         numFiles = np.array([])
         numSegments = np.array([])
@@ -719,6 +755,9 @@ class modelWE:
         # get segment history data at lag time n_lag from current iter
         weightList = self.weightList
         coordPairList = np.zeros((self.nSeg, self.nAtoms, 3, 2))
+
+        log.debug(f"Getting transition data for {self.nSeg} segs")
+
         for iS in range(self.nSeg):
             try:
                 if iS == 0:
@@ -734,16 +773,22 @@ class modelWE:
                     dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
                     dset = dataIn[dsetName]
                     coords = dset[:]
+
+                # Update segment iS in coordPairList with
                 coordPairList[iS, :, :, 1] = coords[
                     self.segindList[iS], self.pcoord_len - 1, :, :
                 ]
                 coordPairList[iS, :, :, 0] = coords[self.segindList[iS], 0, :, :]
-            except:
+            except Exception as e:
                 self.errorWeight = self.errorWeight + weightList[iS]
                 weightList[
                     iS
                 ] = 0.0  # set transitions without structures to zero weight
                 self.errorCount = self.errorCount + 1
+
+                # TODO: Raise this and don't handle it until you can make it more specific! What error happens here?
+                raise e
+
         transitionWeights = weightList.copy()
         departureWeights = weightList.copy()
         self.coordPairList = coordPairList
@@ -771,7 +816,7 @@ class modelWE:
         """
         warpedWeights = []
         for iS in range(first_iter + 1, last_iter + 1):
-            self.get_iter_data(iS + 1)
+            self.load_iter_data(iS + 1)
             self.get_seg_histories(2)
             parentList = self.seg_histories[:, 1]
             warpList = np.where(parentList < 0)
@@ -783,7 +828,7 @@ class modelWE:
     ):  # get all warps and weights over set of iterations
         warpedWeights = []
         for iS in range(first_iter, last_iter + 1):
-            self.get_iter_data(iS)
+            self.load_iter_data(iS)
             pcoord = self.pcoord1List[:, 0]
             warpList = np.where(pcoord < self.WEtargetp1)
             warpedWeights.append(self.weightList[warpList])
@@ -871,6 +916,8 @@ class modelWE:
 
         """
 
+        log.debug(f"Getting seg histories for {self.nSeg} segments")
+
         if n_hist > self.n_iter:
             sys.stdout.write(
                 "we have too much history... n_hist reduced to: "
@@ -885,6 +932,7 @@ class modelWE:
 
         seg_histories = np.zeros((self.nSeg, self.n_hist + 1))
         weight_histories = np.zeros((self.nSeg, self.n_hist))
+
 
         # Loop over all segments
         for iS in range(self.nSeg):
@@ -1048,7 +1096,7 @@ class modelWE:
         Updates state with the coordinates from the last iteration (or whichever iteration is in `self.n_iter`)
 
         Updates:
-            - `self.coordlist`
+            - `self.cur_iter_coords`
             - `self.coordsExist`
 
         Returns
@@ -1061,7 +1109,7 @@ class modelWE:
 
         """
         # get iteration final coordinates
-        coordList = np.zeros((self.nSeg, self.nAtoms, 3))
+        cur_iter_coords = np.zeros((self.nSeg, self.nAtoms, 3))
         for iS in range(self.nSeg):
             try:
                 if iS == 0:
@@ -1078,7 +1126,7 @@ class modelWE:
                     dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
                     dset = dataIn[dsetName]
                     coord = dset[:]
-                coordList[iS, :, :] = coord[self.segindList[iS], 1, :, :]
+                cur_iter_coords[iS, :, :] = coord[self.segindList[iS], 1, :, :]
             except:
                 sys.stdout.write(
                     "error getting coordinates from "
@@ -1089,9 +1137,9 @@ class modelWE:
                     + str(self.segindList[iS])
                     + "\n"
                 )
-                coordList[iS, :, :] = np.zeros((self.nAtoms, 3))
+                cur_iter_coords[iS, :, :] = np.zeros((self.nAtoms, 3))
                 self.coordsExist = False
-        self.coordList = coordList
+        self.cur_iter_coords = cur_iter_coords
 
     def get_iter_coordinates0(self):  # get iteration initial coordinates
         coordList = np.zeros((self.nSeg, self.nAtoms, 3))
@@ -1110,7 +1158,7 @@ class modelWE:
                 dset = dataIn[dsetName]
                 coord = dset[:]
             coordList[iS, :, :] = coord[self.segindList[iS], 0, :, :]
-        self.coordList = coordList
+        self.cur_iter_coords = coordList
 
     def get_coordinates(self, first_iter, last_iter):
         self.first_iter = first_iter
@@ -1122,11 +1170,11 @@ class modelWE:
                 sys.stdout.write(
                     "    gathering structures from iteration " + str(iter) + "...\n"
                 )
-            self.get_iter_data(iter)
+            self.load_iter_data(iter)
             self.get_iter_coordinates()
             if self.coordsExist:
-                coordSet = np.append(coordSet, self.coordList, axis=0)
-        self.coordSet = coordSet
+                coordSet = np.append(coordSet, self.cur_iter_coords, axis=0)
+        self.all_coords = coordSet
 
     def get_coordSet(self, last_iter, n_coords):
         last_iter_cluster = last_iter
@@ -1135,19 +1183,19 @@ class modelWE:
         coordSet = np.zeros((0, self.nAtoms, 3))
         pcoordSet = np.zeros((0, self.pcoord_ndim))
         while numCoords < n_coords:
-            self.get_iter_data(i)
+            self.load_iter_data(i)
             self.get_iter_coordinates()
-            indGood = np.squeeze(np.where(np.sum(np.sum(self.coordList, 2), 1) != 0))
-            coordSet = np.append(coordSet, self.coordList[indGood, :, :], axis=0)
+            indGood = np.squeeze(np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0))
+            coordSet = np.append(coordSet, self.cur_iter_coords[indGood, :, :], axis=0)
             pcoordSet = np.append(pcoordSet, self.pcoord1List[indGood, :], axis=0)
             numCoords = np.shape(coordSet)[0]
             i = i - 1
-        self.coordSet = coordSet
+        self.all_coords = coordSet
         self.pcoordSet = pcoordSet
         first_iter_cluster = i
         self.first_iter = first_iter_cluster
         self.last_iter = last_iter_cluster
-        self.n_coords = np.shape(self.coordSet)[0]
+        self.n_coords = np.shape(self.all_coords)[0]
 
     def get_traj_coordinates(self, from_iter, traj_length):
         if traj_length > from_iter:
@@ -1155,7 +1203,7 @@ class modelWE:
             sys.stdout.write(
                 "trajectory length too long: set to " + str(traj_length) + "\n"
             )
-        self.get_iter_data(from_iter)
+        self.load_iter_data(from_iter)
         self.get_seg_histories(traj_length)
         traj_iters = np.zeros((traj_length, self.nSeg, self.nAtoms, 3))
         ic = traj_length - 1
@@ -1166,7 +1214,7 @@ class modelWE:
             sys.stdout.write(
                 "    gathering structures from iteration " + str(i) + "...\n"
             )
-            self.get_iter_data(i)
+            self.load_iter_data(i)
             self.get_iter_coordinates()
             seg_history = self.seg_histories[:, iH]
             seg_history_index = np.zeros(nS).astype(int)
@@ -1186,10 +1234,10 @@ class modelWE:
                     last_index[iS] = 0
                 elif seg_history[iS] < 0:
                     last_index[iS] = i - (from_iter - traj_length) - 1
-            traj_iters[ic, :, :, :] = self.coordList[seg_history_index, :, :]
+            traj_iters[ic, :, :, :] = self.cur_iter_coords[seg_history_index, :, :]
             ic = ic - 1
             iH = iH + 1
-        self.get_iter_data(from_iter)
+        self.load_iter_data(from_iter)
         traj_iters = np.swapaxes(traj_iters, 0, 1)
         self.trajSet = [None] * self.nSeg
         for iS in range(self.nSeg):
@@ -1214,14 +1262,21 @@ class modelWE:
         Add `else` clause that raises a `NotImplemented` exception
         """
 
-        nC = np.shape(self.coordSet)
+        log.debug(f"Running dimensionality reduction -- method: {self.dimReduceMethod}")
+
+        nC = np.shape(self.all_coords)
         nC = nC[0]
+        # log.debug(self.coordSet)
         if self.dimReduceMethod == "pca":
-            data = self.processCoordinates(self.coordSet)
+            data = self.processCoordinates(self.all_coords)
+
+            # assert not data.shape[-1] == 0, "Processed coordinates are empty!"
+
             self.coordinates = coor.pca(
                 data, dim=-1, var_cutoff=0.95, mean=None, stride=1, skip=0
             )
             self.ndim = self.coordinates.dimension()
+
         if self.dimReduceMethod == "vamp":
             ntraj = len(self.trajSet)
             data = [None] * ntraj
@@ -1238,7 +1293,7 @@ class modelWE:
             )
             self.ndim = self.coordinates.dimension()
         if self.dimReduceMethod == "none":
-            data = self.coordSet.reshape(nC, 3 * self.nAtoms)
+            data = self.all_coords.reshape(nC, 3 * self.nAtoms)
             self.coordinates = self.Coordinates()
             self.ndim = 3 * self.nAtoms
             # self.coordinates.transform=self.processCoordinates
@@ -1252,23 +1307,48 @@ class modelWE:
         def transform(self, coords):
             return coords
 
+    # TODO: Maybe this should be user-overrideable, it's up to them to calculate a reduced coordinate to cluster on
     def processCoordinates(self, coords):
+        log.debug("Processing coordinates")
+
         if self.dimReduceMethod == "none":
             nC = np.shape(coords)
             nC = nC[0]
             ndim = 3 * self.nAtoms
             data = coords.reshape(nC, 3 * self.nAtoms)
             return data
+
         if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
             xt = md.Trajectory(xyz=coords, topology=None)
-            indCA = self.reference_structure.topology.select("name CA")
-            pair1, pair2 = np.meshgrid(indCA, indCA, indexing="xy")
-            indUT = np.where(np.triu(pair1, k=1) > 0)
-            pairs = np.transpose(np.array([pair1[indUT], pair2[indUT]])).astype(int)
-            dist = md.compute_distances(xt, pairs, periodic=True, opt=True)
+            atom_selection_string = "resid 1"
+            # indCA = self.reference_structure.topology.select("name CA")
+            # pair1, pair2 = np.meshgrid(indCA, indCA, indexing="xy")
+            # indUT = np.where(np.triu(pair1, k=1) > 0)
+            # pairs = np.transpose(np.array([pair1[indUT], pair2[indUT]])).astype(int)
+            # dist = md.compute_distances(xt, pairs, periodic=True, opt=True)
+
+            log.warning("Hardcoded selection: Doing dim reduction for Na, Cl")
+            indNA = self.reference_structure.topology.select("element Na")
+            indCL = self.reference_structure.topology.select("element Cl")
+
+            diff = np.subtract(coords[:, indNA], coords[:, indCL])
+
+            dist = np.array(np.sqrt(
+                np.mean(
+                    np.power(
+                        diff,
+                        2)
+                , axis=-1)
+            ))
+
+            # assert not dist.shape[-1] == 0
+
             return dist
 
     def reduceCoordinates(self, coords):
+
+        log.debug("Reducing coordinates")
+
         if self.dimReduceMethod == "none":
             nC = np.shape(coords)
             nC = nC[0]
@@ -1303,19 +1383,21 @@ class modelWE:
 
         """
 
+        log.debug("Doing clustering")
+
         self.n_clusters = n_clusters
-        nC = np.shape(self.coordSet)
+        nC = np.shape(self.all_coords)
         nC = nC[0]
         if self.dimReduceMethod == "none":
             if self.nAtoms > 1:
                 self.clusters = coor.cluster_kmeans(
-                    [self.coordSet.reshape(nC, 3 * self.nAtoms)],
+                    [self.all_coords.reshape(nC, 3 * self.nAtoms)],
                     k=n_clusters,
                     metric="minRMSD",
                 )  # ,max_iter=100)
             elif self.nAtoms == 1:
                 self.clusters = coor.cluster_kmeans(
-                    [self.coordSet.reshape(nC, 3 * self.nAtoms)],
+                    [self.all_coords.reshape(nC, 3 * self.nAtoms)],
                     k=n_clusters,
                     metric="euclidean",
                 )
@@ -1333,7 +1415,7 @@ class modelWE:
             + str(self.n_clusters)
             + ".h5"
         )
-        self.clusters.save(self.clusterFile, save_streaming_chain=True)
+        # self.clusters.save(self.clusterFile, save_streaming_chain=True, overwrite=True)
 
     def load_clusters(self, clusterFile):
         """
@@ -1352,12 +1434,31 @@ class modelWE:
         -------
         None
         """
+
+        log.debug(f"Found saved clusters -- loading from {clusterFile}")
+
         self.clusters = pyemma.load(clusterFile)
         self.n_clusters = np.shape(self.clusters.clustercenters)[0]
 
     def get_iter_fluxMatrix(self, n_iter):
+        """
+        Get the flux matrix for an iteration.
+
+        Parameters
+        ----------
+        n_iter
+
+        Returns
+        -------
+
+        TODO
+        ----
+        """
+
+        # Update state with data from the current iteration
+
         sys.stdout.write("iteration " + str(n_iter) + ": data \n")
-        self.get_iter_data(n_iter)
+        self.load_iter_data(n_iter)
         if self.n_lag > 0:
             sys.stdout.write("segment histories \n")
             self.get_seg_histories(self.n_lag + 1)
@@ -1365,33 +1466,61 @@ class modelWE:
             self.get_transition_data(self.n_lag)
         elif self.n_lag == 0:
             self.get_transition_data_lag0()
+        log.info(f"Getting flux matrix for iter {n_iter} with {self.nSeg} segments")
         nT = np.shape(self.transitionWeights)[0]
+
+        # Create clusters for the target and basis states
         indTargetCluster = self.n_clusters + 1
         indBasisCluster = self.n_clusters
+
+        # (Segment, Atom, [lagged, current coord])
+        log.debug(f"Coord pairlist shape is {self.coordPairList.shape}")
+        # log.debug(f"Coord pairlist is {self.coordPairList[5,5,:,0]}")
+        # log.debug(f"Coord pairlist is {self.coordPairList[5,5,:,1]}")
+
+        # Assign a cluster to the lagged and the current coords
+        # TODO: it seems like this needs to get the number of segments in the current iter
+        # Otherwise, this does coordinate reduction on ALL the coordinates -- which will give me
+        #   the TOTAL number of segments
+        # No -- self.coordPairList only contains the current iteration's segments
+        # But for some reason, cluster0 returns 125 element array??
         cluster0 = self.clusters.assign(
             self.reduceCoordinates(self.coordPairList[:, :, :, 0])
         )
         cluster1 = self.clusters.assign(
             self.reduceCoordinates(self.coordPairList[:, :, :, 1])
         )
+
+        log.debug(f"Cluster 0 shape: {cluster0.shape}")
+
+        # Record every point where you're in the target
         indTarget1 = np.where(self.is_WE_target(self.pcoord1List))
+
         if indTarget1[0].size > 0:
             sys.stdout.write("Target1: " + str(indTarget1[0].size) + "\n")
+
         indBasis0 = np.where(
             self.is_WE_basis(self.pcoord0List)
         )  # needs to fit definition of target in WE
         if indBasis0[0].size > 0:
             sys.stdout.write("Basis0: " + str(indBasis0[0].size) + "\n")
+
         indBasis1 = np.where(self.is_WE_basis(self.pcoord1List))
         if indBasis1[0].size > 0:
             sys.stdout.write("Basis1: " + str(indBasis1[0].size) + "\n")
+
         cluster1[indTarget1] = indTargetCluster
         cluster0[indBasis0] = indBasisCluster
         cluster1[indBasis1] = indBasisCluster
+
+        # coo_matrix takes in (Data, (x, y)) and then gives you a matrix, with the point at Data[i]
+        #   placed at (x,y)[i]
+        # Data here is just the number of segments since each segment is associated with 1 transition
         fluxMatrix = coo_matrix(
             (self.transitionWeights, (cluster0, cluster1)),
             shape=(self.n_clusters + 2, self.n_clusters + 2),
         ).todense()
+
         return fluxMatrix
 
     def get_pcoord1D_fluxMatrix(self, n_lag, first_iter, last_iter, binbounds):
@@ -1454,7 +1583,7 @@ class modelWE:
 
     def get_iter_pcoord1D_fluxMatrix_lag0(self, n_iter, binbounds):
         sys.stdout.write("iteration " + str(n_iter) + ": data \n")
-        self.get_iter_data(n_iter)
+        self.load_iter_data(n_iter)
         nT = np.shape(self.weightList)[0]
         nBins = binbounds.size - 1
         fluxMatrix = np.zeros((nBins, nBins))
@@ -1499,6 +1628,8 @@ class modelWE:
 
         """
 
+        log.debug("Computing all flux matrices")
+
         self.n_lag = n_lag
         self.errorWeight = 0.0
         self.errorCount = 0
@@ -1535,7 +1666,10 @@ class modelWE:
             # Add up the flux matrices for each iteration to get the flux matrix.
             # Then, save that matrix to the data file, along with the number of iterations used
             # FIXME: Duplicated code
+            # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
             for iS in range(first_iter + 1, last_iter + 1):
+                log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
+
                 fluxMatrixI = self.get_iter_fluxMatrix(iS)
                 fluxMatrix = fluxMatrix + fluxMatrixI
                 nI = nI + 1
@@ -1545,7 +1679,7 @@ class modelWE:
                 dsetP[:] = fluxMatrix / nI
                 dsetP.attrs["iter"] = iS
                 f.close()
-                sys.stdout.write("getting fluxMatrix iter: " + str(iS) + "\n")
+                log.debug(f"Completed flux matrix for iter {iS}")
 
             # Normalize the flux matrix by the number of iterations that it was calculated with
             fluxMatrix = fluxMatrix / nI
@@ -1594,12 +1728,14 @@ class modelWE:
         None
         """
 
+        log.debug("Cleaning flux matrix")
+
         # processes raw fluxMatrix
-        nT = np.shape(self.coordSet)
+        nT = np.shape(self.all_coords)
         nT = nT[0]
 
         # Discretize trajectories via clusters
-        dtraj = self.clusters.assign(self.reduceCoordinates(self.coordSet))
+        dtraj = self.clusters.assign(self.reduceCoordinates(self.all_coords))
 
         # Get the indices of the target and basis clusters
         indTargetCluster = self.n_clusters + 1  # Target at -1
@@ -1715,6 +1851,8 @@ class modelWE:
         -------
         None
         """
+
+        log.debug("Computing transition matrix")
 
         # Get a copy of the flux matrix
         Mt = self.fluxMatrix.copy()
@@ -2496,7 +2634,7 @@ class modelWE:
         return self.binObjective
 
     def get_iter_aristoffian(self, iter):
-        self.get_iter_data(iter)
+        self.load_iter_data(iter)
         if not hasattr(self, "model_clusters"):
             self.get_model_clusters()
         #        if self.pcoord_is_kh:
@@ -2507,7 +2645,7 @@ class modelWE:
         #            self.khList=self.khList[:,np.newaxis]
         #        else:
         self.get_iter_coordinates()
-        dtraj_iter = self.model_clusters.assign(self.reduceCoordinates(self.coordList))
+        dtraj_iter = self.model_clusters.assign(self.reduceCoordinates(self.cur_iter_coords))
         kh_iter = self.kh[dtraj_iter]
         self.khList = np.array(kh_iter[:, 0])  # get k-means bins defined over walkers
         nB = self.nB
@@ -2644,11 +2782,11 @@ class modelWE:
         if not hasattr(self, "model_clusters"):
             self.get_model_clusters()
         self.get_iter_coordinates()  # post coordinates
-        dtraj_iter = self.model_clusters.assign(self.reduceCoordinates(self.coordList))
+        dtraj_iter = self.model_clusters.assign(self.reduceCoordinates(self.cur_iter_coords))
         kh_iter = self.kh[dtraj_iter]
         khList1 = np.array(kh_iter[:, 0])  # post pcoord
         self.get_iter_coordinates0()  # pre coordinates
-        dtraj_iter = self.model_clusters.assign(self.reduceCoordinates(self.coordList))
+        dtraj_iter = self.model_clusters.assign(self.reduceCoordinates(self.cur_iter_coords))
         kh_iter = self.kh[dtraj_iter]
         khList0 = np.array(kh_iter[:, 0])  # pre pcoord
         westFile = self.fileList[self.westList[0]]
