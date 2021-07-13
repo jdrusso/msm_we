@@ -144,6 +144,7 @@ class modelWE:
         self.nSeg = None
         self.pcoord0List = None
         self.pcoord1List = None
+        self.seg_weights = {}
 
         self.coordPairList = None
         self.transitionWeights = None
@@ -174,6 +175,10 @@ class modelWE:
         self.pSS = None
         self.lagtime = None
         self.JtargetSS = None
+
+        self.cluster_structures = None
+        self.cluster_structure_weights = None
+        """dict: Mapping of cluster indices to structures in that cluster"""
 
 
 
@@ -254,7 +259,7 @@ class modelWE:
             self.coordsExist = True
         # TODO: Handle this exception more specifically -- what's the error we expect?
         except Exception as e:
-            sys.stdout.write("problem getting coordinates \n")
+            log.warning("problem getting coordinates, they don't exist yet \n")
             self.coordsExist = False
             # TODO: Raise this until you know what the specific exception to handle is
             # raise e
@@ -355,6 +360,8 @@ class modelWE:
         pcoord0List = np.empty((0, self.pcoord_ndim))
         pcoord1List = np.empty((0, self.pcoord_ndim))
 
+        seg_weights = np.array([])
+
         nSeg = 0
 
         # Iterate through each file index, trying to find a file that contains the iteration of interest
@@ -376,6 +383,8 @@ class modelWE:
                     dsetNameP = "/iterations/iter_%08d/pcoord" % int(n_iter)
                     dsetP = dataIn[dsetNameP]
                     pcoord = dsetP[:]
+                    weights = dset['weight']
+                    seg_weights = np.append(seg_weights, weights)
 
                     # Iterate over segments in this dataset
                     for iS in range(nS):
@@ -396,8 +405,9 @@ class modelWE:
                         )
                         nSeg = nSeg + 1
                 dataIn.close()
-            except:
+            except Exception as e:
                 sys.stdout.write("error in " + fileName + str(sys.exc_info()[0]) + "\n")
+                raise e
 
         log.debug(f"Found {nSeg} segments in iteration {n_iter}")
 
@@ -405,7 +415,7 @@ class modelWE:
 
         # This is a list of the segment indices
         self.segindList = segindList.astype(int)
-
+        self.seg_weights[n_iter] = seg_weights
         self.weightList = weightList
         self.nSeg = nSeg
         self.pcoord0List = pcoord0List
@@ -459,7 +469,7 @@ class modelWE:
                     )
             if nSeg > 0:
                 numSegments = np.append(numSegments, nSeg)
-                sys.stdout.write(
+                log.debug(
                     "Iteration " + str(n_iter) + " has " + str(nSeg) + " segments...\n"
                 )
 
@@ -1270,7 +1280,7 @@ class modelWE:
         if self.dimReduceMethod == "pca":
             data = self.processCoordinates(self.all_coords)
 
-            # assert not data.shape[-1] == 0, "Processed coordinates are empty!"
+            assert not data.shape[-1] == 0, "Processed coordinates are empty!"
 
             self.coordinates = coor.pca(
                 data, dim=-1, var_cutoff=0.95, mean=None, stride=1, skip=0
@@ -1319,6 +1329,8 @@ class modelWE:
             return data
 
         if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
+
+            ### Original dimensionality reduction
             xt = md.Trajectory(xyz=coords, topology=None)
             atom_selection_string = "resid 1"
             # indCA = self.reference_structure.topology.select("name CA")
@@ -1327,7 +1339,10 @@ class modelWE:
             # pairs = np.transpose(np.array([pair1[indUT], pair2[indUT]])).astype(int)
             # dist = md.compute_distances(xt, pairs, periodic=True, opt=True)
 
-            log.warning("Hardcoded selection: Doing dim reduction for Na, Cl")
+            ###
+
+            ### NaCl dimensionality reduction
+            log.warning("Hardcoded selection: Doing dim reduction for Na, Cl. This is only for testing!")
             indNA = self.reference_structure.topology.select("element Na")
             indCL = self.reference_structure.topology.select("element Cl")
 
@@ -1341,11 +1356,29 @@ class modelWE:
                 , axis=-1)
             ))
 
+            ###
+
             # assert not dist.shape[-1] == 0
 
             return dist
 
     def reduceCoordinates(self, coords):
+        """
+        TODO: Make this user-overrideable
+
+        Defines the coordinate reduction strategy used.
+        The reduced corodinates are stored in /auxdata for each iteration.
+
+        Parameters
+        ----------
+        coords: array-like
+            Array of coordinates to reduce.
+
+        Returns
+        -------
+        Reduced data
+
+        """
 
         log.debug("Reducing coordinates")
 
@@ -1359,6 +1392,76 @@ class modelWE:
             coords = self.processCoordinates(coords)
             coords = self.coordinates.transform(coords)
             return coords
+
+    def update_cluster_structures(self):
+        """
+        Find structures (i.e. sets of coordinates) corresponding to each clusters.
+
+        Returns
+        -------
+        A dictionary where the keys are cluster indices, and the values are lists of coordinates (structures)
+            in that cluster.
+        """
+
+        assert self.clusters is not None, "Clusters have not been computed!"
+
+        assert self.all_coords is not None, "Coordinates have not been loaded!"
+
+        log.debug("Obtaining cluster structures...")
+        log.debug(f"All coords shape: {self.all_coords.shape}")
+        log.debug(f"Dtrajs len: {len(self.clusters.dtrajs)}, [0] shape: {self.clusters.dtrajs[0].shape}")
+
+        cluster_structures = dict()
+        cluster_structure_weights = dict()
+
+        # Move this elsewhere, WE segment weights are useful to have outside of this
+        all_seg_weights = np.full(int(sum(self.numSegments)), fill_value=None)
+
+        i = 0
+        total_num_iterations = len(self.numSegments)
+        # Don't include the last iteration, where dynamics didn't run
+        for _iter in range(1, total_num_iterations):
+            iter_weights = self.seg_weights[_iter]
+
+            # This is an array, not a dict, so index by... well, index, and not iter_number
+            num_segs_in_iter = int(self.numSegments[_iter - 1])
+
+            log.debug(f"Found {num_segs_in_iter} in iter {_iter}")
+            log.debug(f"Updating indices {i} :  {i + num_segs_in_iter}")
+
+            assert not None in iter_weights, f"None in iter {_iter}, {iter_weights}"
+
+            all_seg_weights[i:i + num_segs_in_iter] = iter_weights
+
+            i += num_segs_in_iter
+
+        log.debug(f"Got {all_seg_weights.shape} seg weights")
+        # ####
+
+        #  Assign each segment to a cluster
+        #   INCLUDING the segments in clusters in the final iteration (i.e. the N+1,  where dynamics didn't run)
+        for seg_idx in range(self.all_coords.shape[0]):
+
+            cluster_idx = self.clusters.dtrajs[0][seg_idx]
+            if cluster_idx not in cluster_structures.keys():
+                cluster_structures[cluster_idx] = []
+                cluster_structure_weights[cluster_idx] = []
+
+            cluster_structures[cluster_idx].append(self.all_coords[seg_idx])
+
+            cluster_structure_weights[cluster_idx].append(all_seg_weights[seg_idx])
+
+        # log.debug(f"Cluster structure shape is {len(list(cluster_structures.keys()))}, weights shape is {len(list(cluster_structure_weights.keys()))}")
+        # log.debug(f"First cluster has {len(cluster_structures[0])} structures and {len(cluster_structure_weights[0])} weights")
+        assert len(list(cluster_structures.keys())) == len(list(cluster_structure_weights.keys())),  \
+            "Structures and weights have different numbers of bins?"
+        assert len(cluster_structures[0]) == len(cluster_structure_weights[0]),  \
+            "First MSM bin has different numbers of structures and weights"
+
+        self.cluster_structures = cluster_structures
+        self.cluster_structure_weights = cluster_structure_weights
+
+        log.debug("Cluster structure mapping completed.")
 
     def cluster_coordinates(self, n_clusters):
         """
@@ -1415,6 +1518,9 @@ class modelWE:
             + str(self.n_clusters)
             + ".h5"
         )
+
+        log.debug("Clustering completed.")
+        # log.debug(f"Dtrajs: {self.clusters.dtrajs}")
         # self.clusters.save(self.clusterFile, save_streaming_chain=True, overwrite=True)
 
     def load_clusters(self, clusterFile):
@@ -1605,7 +1711,8 @@ class modelWE:
 
         Checks if a file has been written named
         "<`self.modelName`>_s<`first_iter`>_e<`last_iter`>_lag<`n_lag`>_clust<`self.n_clusters`>.h5".
-        If this file exists, r
+        If this file exists, load it and recalculate if it was calculated at an earlier iteration.
+        Otherwise, write it.
 
         Updates:
             - `self.n_lag`
@@ -1726,6 +1833,10 @@ class modelWE:
         Returns
         -------
         None
+
+        TODO
+        ----
+        Need to update self.cluster_structures with the new, reduced set of clusters
         """
 
         log.debug("Cleaning flux matrix")
@@ -1916,13 +2027,42 @@ class modelWE:
         -------
         None
         """
+
+        # FIXME: This does not always return the correct shape
+        log.debug("Computing steady-state from eigenvectors")
+
         n = np.shape(self.Tmatrix)[0]
         w, v = np.linalg.eig(np.transpose(self.Tmatrix))
+
         pSS = np.real(v[:, np.argmax(np.real(w))])
+
         pSS = pSS / np.sum(pSS)
+
+        # Flatten the array out.
+        # For some reason, sometimes it's of the shape (n_eigenvectors, 1) instead of (n_eigenvectors,), meaning each
+        #   element is its own sub-array.
+        # I can't seem to consistently replicate this behavior, but I'm sure it's  just some numpy weirdness I don't
+        #   fully understand. However, ravel will flatten that out and fix that.
+        pSS = pSS.ravel().squeeze().squeeze()
+
         self.pSS = pSS
 
     def get_steady_state_matrixpowers(self, conv):
+        """
+        Compute the steady-state distribution using the matrix power method.
+
+        Updates:
+            - `self.pSS`
+
+        Parameters
+        ----------
+        conv: numeric
+            Convergence criterion for iteration.
+
+        Returns
+        -------
+        None
+        """
         max_iters = 10000
         Mt = self.Tmatrix.copy()
         dconv = 1.0e100
