@@ -1862,7 +1862,10 @@ class modelWE:
         # dtraj[indBasis]=indBasisCluster
         # ------------------------
 
+        # This tracks which clusters are going to be cleaned from the flux matrix.
+        # A 0 means it'll be cleaned, a 1 means it'll be kept.
         indData = np.ones(self.n_clusters + 2)
+
         targetRMSD_centers = np.zeros(self.n_clusters + 2)
         # targetRMSD_centers[indTargetCluster]=self.target_rmsd
         targetRMSD_centers[indTargetCluster] = self.WEtargetp1
@@ -1881,20 +1884,36 @@ class modelWE:
                 elif np.shape(ind)[1] > 0:
                     # targetRMSD_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[ind[0],:,:]))
                     targetRMSD_centers[iC] = np.mean(self.pcoordSet[ind[0], 0])
+
+                # Get the total flux along the row and col of this index
                 statesum = np.sum(fluxMatrixTraps[:, iC]) + np.sum(
                     fluxMatrixTraps[iC, :]
                 )
+
+                # If both the row and column are all zero, set indData to 0
                 if statesum == 0.0:
                     indData[iC] = 0
+
+                # If the row and column are nonzero
                 if statesum > 0:
+                    # Get all the clusters that *aren't* the one we're looking at
                     indNotSelf = np.setdiff1d(range(self.n_clusters), iC)
+
+                    # Look at all the flux FROM other clusters
                     fromSum = np.sum(fluxMatrixTraps[iC, indNotSelf])
+
+                    # And look at all the flux TO other clusters
                     toSum = np.sum(fluxMatrixTraps[indNotSelf, iC])
+
+                    # If either the flux from or the flux to other clusters are all zero,
+                    #   then this is a source or sink respectively.
+                    # So, clean it
                     if fromSum == 0.0 or toSum == 0.0:
                         nTraps = nTraps + 1
                         indData[iC] = 0
                         fluxMatrixTraps[:, iC] = 0.0
                         fluxMatrixTraps[iC, :] = 0.0
+
             indData[indBasisCluster] = 1
             indData[indTargetCluster] = 1
         indData = np.squeeze(np.where(indData > 0))
@@ -1903,17 +1922,28 @@ class modelWE:
         targetRMSD_centers = targetRMSD_centers[indData]
         indp1 = np.argsort(targetRMSD_centers)
         self.targetRMSD_centers = targetRMSD_centers[indp1]
+
+        # Make a new flux matrix with only the non-source or sink states
         fluxMatrix = fluxMatrix[indp1, :]
         fluxMatrix = fluxMatrix[:, indp1]
+
+        # Renormalize the new flux matrix
         self.fluxMatrix = fluxMatrix / np.sum(
             fluxMatrix
         )  # average weight transitioning or staying put should be 1
+
         originalClusters = indData[indp1]
         self.indBasis = np.where(originalClusters == indBasisCluster)[0]
         self.indTargets = np.where(originalClusters == indTargetCluster)[0]
         self.originalClusters = originalClusters
+
         self.binCenters = targetRMSD_centers[indp1]
         self.nBins = np.shape(self.binCenters)[0]
+
+        # Remove the cluster structure dict entries corresponding to removed clusters
+        for removed_cluster in np.argwhere(indData == 0).squeeze():
+            self.cluster_structures.pop(removed_cluster)
+            self.cluster_structure_weights.pop(removed_cluster)
 
     def get_model_clusters(
         self,
