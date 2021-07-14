@@ -176,6 +176,7 @@ class modelWE:
         self.lagtime = None
         self.JtargetSS = None
 
+        self.removed_clusters = []
         self.cluster_structures = None
         self.cluster_structure_weights = None
         """dict: Mapping of cluster indices to structures in that cluster"""
@@ -1434,6 +1435,11 @@ class modelWE:
         for seg_idx in range(self.all_coords.shape[0]):
 
             cluster_idx = self.clusters.dtrajs[0][seg_idx]
+
+            if cluster_idx in self.removed_clusters:
+                log.debug(f"Skipping cluster {cluster_idx}")
+                continue
+
             if cluster_idx not in cluster_structures.keys():
                 cluster_structures[cluster_idx] = []
                 cluster_structure_weights[cluster_idx] = []
@@ -1453,6 +1459,7 @@ class modelWE:
         self.cluster_structure_weights = cluster_structure_weights
 
         log.debug("Cluster structure mapping completed.")
+        log.debug(f"Cluster keys are {cluster_structures.keys()}")
 
     def cluster_coordinates(self, n_clusters):
         """
@@ -1907,6 +1914,10 @@ class modelWE:
 
             indData[indBasisCluster] = 1
             indData[indTargetCluster] = 1
+
+        # Store this array. 1 if a cluster is good, 0 otherwise.
+        clusters_good = np.copy(indData)
+
         indData = np.squeeze(np.where(indData > 0))
         fluxMatrix = self.fluxMatrixRaw[indData, :]
         fluxMatrix = fluxMatrix[:, indData]
@@ -1932,9 +1943,35 @@ class modelWE:
         self.nBins = np.shape(self.binCenters)[0]
 
         # Remove the cluster structure dict entries corresponding to removed clusters
-        for removed_cluster in np.argwhere(indData == 0).squeeze():
-            self.cluster_structures.pop(removed_cluster)
-            self.cluster_structure_weights.pop(removed_cluster)
+        removed_clusters = np.argwhere(clusters_good == 0).squeeze()
+        print(np.argwhere(clusters_good == 0))
+        log.debug(f"indData is {clusters_good}")
+        log.debug(f"Removed clusters were {removed_clusters}")
+        self.removed_clusters = removed_clusters
+
+        # After cleaning, the cluster indices may no longer be consecutive.
+        #  So, when I do the cleaning, I need to build a mapping of old, nonconsecutive cluster indices from the
+        #  non-cleaned matrix, to new, consecutive indices.
+        # That's like collapsing the nonconsecutive list. In other words, imagine I started with 5 clusters [0,1,2,3,4]
+        #   and clean cluster 2. Now, I'll still have clusters labeled as [0,1,3,4], but my steady-state distribution
+        #   is only 4 elements. So indexing element 4 won't do anything.
+
+        # TODO: Define this in __init__
+        cluster_mapping = {x:x for x in range(self.n_clusters + 2)}
+        n_removed = 0
+        for key in cluster_mapping.keys():
+            if key in self.removed_clusters:
+                n_removed += 1
+            cluster_mapping[key] =  cluster_mapping[key] - n_removed
+
+        log.debug(f"New cluster mapping is  {cluster_mapping}")
+        self.cluster_mapping = cluster_mapping
+        # raise Exception
+        # if len(removed_clusters) > 0:
+        #     log.debug(f"Clusters are {self.clusters}")
+        #     print(self.clusters)
+        #     for removed_cluster in removed_clusters:
+        #     raise Exception
 
     def get_model_clusters(
         self,
