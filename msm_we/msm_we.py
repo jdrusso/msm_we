@@ -16,7 +16,7 @@ logging.basicConfig(
     level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
 )
 log = logging.getLogger("msm_we")
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 # sys.path.append(os.environ["WEST_ROOT"]+'/src')
 # sys.path.append(os.environ["WEST_ROOT"]+'/lib/west_tools')
@@ -1437,7 +1437,7 @@ class modelWE:
             cluster_idx = self.clusters.dtrajs[0][seg_idx]
 
             if cluster_idx in self.removed_clusters:
-                log.debug(f"Skipping cluster {cluster_idx}")
+                # log.debug(f"Skipping cluster {cluster_idx}")
                 continue
 
             if cluster_idx not in cluster_structures.keys():
@@ -1452,7 +1452,9 @@ class modelWE:
         # log.debug(f"First cluster has {len(cluster_structures[0])} structures and {len(cluster_structure_weights[0])} weights")
         assert len(list(cluster_structures.keys())) == len(list(cluster_structure_weights.keys())),  \
             "Structures and weights have different numbers of bins?"
-        assert len(cluster_structures[0]) == len(cluster_structure_weights[0]),  \
+
+        test_cluster = list(cluster_structures.keys())[0]
+        assert len(cluster_structures[test_cluster]) == len(cluster_structure_weights[test_cluster]),  \
             "First MSM bin has different numbers of structures and weights"
 
         self.cluster_structures = cluster_structures
@@ -1944,7 +1946,7 @@ class modelWE:
 
         # Remove the cluster structure dict entries corresponding to removed clusters
         removed_clusters = np.argwhere(clusters_good == 0).squeeze()
-        print(np.argwhere(clusters_good == 0))
+
         log.debug(f"indData is {clusters_good}")
         log.debug(f"Removed clusters were {removed_clusters}")
         self.removed_clusters = removed_clusters
