@@ -28,23 +28,15 @@ Model building and preparation
     defines the actual coordinate transformer object, in :code:`msm_we.coordinates`. However, :code:`reduceCoordinates()`
     actually runs that transformation on a set of input data.
 
-    An example of how this is currently done:
+    An example of how this is currently done, to read a couple functions from a Python file with path
+    :code:`override_file` and monkey-patch them in:
 
     .. code-block:: python
 
-        user_override_spec = importlib.util.spec_from_file_location("override_module", override_file)
-        user_overrides = importlib.util.module_from_spec(user_override_spec)
-
-        # Make the functions that were overriden in override_file available in the namespace under user_overrides
-        user_override_spec.loader.exec_module(user_overrides)
-
-        # So now we can do the actual monkey-patching of modelWE.
         # We monkey-patch at the module level rather than just override the function in the instanced object
         #   so that the functions retain access to self.
         msm_we.modelWE.processCoordinates = user_overrides.processCoordinates
         msm_we.modelWE.reduceCoordinates = user_overrides.reduceCoordinates
-
-    This will eventually be folded into the main :code:`msm_we` code.
 
 4. Create the model object.
 
