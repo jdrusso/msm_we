@@ -1258,6 +1258,11 @@ class modelWE:
         """
         Dimensionality reduction using the scheme specified in initialization.
 
+        This just defines the dimensionality reduction scheme -- it does NOT actually run it!
+
+        Dimensionality reduction is actually performed via reduceCoordinates(), which uses self.coordinates as set
+            by this.
+
         Updates:
             - `self.coordinates`
             - `self.ndim`
@@ -1288,7 +1293,7 @@ class modelWE:
             )
             self.ndim = self.coordinates.dimension()
 
-        if self.dimReduceMethod == "vamp":
+        elif self.dimReduceMethod == "vamp":
             ntraj = len(self.trajSet)
             data = [None] * ntraj
             for itraj in range(ntraj):
@@ -1303,13 +1308,17 @@ class modelWE:
                 skip=0,
             )
             self.ndim = self.coordinates.dimension()
-        if self.dimReduceMethod == "none":
+
+        elif self.dimReduceMethod == "none":
             data = self.all_coords.reshape(nC, 3 * self.nAtoms)
             self.coordinates = self.Coordinates()
             self.ndim = 3 * self.nAtoms
             # self.coordinates.transform=self.processCoordinates
 
     class Coordinates(object):
+        """
+        Fake Coordinates class, in case you don't want to use either PCA or VAMP for dimensionality reduction
+        """
 
         # The class "constructor" - It's actually an initializer
         def __init__(self):
@@ -1322,6 +1331,10 @@ class modelWE:
     def processCoordinates(self):
         """
         User-overrideable function to process coordinates.
+
+        This defines the featurization process.
+        It takes in takes in an array of the full set of coordinates, and spits out an array of the feature coordinates.
+        That array is then passed to functions like coor.pca(), coor.vamp(), or used directly if dimReduceMethod=="none".
         """
 
         raise NotImplementedError
@@ -1368,6 +1381,13 @@ class modelWE:
     def reduceCoordinates(self):
         """
         User-overrideable function to reduce coordinates.
+
+        This performs the dimensionality reduction.
+
+        dimReduce() defines self.coordinates, which is an object that has a .transform() function that produces the reduced
+        data.
+
+        reduceCoordinates() actually uses that coordinates object and returns the reduced data.
         """
 
         raise NotImplementedError
