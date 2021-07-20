@@ -26,11 +26,21 @@ Word     Definition
 ======= ===========
 Warp     When a particle is recycled from a sink state to a source state
 ------- -----------
-Segment
+Segment  A trajectory from a single WE iteration
 ======= ===========
 
 
-TODOs
+Code development TODOs
+-----
+*  Fold :code:`collectCoordinates.py` functionality into :code:`msm_we` proper.
+*  Does :code:`reduceCoordinates(self, coords)` actually need to be a mandatory user-override?
+*  Provide option for user to override :code:`dimReduce()` in case they want to do something other than PCA/VAMP
+*  Add TICA option to :code:`dimReduce()`
+*  Add monkey-patching directly into :code:`msm_we` code. I.e., add a function like :code:`register_featurization(func)`
+    which takes the featurization function as input and overloads :code:`msm_we.processCoordinates()` with it.
+    Right now, this has to be done manually.
+
+Code understanding TODOs
 -----
 *  When does :code:`segindList` not contain a consecutive list of integers from 1 to n_segs?
 *  What triggers the exception being handled in :code:`get_transition_data()`?
