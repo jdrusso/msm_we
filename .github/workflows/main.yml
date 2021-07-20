@@ -72,11 +72,10 @@ jobs:
         mkdir -p gh-pages/build
         ls docs
         ls docs/build
-        cp -r docs/build/stubs gh-pages/build
+        cp -r docs/build/* gh-pages/build
         cd gh-pages
         touch .nojekyll
         mkdir -p build
-        cp -r stubs/* build/
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add .
