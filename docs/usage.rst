@@ -46,25 +46,63 @@ Model building and preparation
 
     This will eventually be folded into the main :code:`msm_we` code.
 
-4. Create the model object. :code:`model = msm_we.modelWE()`
+4. Create the model object.
 
-5. Initialize the model. :code:`model.initialize(h5_glob, reference_structure_file, basis_structure_file, model_name)`
+.. code-block:: python
+
+    model = msm_we.modelWE()
+
+5. Initialize the model.
+
+.. code-block:: python
+
+    model.initialize(h5_glob, reference_structure_file, basis_structure_file, model_name)
 
 6. Load all coords and pcoords into  :code:`model.all_coords` and :code:`model.pcoordSet` respectively.
 
-7. Prepare dimensionality reduction transformer by running :code:`model.dimReduce()`.
+7. Prepare dimensionality reduction transformer by running
 
-8. Do clustering with :code:`model.cluster_coordinates(n_clusters)`
+.. code-block:: python
 
-9. Create the flux matrix with :code:`model.get_fluxMatrix(lag, first_iter, last_iter)`.
+    model.dimReduce()
 
-    a. (Optionally) Clean disconnected states and sort the flux matrix with :code:`model.organize_fluxMatrix`
+8. Do clustering with
+
+.. code-block:: python
+
+    model.cluster_coordinates(n_clusters)
+
+9. Create the flux matrix with
+
+.. code-block:: python
+
+    model.get_fluxMatrix(lag, first_iter, last_iter)
+
+a. (Optionally) Clean disconnected states and sort the flux matrix with :code:`model.organize_fluxMatrix`
 
 Analysis
 --------
 
-10. Normalize the flux matrix to produce a transition matrix with :code:`model.get_Tmatrix()`.
+10. Normalize the flux matrix to produce a transition matrix with
 
-11. Obtain steady-state distribution with :code:`model.get_steady_state_algebraic`.
+.. code-block:: python
 
-12. Obtain steady-state target flux with :code:`model.get_steady_state_target_flux()`
+    model.get_Tmatrix()
+
+11. Obtain steady-state distribution with
+
+.. code-block:: python
+
+    model.get_steady_state_algebraic()
+
+12. Update cluster structures
+
+.. code-block:: python
+
+    model.update_cluster_structures()
+
+13. Obtain steady-state target flux with
+
+.. code-block:: python
+
+    model.get_steady_state_target_flux()
