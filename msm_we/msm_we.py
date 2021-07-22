@@ -1824,7 +1824,11 @@ class modelWE:
             + "_clust"
             + str(self.n_clusters)
         )
-        f = h5py.File(fileName + ".h5", "a")
+
+        # Overwrite this file, don't try to read from it.
+        # TODO: Maybe in the future return to this,
+        #  but it caused more problems than it was worth when doing multiple runs.
+        f = h5py.File(fileName + ".h5", "w")
 
         dsetName = "fluxMatrix"
 
@@ -1861,6 +1865,7 @@ class modelWE:
             fluxMatrix = fluxMatrix / nI
 
         # If this datafile DOES contain a fluxMatrix entry...
+        # This should never run now.
         elif fluxmatrix_exists_in_h5:
 
             log.info("Fluxmatrix already exists in h5 file, loading saved.")
