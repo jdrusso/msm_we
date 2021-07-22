@@ -103,11 +103,18 @@ class modelWE:
         """float: Resampling time for weighted ensemble. (Maybe should be int? Units?)"""
 
         self.WEtargetp1 = None
-        """float: Progress coordinate value at target state."""
+        """float: Progress coordinate value at target state.
+        Used to check if a progress coord is in the target, and to set the RMSD of the target cluster when cleaning the
+        fluxmatrix."""
         self.WEbasisp1_min = None
-        """float: Minimum progress coordinate value within basis state."""
+        """float: Minimum progress coordinate value within basis state.
+        Used to check if a progress coord is in the basis, and to set the RMSD of the basis cluster when cleaning the
+        fluxmatrix."""
         self.WEbasisp1_max = None
-        """float: Maximum progress coordinate value within basis state."""
+        """float: Maximum progress coordinate value within basis state.
+        Used to check if a progress coord is in the basis, and to set the RMSD of the basis cluster when cleaning the
+        fluxmatrix."""
+
         self.dimReduceMethod = None
         """str: Dimensionality reduction method. Must be one of "pca", "vamp", or "none" (**NOT** NoneType)"""
 
@@ -182,7 +189,6 @@ class modelWE:
         """dict: Mapping of cluster indices to structures in that cluster"""
 
 
-
     def initialize(
         self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
     ):
@@ -239,8 +245,10 @@ class modelWE:
         # self.pcoord_len = 50
         tau = 10.0e-12
         self.tau = tau
+
         self.set_topology(refPDBfile)
         self.set_basis(initPDBfile)
+
         # self.WEtargetp1 = 1.25  # target def on WE p1
         # self.WEbasisp1_min = 12.0  # WE bin where basis structure is mapped
         # self.WEbasisp1_max = 12.5
@@ -529,46 +537,77 @@ class modelWE:
         self.numSegments = numSegments
         self.maxIter = last_iter
 
-    def set_topology(self, PDBfile):
+    def set_topology(self, topology):
         """
         Updates internal state with a new topology.
 
         Parameters
         ----------
-        PDBfile : str
-            Path to a file containing the PDB with the topology.
+        topology : str
+            Path to a file containing the PDB with the topology, OR, an mdtraj Trajectory object describing
+            the new basis structure.
 
         Returns
         -------
         None
         """
-        if PDBfile[-3:] == "dat":
-            self.reference_coord = np.loadtxt(PDBfile)
-            self.nAtoms = 1
-        elif PDBfile[-3:] == "pdb":
-            struct = md.load(PDBfile)
+
+        if type(topology) is str:
+
+            log.debug("Input reference topology was provided as a path, trying to load with mdtraj")
+
+            if topology[-3:] == "dat":
+                self.reference_coord = np.loadtxt(topology)
+                self.nAtoms = 1
+            elif topology[-3:] == "pdb":
+                struct = md.load(topology)
+                self.reference_structure = struct
+                self.reference_coord = np.squeeze(struct._xyz)
+                self.nAtoms = struct.topology.n_atoms
+            else:
+                raise NotImplementedError("Topology is not a recognized filetype")
+
+        else:
+            log.debug("Input reference topology  was provided as an mdtraj structure, loading that")
+
+            struct = topology
             self.reference_structure = struct
             self.reference_coord = np.squeeze(struct._xyz)
             self.nAtoms = struct.topology.n_atoms
 
-    def set_basis(self, PDBfile):
+    def set_basis(self, basis):
         """
         Updates internal state with a new basis.
 
         Parameters
         ----------
-        PDBfile : str
-            Path to a file containing the PDB with the new basis state.
+        basis : str or mdtraj.Trajectory
+            Path to a file containing the PDB with the new basis state, OR, an mdtraj Trajectory object describing
+            the new basis structure.
 
         Returns
         -------
         None
         """
 
-        if PDBfile[-3:] == "dat":
-            self.basis_coords = np.loadtxt(PDBfile)
-        elif PDBfile[-3:] == "pdb":
-            struct = md.load(PDBfile)
+        if type(basis) is str:
+
+            log.debug("Input basis state topology was provided as a path, trying to load with mdtraj")
+
+            if basis[-3:] == "dat":
+                self.basis_coords = np.loadtxt(basis)
+            elif basis[-3:] == "pdb":
+                struct = md.load(basis)
+                self.basis_structure = struct
+                self.basis_coords = np.squeeze(struct._xyz)
+            else:
+                pass
+                # raise NotImplementedError("Basis coordinates are not a recognized filetype")
+
+        else:
+            log.debug("Input reference topology  was provided as an mdtraj structure, loading that")
+
+            struct = basis
             self.basis_structure = struct
             self.basis_coords = np.squeeze(struct._xyz)
 
@@ -582,7 +621,7 @@ class modelWE:
         Parameters
         ----------
         n_lag : int
-            Lag to use for transitions.
+            Number of lags to use for transitions.
 
         Returns
         -------
@@ -624,70 +663,87 @@ class modelWE:
         # Go through each segment, and get pairs of coordinates at current iter (n_iter) and
         # lagged iter (n_iter-n_lag)
         for iS in range(self.nSeg):
+
             # FIXME: Try statements should encompass the smallest amount of code
             #  possible - anything could be tripping this
-            try:
-                if iS == 0:
-                    westFile = self.fileList[self.westList[iS]]
-                    dataIn = h5py.File(westFile, "r")
-                    dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
-                    dset = dataIn[dsetName]
-                    coords_current = dset[:]
-                    dsetName = "/iterations/iter_%08d/auxdata/coord" % int(
-                        self.n_iter - n_lag
-                    )
-                    dset = dataIn[dsetName]
-                    coords_lagged = dset[:]
-                elif self.westList[iS] != self.westList[iS - 1]:
-                    # FIXME: I think you can just move this close to an if statement in the beginning, and then remove
-                    #   this whole if/elif. Everything after that close() seems to be duplicated.
-                    dataIn.close()
-                    westFile = self.fileList[self.westList[iS]]
-                    dataIn = h5py.File(westFile, "r")
+            # try:
+            if iS == 0:
+                westFile = self.fileList[self.westList[iS]]
+                dataIn = h5py.File(westFile, "r")
+                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+                dset = dataIn[dsetName]
+                coords_current = dset[:]
+                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(
+                    self.n_iter - n_lag
+                )
+                dset = dataIn[dsetName]
+                coords_lagged = dset[:]
+            elif self.westList[iS] != self.westList[iS - 1]:
+                # FIXME: I think you can just move this close to an if statement in the beginning, and then remove
+                #   this whole if/elif. Everything after that close() seems to be duplicated.
+                dataIn.close()
+                westFile = self.fileList[self.westList[iS]]
+                dataIn = h5py.File(westFile, "r")
 
-                    # Load the data for the current iteration
-                    dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
-                    dset = dataIn[dsetName]
-                    coords_current = dset[:]
+                # Load the data for the current iteration
+                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+                dset = dataIn[dsetName]
+                coords_current = dset[:]
 
-                    # Load the lagged data for (iteration - n_lag)
-                    dsetName = "/iterations/iter_%08d/auxdata/coord" % int(
-                        self.n_iter - n_lag
-                    )
-                    dset = dataIn[dsetName]
-                    coords_lagged = dset[:]
+                # Load the lagged data for (iteration - n_lag)
+                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(
+                    self.n_iter - n_lag
+                )
+                dset = dataIn[dsetName]
+                coords_lagged = dset[:]
 
-                coordPairList[iS, :, :, 1] = coords_current[
-                    self.segindList[iS], 1, :, :
+            coordPairList[iS, :, :, 1] = coords_current[
+                self.segindList[iS], 1, :, :
+            ]
+
+            # If this segment has no warps, then add the lagged coordinates
+            if warpList[iS] == 0:
+                # Try to set the previous coord in the transition pair to the segment's lagged coordinates
+                try:
+                    lagged_seg_index = segindList_lagged[iS]
+                    coordPairList[iS, :, :, 0] = coords_lagged[
+                        lagged_seg_index, 0, :, :
+                    ]
+
+                # If this fails, then there were no lagged coordinates for this structure.
+                except IndexError as e:
+                    log.critical(f"Lagged coordinates do not exist for the structure in segment {iS}")
+                    raise e
+                    weightList_lagged[iS] = 0.0
+                    weightList[
+                        iS
+                    ] = 0.0  # set transitions without structures to zero weight
+
+            # If something was recycled during this segment, then instead of using the lagged cooordinates,
+            #   just use the basis coords.
+            # But, also save the original structure before the warp!
+            elif warpList[iS] > 0:
+
+                # St
+                prewarpedStructures[nWarped, :, :] = coords_lagged[
+                    segindList_lagged[iS], 0, :, :
                 ]
 
-                # If this segment has no warps, then add the lagged coordinates
-                # TODO: What is coordPairList?
-                if warpList[iS] == 0:
-                    coordPairList[iS, :, :, 0] = coords_lagged[
-                        segindList_lagged[iS], 0, :, :
-                    ]
+                assert self.basis_coords is not None
 
-                # If something was recycled during this segment, then instead of using the lagged cooordinates,
-                #   just use the basis coords.
-                # But, also save the original structure before the warp!
-                elif warpList[iS] > 0:
+                coordPairList[iS, :, :, 0] = self.basis_coords
+                nWarped = nWarped + 1
 
-                    # St
-                    prewarpedStructures[nWarped, :, :] = coords_lagged[
-                        segindList_lagged[iS], 0, :, :
-                    ]
-                    coordPairList[iS, :, :, 0] = self.basis_coords
-                    nWarped = nWarped + 1
-
-            # TODO: What triggers this? When that critical log hits, come update this comment and the main docstring.
-            except Exception as e:
-                log.critical("Document whatever's causing this exception!")
-                log.warning(e)
-                weightList_lagged[iS] = 0.0
-                weightList[
-                    iS
-                ] = 0.0  # set transitions without structures to zero weight
+            # # TODO: What triggers this? When that critical log hits, come update this comment and the main docstring.
+            # # This triggers on index out of bounds... But that's a huge try statement!
+            # except Exception as e:
+            #     log.critical("Document whatever's causing this exception!")
+            #     log.warning(e)
+            #     raise e
+            #     weightList_lagged[iS] = 0.0
+            #     weightList[
+            #         iS
+            #     ] = 0.0  # set transitions without structures to zero weight
 
         # Squeeze removes axes of length 1 -- this helps with np.where returning nested lists of indices
         # FIXME: is any of this necessary? This kinda seems like it could be replaced with
@@ -750,7 +806,10 @@ class modelWE:
         self,
     ):
         """
-        **TODO: What does this do exactly?**
+        **TODO: What does this do exactly? What does it mean to get transition data at a lag of 0?**
+
+        Get coordinate pairs as the position at the beginning and end of this iteration.
+        In this scheme, it's not possible to have warps, since warps/recycles are handled between iterations.
 
         Returns
         -------
@@ -767,10 +826,12 @@ class modelWE:
         weightList = self.weightList
         coordPairList = np.zeros((self.nSeg, self.nAtoms, 3, 2))
 
-        log.debug(f"Getting transition data for {self.nSeg} segs")
+        log.debug(f"Getting transition data for {self.nSeg} segs, at a lag of 0")
 
         for iS in range(self.nSeg):
             try:
+                # TODO: Brain locked on something else right now, but you can remove all this duplicate if/elif and just
+                #   put the close in an if, or at the end
                 if iS == 0:
                     westFile = self.fileList[self.westList[iS]]
                     dataIn = h5py.File(westFile, "r")
@@ -915,6 +976,11 @@ class modelWE:
     def get_seg_histories(self, n_hist):
         """
         **TODO: What does this do exactly?**
+
+        Updates:
+            - self.seg_histories
+            - self.weight_histories
+            - self.n_hist
 
         Parameters
         ----------
@@ -1541,6 +1607,9 @@ class modelWE:
         """
         Get the flux matrix for an iteration.
 
+        1. Update state with data from the iteration you want to compute the flux matrix for
+        2. Load transition data at the requested lag
+
         Parameters
         ----------
         n_iter
@@ -1552,35 +1621,37 @@ class modelWE:
         ----
         """
 
-        # Update state with data from the current iteration
-
+        # 1. Update state with data from the iteration you want to compute the flux matrix for
         sys.stdout.write("iteration " + str(n_iter) + ": data \n")
         self.load_iter_data(n_iter)
+
+        #  2. Load transition data at the requested lag
         if self.n_lag > 0:
+            # If you're using more than 1 lag, obtain segment histories at that lag
+            #   This means you have to look back one or more iterations
             sys.stdout.write("segment histories \n")
             self.get_seg_histories(self.n_lag + 1)
             sys.stdout.write(" transition data...\n")
             self.get_transition_data(self.n_lag)
         elif self.n_lag == 0:
+            # If you're using a lag of 0, your coordinate pairs are just the beginning/end of the iteration.
+            #   In that, it's not possible to have warps/recycles, since those are done handled between iterations.
             self.get_transition_data_lag0()
+
         log.info(f"Getting flux matrix for iter {n_iter} with {self.nSeg} segments")
+        # If you used a lag of 0, transitions weights are just weightList
+        # If you used a lag > 0, these include the weight histories from previous iterations
         nT = np.shape(self.transitionWeights)[0]
 
-        # Create clusters for the target and basis states
+        # Create dedicated clusters for the target and basis states,
+        # and reassign any points within the target or basis to those
         indTargetCluster = self.n_clusters + 1
         indBasisCluster = self.n_clusters
 
         # (Segment, Atom, [lagged, current coord])
         log.debug(f"Coord pairlist shape is {self.coordPairList.shape}")
-        # log.debug(f"Coord pairlist is {self.coordPairList[5,5,:,0]}")
-        # log.debug(f"Coord pairlist is {self.coordPairList[5,5,:,1]}")
 
         # Assign a cluster to the lagged and the current coords
-        # TODO: it seems like this needs to get the number of segments in the current iter
-        # Otherwise, this does coordinate reduction on ALL the coordinates -- which will give me
-        #   the TOTAL number of segments
-        # No -- self.coordPairList only contains the current iteration's segments
-        # But for some reason, cluster0 returns 125 element array??
         cluster0 = self.clusters.assign(
             self.reduceCoordinates(self.coordPairList[:, :, :, 0])
         )
@@ -1594,18 +1665,24 @@ class modelWE:
         indTarget1 = np.where(self.is_WE_target(self.pcoord1List))
 
         if indTarget1[0].size > 0:
-            sys.stdout.write("Target1: " + str(indTarget1[0].size) + "\n")
+            log.info("Number of post-transition target1 entries: " + str(indTarget1[0].size) + "\n")
+        else:
+            log.info(f"No target1 entries. {indTarget1}")
 
+        # Get the index of every point
         indBasis0 = np.where(
             self.is_WE_basis(self.pcoord0List)
         )  # needs to fit definition of target in WE
         if indBasis0[0].size > 0:
-            sys.stdout.write("Basis0: " + str(indBasis0[0].size) + "\n")
+            log.info("Number of pre-transition points in basis0: " + str(indBasis0[0].size) + "\n")
 
         indBasis1 = np.where(self.is_WE_basis(self.pcoord1List))
         if indBasis1[0].size > 0:
-            sys.stdout.write("Basis1: " + str(indBasis1[0].size) + "\n")
+            log.info("Number of post-transition points in basis1: " + str(indBasis1[0].size) + "\n")
 
+        log.info(f"Target cluster index is: {indTargetCluster},  basis cluster index is: {indBasisCluster}")
+
+        # Re-assign points that were in either the target or the basis to the target or basis clusters
         cluster1[indTarget1] = indTargetCluster
         cluster0[indBasis0] = indBasisCluster
         cluster1[indBasis1] = indBasisCluster
@@ -1714,7 +1791,7 @@ class modelWE:
         Parameters
         ----------
         n_lag: int
-            Lag to use.
+            Number of lags to use.
         first_iter: int
             First iteration to use.
         last_iter: int
@@ -1752,9 +1829,10 @@ class modelWE:
         dsetName = "fluxMatrix"
 
         # FIXME: name this something descriptive or just use the 'in' statement in the if/elif
-        e = dsetName in f
+        fluxmatrix_exists_in_h5 = dsetName in f
+
         # If this data file does not contain a fluxMatrix entry, create it
-        if not e:
+        if not fluxmatrix_exists_in_h5:
             # Create the fluxMatrix dataset
             dsetP = f.create_dataset(dsetName, np.shape(fluxMatrix))
             dsetP[:] = fluxMatrix
@@ -1783,7 +1861,9 @@ class modelWE:
             fluxMatrix = fluxMatrix / nI
 
         # If this datafile DOES contain a fluxMatrix entry...
-        elif e:
+        elif fluxmatrix_exists_in_h5:
+
+            log.info("Fluxmatrix already exists in h5 file, loading saved.")
 
             # Load the existing fluxMatrix
             dsetP = f[dsetName]
@@ -1795,7 +1875,11 @@ class modelWE:
             # If the flux matrix was calculated at an earlier iteration than the current/requested last iteration, then
             #   recalculate it and update it.
             # TODO: Check if first_iter changed too? That's not stored anywhere
-            if nIter < last_iter:
+
+            #  For now, just always overwrite any saved data.
+            # if nIter < last_iter:
+            if True:
+                log.warning(f"Ignoring any saved fluxmatrix in {fileName}.h5")
                 for iS in range(nIter, last_iter + 1):
                     fluxMatrixI = self.get_iter_fluxMatrix(iS)
                     fluxMatrix = fluxMatrix + fluxMatrixI
@@ -1881,11 +1965,11 @@ class modelWE:
                     fluxMatrixTraps[iC, :]
                 )
 
-                # If both the row and column are all zero, set indData to 0
+                # If both the row and column are all zero, this is an unvisited state, so set indData to 0
                 if statesum == 0.0:
                     indData[iC] = 0
 
-                # If the row and column are nonzero
+                # If the sum along the row and column are nonzero
                 if statesum > 0:
                     # Get all the clusters that *aren't* the one we're looking at
                     indNotSelf = np.setdiff1d(range(self.n_clusters), iC)
@@ -1900,25 +1984,32 @@ class modelWE:
                     #   then this is a source or sink respectively.
                     # So, clean it
                     if fromSum == 0.0 or toSum == 0.0:
+                        log.debug(f"Cluster with index {iC} is a trap")
                         nTraps = nTraps + 1
                         indData[iC] = 0
                         fluxMatrixTraps[:, iC] = 0.0
                         fluxMatrixTraps[iC, :] = 0.0
 
+            # Make sure we don't clean the target or basis clusters
             indData[indBasisCluster] = 1
             indData[indTargetCluster] = 1
 
         # Store this array. 1 if a cluster is good, 0 otherwise.
         clusters_good = np.copy(indData)
 
+        # Get all the visited and non-trap clusters, which we want to keep, and make fluxMatrix from those
         indData = np.squeeze(np.where(indData > 0))
         fluxMatrix = self.fluxMatrixRaw[indData, :]
         fluxMatrix = fluxMatrix[:, indData]
+
+        # Get the RMSD centers for all of the clusters we want to keep
         targetRMSD_centers = targetRMSD_centers[indData]
+        # Get the indices that sort it
         indp1 = np.argsort(targetRMSD_centers)
+        # And update the model's RMSD cluster centers to just include the sorted clusters to keep
         self.targetRMSD_centers = targetRMSD_centers[indp1]
 
-        # Make a new flux matrix with only the non-source or sink states
+        # Sort fluxmatrix using the sorted indices, columns and then rows
         fluxMatrix = fluxMatrix[indp1, :]
         fluxMatrix = fluxMatrix[:, indp1]
 
@@ -1927,18 +2018,25 @@ class modelWE:
             fluxMatrix
         )  # average weight transitioning or staying put should be 1
 
+        # Update the index of the basis and target states to account for their position in the new sorted clusters
         originalClusters = indData[indp1]
+        log.info(f"indData: {indData}")
         self.indBasis = np.where(originalClusters == indBasisCluster)[0]
         self.indTargets = np.where(originalClusters == indTargetCluster)[0]
+        log.info(f"indBasis:  {self.indBasis}, indTargets: {self.indTargets}")
+        log.info(f"Sanity check -- basis:  {self.targetRMSD_centers[self.indBasis]}, target: {self.targetRMSD_centers[self.indTargets]}")
+
+        # Save the new, sorted clusters
         self.originalClusters = originalClusters
 
+        # Update binCenters with the new, sorted centers
         self.binCenters = targetRMSD_centers[indp1]
         self.nBins = np.shape(self.binCenters)[0]
 
         # Remove the cluster structure dict entries corresponding to removed clusters
         removed_clusters = np.argwhere(clusters_good == 0).squeeze()
 
-        log.debug(f"indData is {clusters_good}")
+        log.debug(f"Good clusters are {clusters_good}")
         log.debug(f"Removed clusters were {removed_clusters}")
         self.removed_clusters = removed_clusters
 
@@ -1948,6 +2046,7 @@ class modelWE:
         # That's like collapsing the nonconsecutive list. In other words, imagine I started with 5 clusters [0,1,2,3,4]
         #   and clean cluster 2. Now, I'll still have clusters labeled as [0,1,3,4], but my steady-state distribution
         #   is only 4 elements. So indexing element 4 won't do anything.
+
 
         # TODO: Define this in __init__
         cluster_mapping = {x:x for x in range(self.n_clusters + 2)}
@@ -1959,6 +2058,11 @@ class modelWE:
 
         log.debug(f"New cluster mapping is  {cluster_mapping}")
         self.cluster_mapping = cluster_mapping
+
+        # Update self.n_clusters to account for any removed clusters
+        self.n_clusters -= n_removed
+
+
         # raise Exception
         # if len(removed_clusters) > 0:
         #     log.debug(f"Clusters are {self.clusters}")
@@ -1969,6 +2073,9 @@ class modelWE:
     def get_model_clusters(
         self,
     ):  # define new clusters from organized flux matrix corresponding to model
+
+        log.critical("This function is untested, and may rely on other untested parts of this code. Use with extreme caution.")
+
         clustercenters = np.zeros((self.n_clusters + 2, self.ndim))
         clustercenters[0 : self.n_clusters, :] = self.clusters.clustercenters
         if self.dimReduceMethod == "none":
@@ -2152,11 +2259,15 @@ class modelWE:
         # Get a list of all the states that AREN'T targets, since we want to sum up
         nTargets = self.indTargets.size
         indNotTargets = np.setdiff1d(range(self.nBins), self.indTargets)
+        log.info(f"Non-target states are those with index {indNotTargets}")
 
         Jt = 0.0
         # Add up the total flux into each of the targets
         for j in range(nTargets):
+            log.info(f"Processing flux into target state with index {self.indTargets[j]}")
+
             jj = self.indTargets[j]
+
             Jt = Jt + np.sum(
                 np.multiply(
                     pSS[indNotTargets],
@@ -2165,6 +2276,7 @@ class modelWE:
                     ),
                 )
             )
+
         self.JtargetSS = Jt / self.lagtime
 
     def evolve_probability(
@@ -2825,6 +2937,9 @@ class modelWE:
         return self.binObjective
 
     def get_iter_aristoffian(self, iter):
+
+        log.critical("This function is untested, and may rely on other untested parts of this code. Use with extreme caution.")
+
         self.load_iter_data(iter)
         if not hasattr(self, "model_clusters"):
             self.get_model_clusters()
