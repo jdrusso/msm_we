@@ -2199,6 +2199,10 @@ class modelWE:
 
         pSS = np.real(v[:, np.argmax(np.real(w))])
 
+        # Remove values that are below machine precision
+        pSS_eps = np.finfo(pSS.dtype).eps
+        pSS[pSS < pSS_eps] = 0.0
+
         pSS = pSS / np.sum(pSS)
 
         # Flatten the array out.
