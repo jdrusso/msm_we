@@ -4,6 +4,7 @@ from __future__ import division, print_function
 __metaclass__ = type
 import numpy as np
 import os
+import tqdm
 import sys
 import subprocess
 import h5py
@@ -93,6 +94,8 @@ class modelWE:
         """int: Number of files in :code:`fileList`
 
         **TODO**: Deprecate this, this could just be a property"""
+
+        self.cluster_seed = False
 
         self.n_lag = None
         self.pcoord_ndim = None
@@ -1015,14 +1018,14 @@ class modelWE:
         for iS in range(self.nSeg):
 
             # Print a message every 100 segments
-            if iS % 100 == 0:
-                sys.stdout.write(
-                    "        getting history for iteration "
-                    + str(self.n_iter)
-                    + " segment "
-                    + str(iS)
-                    + "...\n"
-                )
+            # if iS % 100 == 0:
+            #     sys.stdout.write(
+            #         "        getting history for iteration "
+            #         + str(self.n_iter)
+            #         + " segment "
+            #         + str(iS)
+            #         + "...\n"
+            #     )
 
             # Open the relevant datafile for reading
             if iS == 0:
@@ -1553,18 +1556,23 @@ class modelWE:
                 self.clusters = coor.cluster_kmeans(
                     [self.all_coords.reshape(nC, 3 * self.nAtoms)],
                     k=n_clusters,
+                    fixed_seed=self.cluster_seed,
                     metric="minRMSD",
-                )  # ,max_iter=100)
+                )
+                # max_iter=100)
             elif self.nAtoms == 1:
                 self.clusters = coor.cluster_kmeans(
                     [self.all_coords.reshape(nC, 3 * self.nAtoms)],
                     k=n_clusters,
+                    fixed_seed=self.cluster_seed,
                     metric="euclidean",
                 )
         if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
             self.clusters = coor.cluster_kmeans(
-                self.coordinates.get_output(), k=n_clusters, metric="euclidean"
-            )  # ,max_iter=100)
+                self.coordinates.get_output(), k=n_clusters, metric="euclidean",
+                fixed_seed=self.cluster_seed,
+            max_iter=100,
+            )
         self.clusterFile = (
             self.modelName
             + "_clusters_s"
@@ -1622,16 +1630,17 @@ class modelWE:
         """
 
         # 1. Update state with data from the iteration you want to compute the flux matrix for
-        sys.stdout.write("iteration " + str(n_iter) + ": data \n")
+        # sys.stdout.write("iteration " + str(n_iter) + ": data \n")
         self.load_iter_data(n_iter)
 
         #  2. Load transition data at the requested lag
         if self.n_lag > 0:
             # If you're using more than 1 lag, obtain segment histories at that lag
             #   This means you have to look back one or more iterations
-            sys.stdout.write("segment histories \n")
+
+            # sys.stdout.write("segment histories \n")
             self.get_seg_histories(self.n_lag + 1)
-            sys.stdout.write(" transition data...\n")
+            # sys.stdout.write(" transition data...\n")
             self.get_transition_data(self.n_lag)
         elif self.n_lag == 0:
             # If you're using a lag of 0, your coordinate pairs are just the beginning/end of the iteration.
@@ -1664,10 +1673,10 @@ class modelWE:
         # Record every point where you're in the target
         indTarget1 = np.where(self.is_WE_target(self.pcoord1List))
 
-        if indTarget1[0].size > 0:
-            log.debug("Number of post-transition target1 entries: " + str(indTarget1[0].size) + "\n")
-        else:
-            log.warning(f"No target1 entries. {indTarget1}")
+        # if indTarget1[0].size > 0:
+        #     log.debug("Number of post-transition target1 entries: " + str(indTarget1[0].size) + "\n")
+        # else:
+        #     log.warning(f"No target1 entries. {indTarget1}")
 
         # Get the index of every point
         indBasis0 = np.where(
@@ -1756,7 +1765,7 @@ class modelWE:
         self.pcoord1D_fluxMatrix = fluxMatrix
 
     def get_iter_pcoord1D_fluxMatrix_lag0(self, n_iter, binbounds):
-        sys.stdout.write("iteration " + str(n_iter) + ": data \n")
+        # sys.stdout.write("iteration " + str(n_iter) + ": data \n")
         self.load_iter_data(n_iter)
         nT = np.shape(self.weightList)[0]
         nBins = binbounds.size - 1
@@ -1825,7 +1834,7 @@ class modelWE:
             + str(self.n_clusters)
         )
 
-        # Overwrite this file, don't try to read from it.
+        # Overwrite this file, don't try to read from it.  Hence the "w" flag
         # TODO: Maybe in the future return to this,
         #  but it caused more problems than it was worth when doing multiple runs.
         f = h5py.File(fileName + ".h5", "w")
@@ -1841,25 +1850,25 @@ class modelWE:
             dsetP = f.create_dataset(dsetName, np.shape(fluxMatrix))
             dsetP[:] = fluxMatrix
             # FIXME: Maybe just close this file after, I don't think it needs to be opened and closed this much
-            f.close()
+            # f.close()
 
             # Add up the flux matrices for each iteration to get the flux matrix.
             # Then, save that matrix to the data file, along with the number of iterations used
             # FIXME: Duplicated code
             # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
-            for iS in range(first_iter + 1, last_iter + 1):
+            for iS in tqdm.tqdm(range(first_iter + 1, last_iter + 1), desc="Constructing flux matrix"):
                 log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
 
                 fluxMatrixI = self.get_iter_fluxMatrix(iS)
                 fluxMatrix = fluxMatrix + fluxMatrixI
                 nI = nI + 1
 
-                f = h5py.File(fileName + ".h5", "a")
+                # f = h5py.File(fileName + ".h5", "a")
                 dsetP = f[dsetName]
                 dsetP[:] = fluxMatrix / nI
                 dsetP.attrs["iter"] = iS
-                f.close()
                 log.debug(f"Completed flux matrix for iter {iS}")
+            f.close()
 
             # Normalize the flux matrix by the number of iterations that it was calculated with
             fluxMatrix = fluxMatrix / nI
@@ -1874,7 +1883,7 @@ class modelWE:
             dsetP = f[dsetName]
             fluxMatrix = dsetP[:]
             nIter = dsetP.attrs["iter"]
-            f.close()
+            # f.close()
             nI = 1
 
             # If the flux matrix was calculated at an earlier iteration than the current/requested last iteration, then
@@ -1889,12 +1898,13 @@ class modelWE:
                     fluxMatrixI = self.get_iter_fluxMatrix(iS)
                     fluxMatrix = fluxMatrix + fluxMatrixI
                     nI = nI + 1
-                    f = h5py.File(fileName + ".h5", "a")
+                    # f = h5py.File(fileName + ".h5", "a")
                     dsetP = f[dsetName]
                     dsetP[:] = fluxMatrix / nI
                     dsetP.attrs["iter"] = iS
-                    f.close()
+                    # f.close()
                     sys.stdout.write("getting fluxMatrix iter: " + str(iS) + "\n")
+                f.close()
                 fluxMatrix = fluxMatrix / nI
 
         f.close()
