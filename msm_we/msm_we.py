@@ -1638,7 +1638,7 @@ class modelWE:
             #   In that, it's not possible to have warps/recycles, since those are done handled between iterations.
             self.get_transition_data_lag0()
 
-        log.info(f"Getting flux matrix for iter {n_iter} with {self.nSeg} segments")
+        log.debug(f"Getting flux matrix for iter {n_iter} with {self.nSeg} segments")
         # If you used a lag of 0, transitions weights are just weightList
         # If you used a lag > 0, these include the weight histories from previous iterations
         nT = np.shape(self.transitionWeights)[0]
@@ -1665,22 +1665,22 @@ class modelWE:
         indTarget1 = np.where(self.is_WE_target(self.pcoord1List))
 
         if indTarget1[0].size > 0:
-            log.info("Number of post-transition target1 entries: " + str(indTarget1[0].size) + "\n")
+            log.debug("Number of post-transition target1 entries: " + str(indTarget1[0].size) + "\n")
         else:
-            log.info(f"No target1 entries. {indTarget1}")
+            log.warning(f"No target1 entries. {indTarget1}")
 
         # Get the index of every point
         indBasis0 = np.where(
             self.is_WE_basis(self.pcoord0List)
         )  # needs to fit definition of target in WE
         if indBasis0[0].size > 0:
-            log.info("Number of pre-transition points in basis0: " + str(indBasis0[0].size) + "\n")
+            log.debug("Number of pre-transition points in basis0: " + str(indBasis0[0].size) + "\n")
 
         indBasis1 = np.where(self.is_WE_basis(self.pcoord1List))
         if indBasis1[0].size > 0:
-            log.info("Number of post-transition points in basis1: " + str(indBasis1[0].size) + "\n")
+            log.debug("Number of post-transition points in basis1: " + str(indBasis1[0].size) + "\n")
 
-        log.info(f"Target cluster index is: {indTargetCluster},  basis cluster index is: {indBasisCluster}")
+        log.debug(f"Target cluster index is: {indTargetCluster},  basis cluster index is: {indBasisCluster}")
 
         # Re-assign points that were in either the target or the basis to the target or basis clusters
         cluster1[indTarget1] = indTargetCluster
@@ -2025,11 +2025,11 @@ class modelWE:
 
         # Update the index of the basis and target states to account for their position in the new sorted clusters
         originalClusters = indData[indp1]
-        log.info(f"indData: {indData}")
+        log.debug(f"indData: {indData}")
         self.indBasis = np.where(originalClusters == indBasisCluster)[0]
         self.indTargets = np.where(originalClusters == indTargetCluster)[0]
-        log.info(f"indBasis:  {self.indBasis}, indTargets: {self.indTargets}")
-        log.info(f"Sanity check -- basis:  {self.targetRMSD_centers[self.indBasis]}, target: {self.targetRMSD_centers[self.indTargets]}")
+        log.debug(f"indBasis:  {self.indBasis}, indTargets: {self.indTargets}")
+        log.debug(f"Sanity check -- basis:  {self.targetRMSD_centers[self.indBasis]}, target: {self.targetRMSD_centers[self.indTargets]}")
 
         # Save the new, sorted clusters
         self.originalClusters = originalClusters
@@ -2268,12 +2268,12 @@ class modelWE:
         # Get a list of all the states that AREN'T targets, since we want to sum up
         nTargets = self.indTargets.size
         indNotTargets = np.setdiff1d(range(self.nBins), self.indTargets)
-        log.info(f"Non-target states are those with index {indNotTargets}")
+        log.debug(f"Non-target states are those with index {indNotTargets}")
 
         Jt = 0.0
         # Add up the total flux into each of the targets
         for j in range(nTargets):
-            log.info(f"Processing flux into target state with index {self.indTargets[j]}")
+            log.debug(f"Processing flux into target state with index {self.indTargets[j]}")
 
             jj = self.indTargets[j]
 
