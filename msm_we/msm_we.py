@@ -14,7 +14,7 @@ import logging
 from rich.logging import RichHandler
 FORMAT = "%(message)s"
 logging.basicConfig(
-    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
+    format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
 )
 log = logging.getLogger("msm_we")
 log.setLevel(logging.INFO)
@@ -32,6 +32,7 @@ import matplotlib
 
 # matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+
 import mdtraj as md
 import pyemma.coordinates as coor
 import pyemma.coordinates.clustering as clustering
