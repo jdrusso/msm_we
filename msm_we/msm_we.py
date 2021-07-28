@@ -2209,18 +2209,24 @@ class modelWE:
 
         pSS = np.real(v[:, np.argmax(np.real(w))])
 
-        # Remove values that are below machine precision
-        pSS_eps = np.finfo(pSS.dtype).eps
-        pSS[pSS < pSS_eps] = 0.0
-
-        pSS = pSS / np.sum(pSS)
-
         # Flatten the array out.
         # For some reason, sometimes it's of the shape (n_eigenvectors, 1) instead of (n_eigenvectors,), meaning each
         #   element is its own sub-array.
         # I can't seem to consistently replicate this behavior, but I'm sure it's  just some numpy weirdness I don't
         #   fully understand. However, ravel will flatten that out and fix that.
         pSS = pSS.ravel().squeeze().squeeze()
+
+        assert not np.isclose(np.sum(pSS), 0), "Steady-state distribution sums to 0!"
+        pSS = pSS / np.sum(pSS)
+
+        # Remove values that are below machine precision
+        pSS_eps = np.finfo(pSS.dtype).eps
+        pSS[np.abs(pSS) < pSS_eps] = 0.0
+
+        # Normalize after removing these very small values
+        pSS = pSS / np.sum(pSS)
+
+        assert np.all(pSS > 0), "Some negative elements in steady-state distribution"
 
         self.pSS = pSS
 
