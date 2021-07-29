@@ -569,7 +569,8 @@ class modelWE:
                 self.reference_coord = np.squeeze(struct._xyz)
                 self.nAtoms = struct.topology.n_atoms
             else:
-                raise NotImplementedError("Topology is not a recognized filetype")
+                log.critical("Topology is not a recognized type! Proceeding, but no guarantees.")
+                # raise NotImplementedError("Topology is not a recognized filetype")
 
         else:
             log.debug("Input reference topology  was provided as an mdtraj structure, loading that")
@@ -605,7 +606,7 @@ class modelWE:
                 self.basis_structure = struct
                 self.basis_coords = np.squeeze(struct._xyz)
             else:
-                pass
+                log.critical("Basis is not a recognized type! Proceeding, but no guarantees.")
                 # raise NotImplementedError("Basis coordinates are not a recognized filetype")
 
         else:
@@ -1380,9 +1381,10 @@ class modelWE:
             self.ndim = self.coordinates.dimension()
 
         elif self.dimReduceMethod == "none":
-            data = self.all_coords.reshape(nC, 3 * self.nAtoms)
+            self.ndim = int(3 * self.nAtoms)
+
+            data = self.all_coords.reshape(nC, self.ndim)
             self.coordinates = self.Coordinates()
-            self.ndim = 3 * self.nAtoms
             # self.coordinates.transform=self.processCoordinates
 
     class Coordinates(object):
@@ -1561,9 +1563,11 @@ class modelWE:
                     metric="minRMSD",
                 )
                 # max_iter=100)
-            elif self.nAtoms == 1:
+            # elif self.nAtoms == 1:
+            # Else here is a little sketchy, but fractional nAtoms is useful for some debugging hacks.
+            else:
                 self.clusters = coor.cluster_kmeans(
-                    [self.all_coords.reshape(nC, 3 * self.nAtoms)],
+                    [self.all_coords.reshape(nC, int(3 * self.nAtoms))],
                     k=n_clusters,
                     fixed_seed=self.cluster_seed,
                     metric="euclidean",
@@ -2227,7 +2231,7 @@ class modelWE:
         # Normalize after removing these very small values
         pSS = pSS / np.sum(pSS)
 
-        assert np.all(pSS > 0), "Some negative elements in steady-state distribution"
+        assert np.all(pSS >= 0), "Some negative elements in steady-state distribution"
 
         self.pSS = pSS
 
