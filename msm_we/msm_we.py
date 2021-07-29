@@ -106,10 +106,14 @@ class modelWE:
         self.tau = None
         """float: Resampling time for weighted ensemble. (Maybe should be int? Units?)"""
 
-        self.WEtargetp1 = None
+        self.WEtargetp1_min = None
+        self.WEtargetp1_max = None
         """float: Progress coordinate value at target state.
         Used to check if a progress coord is in the target, and to set the RMSD of the target cluster when cleaning the
         fluxmatrix."""
+        self.target_bin_center = None
+
+
         self.WEbasisp1_min = None
         """float: Minimum progress coordinate value within basis state.
         Used to check if a progress coord is in the basis, and to set the RMSD of the basis cluster when cleaning the
@@ -118,6 +122,8 @@ class modelWE:
         """float: Maximum progress coordinate value within basis state.
         Used to check if a progress coord is in the basis, and to set the RMSD of the basis cluster when cleaning the
         fluxmatrix."""
+
+        self.basis_bin_center = None
 
         self.dimReduceMethod = None
         """str: Dimensionality reduction method. Must be one of "pca", "vamp", or "none" (**NOT** NoneType)"""
@@ -266,6 +272,19 @@ class modelWE:
         self.allocationMethod = (
             "adaptive"  # adaptive for dynamic allocation, uniform for equal allocation
         )
+
+
+
+        # # If neither of the target bin boundaries are infinity, then the bin center is their mean.
+        # if not abs(self.WEtargetp1_min) == np.inf and not abs(self.WEtargetp1_max) == np.inf:
+        #     self.target_bin_center = np.mean([self.WEtargetp1_min, self.WEtargetp1_max])
+        #
+        # # If one of them IS infinity, their "bin center" is the non-infinity one.
+        # else:
+        #     # Janky indexing, if p1_max == inf then that's True, and True == 1 so it picks the second element
+        #     self.target_bin_center = [self.WEtargetp1_min, self.WEtargetp1_max][self.WEtargetp1_min == np.inf]
+        #
+
         try:
             self.load_iter_data(1)
             self.get_iter_coordinates0()
@@ -278,6 +297,56 @@ class modelWE:
             # raise e
 
         log.debug("msm_we model successfully initialized")
+
+    @property
+    def WEbasisp1_bounds(self):
+        return self._WEbasisp1_bounds
+
+    @WEbasisp1_bounds.setter
+    def WEbasisp1_bounds(self, bounds):
+        """
+        Set the boundaries for the basis state in pcoord1, and also set the bin center based on those.
+
+        Parameters
+        ----------
+        bounds
+        """
+        if None in bounds:
+            raise Exception("A basis boundary has not been correctly provided")
+
+        self.WEbasisp1_min, self.WEbasisp1_max = bounds
+
+        # Same as in WEtargetp1_bounds
+        if not abs(self.WEbasisp1_min) == np.inf and not abs(self.WEbasisp1_max) == np.inf:
+            self.basis_bin_center = np.mean([self.WEbasisp1_min, self.WEbasisp1_max])
+        else:
+            self.basis_bin_center = [self.WEbasisp1_min, self.WEbasisp1_max][self.WEbasisp1_min == np.inf]
+
+    @property
+    def WEtargetp1_bounds(self):
+        return self._WEtargetp1_bounds
+
+    @WEtargetp1_bounds.setter
+    def WEtargetp1_bounds(self, bounds):
+        """
+        Set the boundaries for the target state in pcoord1, and also set the bin center based on those.
+
+        Parameters
+        ----------
+        bounds
+        """
+        if None in bounds:
+            raise Exception("A target boundary has not been correctly provided")
+        self.WEtargetp1_min, self.WEtargetp1_max = bounds
+
+        # If neither of the target bin boundaries are infinity, then the bin center is their mean.
+        if not abs(self.WEtargetp1_min) == np.inf and not abs(self.WEtargetp1_max) == np.inf:
+            self.target_bin_center = np.mean([self.WEtargetp1_min, self.WEtargetp1_max])
+
+        # If one of them IS infinity, their "bin center" is the non-infinity one.
+        else:
+            # Janky indexing, if p1_max == inf then that's True, and True == 1 so it picks the second element
+            self.target_bin_center = [self.WEtargetp1_min, self.WEtargetp1_max][self.WEtargetp1_min == np.inf]
 
     def initialize_from_h5(self, refPDBfile, initPDBfile, modelName):
         """
@@ -333,8 +402,13 @@ class modelWE:
         ----
         This only checks the 0th progress coordinate
 
+        This also assumes you need a small pcoord!
+
         """
-        isTarget = pcoords[:, 0] < self.WEtargetp1
+
+        isTarget = np.logical_and(
+            pcoords[:, 0] > self.WEtargetp1_min, pcoords[:, 0] < self.WEtargetp1_max
+        )
         return isTarget
 
     def load_iter_data(self, n_iter: int):
@@ -856,7 +930,10 @@ class modelWE:
                     self.segindList[iS], self.pcoord_len - 1, :, :
                 ]
                 coordPairList[iS, :, :, 0] = coords[self.segindList[iS], 0, :, :]
-            except Exception as e:
+
+            # This trips if it can't find the object it's looking for in the H5 file
+            # That might include things like looking for an iteration that doesn't exist
+            except KeyError as e:
                 self.errorWeight = self.errorWeight + weightList[iS]
                 weightList[
                     iS
@@ -864,6 +941,7 @@ class modelWE:
                 self.errorCount = self.errorCount + 1
 
                 # TODO: Raise this and don't handle it until you can make it more specific! What error happens here?
+                log.error(e)
                 raise e
 
         transitionWeights = weightList.copy()
@@ -907,7 +985,8 @@ class modelWE:
         for iS in range(first_iter, last_iter + 1):
             self.load_iter_data(iS)
             pcoord = self.pcoord1List[:, 0]
-            warpList = np.where(pcoord < self.WEtargetp1)
+            # warpList = np.where(pcoord < self.WEtargetp1)
+            warpList = np.where(self.is_WE_target(pcoord))
             warpedWeights.append(self.weightList[warpList])
             meanJ = (
                 np.mean(self.weightList[warpList]) / self.tau / np.sum(self.weightList)
@@ -1561,8 +1640,8 @@ class modelWE:
                     k=n_clusters,
                     fixed_seed=self.cluster_seed,
                     metric="minRMSD",
-                )
-                # max_iter=100)
+                # )
+                max_iter=100)
             # elif self.nAtoms == 1:
             # Else here is a little sketchy, but fractional nAtoms is useful for some debugging hacks.
             else:
@@ -1571,6 +1650,7 @@ class modelWE:
                     k=n_clusters,
                     fixed_seed=self.cluster_seed,
                     metric="euclidean",
+                    max_iter=100
                 )
         if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
             self.clusters = coor.cluster_kmeans(
@@ -1850,7 +1930,8 @@ class modelWE:
         fluxmatrix_exists_in_h5 = dsetName in f
 
         # If this data file does not contain a fluxMatrix entry, create it
-        if not fluxmatrix_exists_in_h5:
+        # For now, don't use a saved fluxmatrix, annoying to debug
+        if True or not fluxmatrix_exists_in_h5:
             # Create the fluxMatrix dataset
             dsetP = f.create_dataset(dsetName, np.shape(fluxMatrix))
             dsetP[:] = fluxMatrix
@@ -1963,9 +2044,9 @@ class modelWE:
 
         targetRMSD_centers = np.zeros(self.n_clusters + 2)
         # targetRMSD_centers[indTargetCluster]=self.target_rmsd
-        targetRMSD_centers[indTargetCluster] = self.WEtargetp1
+        targetRMSD_centers[indTargetCluster] = self.target_bin_center
         # targetRMSD_centers[indBasisCluster]=self.get_reference_rmsd(self.basis_coords)
-        targetRMSD_centers[indBasisCluster] = self.WEbasisp1_min
+        targetRMSD_centers[indBasisCluster] = self.basis_bin_center
 
         # Just initialize this to some positive nonzero value to kick off the while loop
         nTraps = 1000
