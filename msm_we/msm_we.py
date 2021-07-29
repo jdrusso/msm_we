@@ -315,6 +315,7 @@ class modelWE:
             raise Exception("A basis boundary has not been correctly provided")
 
         self.WEbasisp1_min, self.WEbasisp1_max = bounds
+        self._WEbasisp1_bounds = bounds
 
         # Same as in WEtargetp1_bounds
         if not abs(self.WEbasisp1_min) == np.inf and not abs(self.WEbasisp1_max) == np.inf:
@@ -338,6 +339,7 @@ class modelWE:
         if None in bounds:
             raise Exception("A target boundary has not been correctly provided")
         self.WEtargetp1_min, self.WEtargetp1_max = bounds
+        self._WEtargetp1_bounds = bounds
 
         # If neither of the target bin boundaries are infinity, then the bin center is their mean.
         if not abs(self.WEtargetp1_min) == np.inf and not abs(self.WEtargetp1_max) == np.inf:
