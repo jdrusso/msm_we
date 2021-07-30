@@ -18,9 +18,8 @@ log = logging.getLogger("msm_we")
 log.setLevel(logging.INFO)
 
 # Using the tkinter backend makes matplotlib run better on a cluster, maybe?
-import matplotlib
-
-matplotlib.use("TkAgg")
+# import matplotlib
+# matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
 import mdtraj as md
@@ -267,12 +266,10 @@ class modelWE:
             self.load_iter_data(1)
             self.get_iter_coordinates0()
             self.coordsExist = True
-        # TODO: Handle this exception more specifically -- what's the error we expect?
-        except Exception as e:
+
+        except KeyError:
             log.warning("problem getting coordinates, they don't exist yet \n")
             self.coordsExist = False
-            # TODO: Log this until you know what the specific correct exception to handle is
-            log.error(e)
 
         log.debug("msm_we model successfully initialized")
 
@@ -2614,13 +2611,8 @@ class modelWE:
                 JF = JF + np.sum(fluxMatrix[indBack, j * np.ones_like(indBack)])
             J[i] = JR - JF
             self.J = J
-            sys.stdout.write(str(i))
 
     def get_flux_committor(self):
-
-        raise NotImplementedError("This function doesn't run as-is, sorry.")
-
-        # TODO: Make this work. What's it supposed to do? Fix references to model, both undefined
 
         J = np.zeros_like(self.binCenters)
         nBins = np.shape(self.binCenters)[0]
@@ -2683,11 +2675,14 @@ class modelWE:
         fig.savefig(self.modelName + "flux_committor.pdf")
         plt.pause(1)
 
-    def plot_flux(self):
+    def plot_flux(self, custom_name=None):
         """
         Make, and save, a plot of the fluxes along the RMSD.  get_flux() must be run before this.
 
-        Plots are saved to flux_s<first iter>_e<last iter>.png.
+        Parameters
+        ----------
+        custom_name : str (optional)
+            The name for the saved plot. Defaults to flux_s<first iter>_e<last iter>.png
 
         Returns
         -------
@@ -2729,9 +2724,13 @@ class modelWE:
         )
         plt.legend(loc="lower right")
         plt.pause(1)
-        fig.savefig(
-            "flux_s" + str(self.first_iter) + "_e" + str(self.last_iter) + ".png"
-        )
+
+        if custom_name is None:
+            name = "flux_s" + str(self.first_iter) + "_e" + str(self.last_iter) + ".png"
+        else:
+            name = custom_name
+
+        fig.savefig(name)
 
     def evolve_target_flux(self):
         Mss = self.Tmatrix
