@@ -2034,11 +2034,11 @@ class modelWE:
         # A 0 means it'll be cleaned, a 1 means it'll be kept.
         good_clusters = np.ones(self.n_clusters + 2)
 
-        targetRMSD_centers = np.zeros(self.n_clusters + 2)
-        # targetRMSD_centers[indTargetCluster]=self.target_rmsd
-        targetRMSD_centers[target_cluster_index] = self.target_bin_center
-        # targetRMSD_centers[indBasisCluster]=self.get_reference_rmsd(self.basis_coords)
-        targetRMSD_centers[basis_cluster_index] = self.basis_bin_center
+        cluster_pcoord_centers = np.zeros(self.n_clusters + 2)
+        # cluster_pcoord_centers[indTargetCluster]=self.target_rmsd
+        cluster_pcoord_centers[target_cluster_index] = self.target_bin_center
+        # cluster_pcoord_centers[indBasisCluster]=self.get_reference_rmsd(self.basis_coords)
+        cluster_pcoord_centers[basis_cluster_index] = self.basis_bin_center
 
         # Just initialize this to some positive nonzero value to kick off the while loop
         nTraps = 1000
@@ -2050,9 +2050,9 @@ class modelWE:
                 if np.shape(idx_traj_in_cluster)[1] == 0:
                     good_clusters[cluster_index] = 0
                 elif np.shape(idx_traj_in_cluster)[1] > 0:
-                    # targetRMSD_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[idx_traj_in_cluster[0],:,:]))
+                    # cluster_pcoord_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[idx_traj_in_cluster[0],:,:]))
                     # The coordinate of this cluster center is the average pcoord of all points in it
-                    targetRMSD_centers[cluster_index] = np.mean(self.pcoordSet[idx_traj_in_cluster[0], 0])
+                    cluster_pcoord_centers[cluster_index] = np.mean(self.pcoordSet[idx_traj_in_cluster[0], 0])
 
                 # Get the total flux along the row and col of this index
                 net_flux = np.sum(fluxMatrixTraps[:, cluster_index]) + np.sum(
@@ -2097,11 +2097,11 @@ class modelWE:
         fluxMatrix = fluxMatrix[:, good_clusters]
 
         # Get the RMSD centers for all of the clusters we want to keep
-        targetRMSD_centers = targetRMSD_centers[good_clusters]
+        cluster_pcoord_centers = cluster_pcoord_centers[good_clusters]
         # Get the indices that sort it
-        pcoord_sort_indices = np.argsort(targetRMSD_centers)
+        pcoord_sort_indices = np.argsort(cluster_pcoord_centers)
         # And update the model's RMSD cluster centers to just include the sorted clusters to keep
-        self.targetRMSD_centers = targetRMSD_centers[pcoord_sort_indices]
+        self.targetRMSD_centers = cluster_pcoord_centers[pcoord_sort_indices]
 
         # Sort fluxmatrix using the sorted indices, columns and then rows
         fluxMatrix = fluxMatrix[pcoord_sort_indices, :]
@@ -2124,7 +2124,7 @@ class modelWE:
         self.originalClusters = originalClusters
 
         # Update binCenters with the new, sorted centers
-        self.binCenters = targetRMSD_centers[pcoord_sort_indices]
+        self.binCenters = cluster_pcoord_centers[pcoord_sort_indices]
         self.nBins = np.shape(self.binCenters)[0]
 
         # Remove the cluster structure dict entries corresponding to removed clusters
@@ -2637,7 +2637,9 @@ class modelWE:
 
     def plot_flux(self):
         """
-        Make, and save, a plot of the fluxes along the RMSD.
+        Make, and save, a plot of the fluxes along the RMSD.  get_flux() must be run before this.
+
+        Plots are saved to flux_s<first iter>_e<last iter>.png.
 
         Returns
         -------
@@ -2673,7 +2675,7 @@ class modelWE:
         )  # ,color=plt.cm.Reds(float(iStep)/float(nStepFrames)))
         plt.yscale("log")
         plt.ylabel("flux (weight/second)", fontsize=12)
-        plt.xlabel("RMSD ($\AA$)", fontsize=12)
+        plt.xlabel("Pcoord 1", fontsize=12)
         plt.title(
             "Flux Run 1-30 Iter " + str(self.first_iter) + "-" + str(self.last_iter)
         )
