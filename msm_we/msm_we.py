@@ -328,6 +328,7 @@ class modelWE:
         """
         if None in bounds:
             raise Exception("A target boundary has not been correctly provided")
+
         self.WEtargetp1_min, self.WEtargetp1_max = bounds
         self._WEtargetp1_bounds = bounds
 
@@ -2565,6 +2566,11 @@ class modelWE:
             sys.stdout.write(str(i))
 
     def get_flux_committor(self):
+
+        raise NotImplementedError("This function doesn't run as-is, sorry.")
+
+        # TODO: Make this work. What's it supposed to do? Fix references to model, both undefined
+
         J = np.zeros_like(self.binCenters)
         nBins = np.shape(self.binCenters)[0]
         fluxMatrix = self.fluxMatrix.copy()
@@ -2585,6 +2591,11 @@ class modelWE:
             sys.stdout.write("%s " % i)
 
     def plot_flux_committor(self, nwin):
+
+        raise NotImplementedError("This function doesn't run as-is, sorry.")
+
+        # TODO: Make this work. What's it supposed to do? Fix references to nBins and model, both undefined
+        # From get_flux_committor, nbins probably should just come from binCenters
         Jq_av = self.Jq.copy()
         Jq_std = np.zeros_like(Jq_av)
         q_av = np.zeros_like(Jq_av)
@@ -2625,8 +2636,20 @@ class modelWE:
         plt.pause(1)
 
     def plot_flux(self):
-        tau = 10.0e-12
-        J = self.J / tau
+        """
+        Make, and save, a plot of the fluxes along the RMSD.
+
+        Returns
+        -------
+
+        """
+
+        try:
+            J = self.J / self.tau
+        except AttributeError:
+            log.error("Fluxes not yet calculated -- run get_flux() before plot_flux().")
+            return
+
         binCenters = self.binCenters
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111)
