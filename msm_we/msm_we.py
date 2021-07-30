@@ -2156,14 +2156,6 @@ class modelWE:
         # Update self.n_clusters to account for any removed clusters
         self.n_clusters -= n_removed
 
-
-        # raise Exception
-        # if len(removed_clusters) > 0:
-        #     log.debug(f"Clusters are {self.clusters}")
-        #     print(self.clusters)
-        #     for removed_cluster in removed_clusters:
-        #     raise Exception
-
     def get_model_clusters(
         self,
     ):  # define new clusters from organized flux matrix corresponding to model
