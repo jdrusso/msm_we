@@ -3,7 +3,6 @@ from __future__ import division, print_function
 
 __metaclass__ = type
 import numpy as np
-import os
 import tqdm
 import sys
 import subprocess
@@ -18,18 +17,10 @@ logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 log = logging.getLogger("msm_we")
 log.setLevel(logging.INFO)
 
-# sys.path.append(os.environ["WEST_ROOT"]+'/src')
-# sys.path.append(os.environ["WEST_ROOT"]+'/lib/west_tools')
-# sys.path.append(os.environ["WEST_ROOT"]+'/src/west')
-# sys.path.append(os.environ["WEST_ROOT"]+'/lib/wwmgr')
-# sys.path.append(os.environ["WEST_ROOT"]+'/src/west')
-# import west
-# from west import WESTSystem
-# from westpa.binning import RectilinearBinMapper
-# import warnings
+# Using the tkinter backend makes matplotlib run better on a cluster, maybe?
 import matplotlib
 
-# matplotlib.use('TkAgg')
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
 import mdtraj as md
@@ -280,8 +271,8 @@ class modelWE:
         except Exception as e:
             log.warning("problem getting coordinates, they don't exist yet \n")
             self.coordsExist = False
-            # TODO: Raise this until you know what the specific exception to handle is
-            # raise e
+            # TODO: Log this until you know what the specific correct exception to handle is
+            log.error(e)
 
         log.debug("msm_we model successfully initialized")
 
@@ -526,9 +517,7 @@ class modelWE:
 
         log.debug("Getting number of iterations and segments")
 
-        numFiles = np.array([])
         numSegments = np.array([])
-        iterationList = np.array([])
         nSeg = 1
         n_iter = 1
 
@@ -553,10 +542,10 @@ class modelWE:
                         nS = np.shape(newSet)
                         nSeg = nS[0] + nSeg
                     dataIn.close()
-                except:
-                    sys.stdout.write(
-                        "no segments in " + fileName + str(sys.exc_info()[0]) + "\n"
-                    )
+                except Exception as e:
+                    log.error(e)
+                    log.error(f"No segments in {fileName} {str(sys.exc_info()[0])}")
+
             if nSeg > 0:
                 numSegments = np.append(numSegments, nSeg)
                 log.debug(
@@ -588,10 +577,8 @@ class modelWE:
 
         """
 
-        numFiles = np.array([])
         numSegments = np.array([])
-        iterationList = np.array([])
-        nSeg = 1
+
         for n_iter in range(first_iter, last_iter + 1):
             nSeg = 0
             for iF in range(self.n_data_files):
@@ -606,10 +593,10 @@ class modelWE:
                         nS = np.shape(newSet)
                         nSeg = nS[0] + nSeg
                     dataIn.close()
-                except:
-                    sys.stdout.write(
-                        "no segments in " + fileName + str(sys.exc_info()[0]) + "\n"
-                    )
+                except Exception as e:
+                    log.error(e)
+                    log.error(f"No segments in {fileName} {str(sys.exc_info()[0])}")
+
             if nSeg > 0:
                 numSegments = np.append(numSegments, nSeg)
                 sys.stdout.write(
@@ -1177,6 +1164,9 @@ class modelWE:
         """
         Goes through the generated trajectory segments, and adds data from the segments to an H5 file.
 
+        This should be implemented by the user, and this implementation assumes a really specific configuration.
+        This is left in mostly as an example.
+
         Returns
         -------
         None
@@ -1185,6 +1175,12 @@ class modelWE:
         ----
         Generalize to different filetypes. This appears to be AMBER specific and relies on loading rst7 files
         """
+
+        log.critical(
+            "If you're calling this function, be absolutely sure it does what you want -- this is "
+            "very specifically written for the output of certain simulations."
+        )
+
         nS = self.nSeg
         westFile = self.fileList[self.westList[0]]
         dataIn = h5py.File(westFile, "a")
@@ -1219,19 +1215,18 @@ class modelWE:
                                 dsetName, np.shape(coords[:-1, :, :, :])
                             )
                             dset[:] = coords[:-1, :, :, :]
-                        except:
+                        except (RuntimeError, ValueError):
                             del dataIn[dsetName]
                             dset = dataIn.create_dataset(
                                 dsetName, np.shape(coords[:-1, :, :, :])
                             )
                             dset[:] = coords[:-1, :, :, :]
-                            sys.stdout.write(
+                            log.warning(
                                 "coords exist for iteration "
-                                # FIXME: This will always fail *within* the exception handler, since n_iter
-                                #   is not defined.
-                                + str(n_iter)
+                                + str(self.n_iter)
                                 + " overwritten\n"
                             )
+
                         dataIn.close()
                         coords = np.zeros((0, 2, self.nAtoms, 3))
                         coords = np.append(coords, coordT, axis=0)
@@ -1245,18 +1240,20 @@ class modelWE:
                         try:
                             dset = dataIn.create_dataset(dsetName, np.shape(coords))
                             dset[:] = coords
-                        except:
+                        except (RuntimeError, ValueError):
                             del dataIn[dsetName]
                             dset = dataIn.create_dataset(dsetName, np.shape(coords))
                             dset[:] = coords
-                            sys.stdout.write(
+                            log.warning(
                                 "coords exist for iteration "
                                 + str(self.n_iter)
                                 + " overwritten\n"
                             )
+
                         dataIn.close()
-            except:
-                sys.stdout.write(
+
+            except Exception as e:
+                log.error(
                     "error collecting coordinates from "
                     + WEfolder
                     + " , iter "
@@ -1265,6 +1262,7 @@ class modelWE:
                     + str(self.segindList[iS])
                     + "\n"
                 )
+                log.error(e)
 
     def get_iter_coordinates(self):
         """
@@ -1302,8 +1300,9 @@ class modelWE:
                     dset = dataIn[dsetName]
                     coord = dset[:]
                 cur_iter_coords[iS, :, :] = coord[self.segindList[iS], 1, :, :]
-            except:
-                sys.stdout.write(
+
+            except (RuntimeError, ValueError):
+                log.error(
                     "error getting coordinates from "
                     + self.fileList[self.westList[iS]]
                     + " , iter "
@@ -1581,7 +1580,7 @@ class modelWE:
             log.debug(f"Found {num_segs_in_iter} in iter {_iter}")
             log.debug(f"Updating indices {i} :  {i + num_segs_in_iter}")
 
-            assert not None in iter_weights, f"None in iter {_iter}, {iter_weights}"
+            assert None not in iter_weights, f"None in iter {_iter}, {iter_weights}"
 
             all_seg_weights[i : i + num_segs_in_iter] = iter_weights
 
@@ -1758,7 +1757,7 @@ class modelWE:
         log.debug(f"Getting flux matrix for iter {n_iter} with {self.nSeg} segments")
         # If you used a lag of 0, transitions weights are just weightList
         # If you used a lag > 0, these include the weight histories from previous iterations
-        num_transitions = np.shape(self.transitionWeights)[0]
+        # num_transitions = np.shape(self.transitionWeights)[0]
 
         # Create dedicated clusters for the target and basis states,
         # and reassign any points within the target or basis to those
@@ -1860,9 +1859,10 @@ class modelWE:
             fluxMatrix = dsetP[:]
             try:
                 nIter = dsetP.attrs["iter"]
-            except:
+            except Exception as e:
                 nIter = first_iter + 1
                 fluxMatrix = np.zeros((nBins, nBins))
+                log.error(e)
             nI = 1
             if nIter < last_iter:
                 for iS in range(nIter, last_iter + 1):
@@ -2059,8 +2059,6 @@ class modelWE:
         # Get the indices of the target and basis clusters
         target_cluster_index = self.n_clusters + 1  # Target at -1
         basis_cluster_index = self.n_clusters  # basis at -2
-        # In case it changes
-        original_basis_cluster_index = basis_cluster_index
 
         # This tracks which clusters are going to be cleaned from the flux matrix.
         # A 0 means it'll be cleaned, a 1 means it'll be kept.
@@ -2323,10 +2321,8 @@ class modelWE:
         None
         """
 
-        # FIXME: This does not always return the correct shape
         log.debug("Computing steady-state from eigenvectors")
 
-        n = np.shape(self.Tmatrix)[0]
         eigenvalues, eigenvectors = np.linalg.eig(np.transpose(self.Tmatrix))
 
         pSS = np.real(eigenvectors[:, np.argmax(np.real(eigenvalues))])
@@ -2335,7 +2331,7 @@ class modelWE:
         # For some reason, sometimes it's of the shape (n_eigenvectors, 1) instead of (n_eigenvectors,), meaning each
         #   element is its own sub-array.
         # I can't seem to consistently replicate this behavior, but I'm sure it's  just some numpy weirdness I don't
-        #   fully understand. However, ravel will flatten that out and fix that.
+        #   fully understand. However, ravel/squeeze will flatten that out and fix that.
         pSS = pSS.ravel().squeeze().squeeze()
 
         assert not np.isclose(np.sum(pSS), 0), "Steady-state distribution sums to 0!"
@@ -2458,7 +2454,8 @@ class modelWE:
                         color=plt.cm.Greys(float(i) / float(nEvolve)),
                     )
                     plt.yscale("log")
-                except:
+                except Exception as e:
+                    log.error(e)
                     try:
                         plt.plot(
                             binCenters,
@@ -2466,7 +2463,9 @@ class modelWE:
                             "-",
                             color=plt.cm.Greys(float(i) / float(nEvolve)),
                         )
-                    except:
+                    # ????? why these nested excepts? What's so fragile here? Maybe the shape of pSS?
+                    except Exception as e2:
+                        log.error(e2)
                         pass
                 probTransient[iT, :] = np.squeeze(pSS)
                 iT = iT + 1
@@ -2477,7 +2476,8 @@ class modelWE:
         try:
             plt.pause(4)
             plt.close()
-        except:
+        except Exception as e:
+            log.error(e)
             pass
 
     def evolve_probability2(
@@ -2513,7 +2513,8 @@ class modelWE:
                         color=plt.cm.Greys(float(i) / float(nEvolve)),
                     )
                     plt.yscale("log")
-                except:
+                except Exception as e:
+                    log.error(e)
                     try:
                         plt.plot(
                             binCenters,
@@ -2521,7 +2522,8 @@ class modelWE:
                             "-",
                             color=plt.cm.Greys(float(i) / float(nEvolve)),
                         )
-                    except:
+                    except Exception as e2:
+                        log.error(e2)
                         pass
                 # plt.ylim([1e-100,1])
                 # plt.title(str(iT)+' of '+str(nIterations))
@@ -2535,7 +2537,8 @@ class modelWE:
         try:
             plt.pause(4)
             plt.close()
-        except:
+        except Exception as e:
+            log.error(e)
             pass
 
     def evolve_probability_from_initial(
@@ -2571,7 +2574,8 @@ class modelWE:
                         color=plt.cm.Greys(float(i) / float(nEvolve)),
                     )
                     plt.yscale("log")
-                except:
+                except Exception as e:
+                    log.error(e)
                     try:
                         plt.plot(
                             binCenters,
@@ -2579,7 +2583,8 @@ class modelWE:
                             "-",
                             color=plt.cm.Greys(float(i) / float(nEvolve)),
                         )
-                    except:
+                    except Exception as e2:
+                        log.error(e2)
                         pass
                 probTransient[iT, :] = np.squeeze(pSS)
                 iT = iT + 1
@@ -2590,7 +2595,8 @@ class modelWE:
         try:
             plt.pause(4)
             plt.close()
-        except:
+        except Exception as e:
+            log.error(e)
             pass
 
     def get_flux(self):
@@ -2632,15 +2638,12 @@ class modelWE:
             for j in indForward:
                 JF = JF + np.sum(fluxMatrix[indBack, j * np.ones_like(indBack)])
             J[i] = JR - JF
-            self.Jq = J / model.tau
+            self.Jq = J / self.tau
             sys.stdout.write("%s " % i)
 
     def plot_flux_committor(self, nwin):
 
-        raise NotImplementedError("This function doesn't run as-is, sorry.")
-
-        # TODO: Make this work. What's it supposed to do? Fix references to nBins and model, both undefined
-        # From get_flux_committor, nbins probably should just come from binCenters
+        nBins = np.shape(self.binCenters)[0]
         Jq_av = self.Jq.copy()
         Jq_std = np.zeros_like(Jq_av)
         q_av = np.zeros_like(Jq_av)
@@ -2648,9 +2651,9 @@ class modelWE:
         for i in range(nBins - 1, nwin - 1, -1):
             iav = i - nwin
             ind = range(i - nwin, i)
-            Jq_av[iav] = np.mean(model.Jq[ind])
-            Jq_std[iav] = np.std(model.Jq[ind])
-            q_av[iav] = np.mean(model.q[indq[ind]])
+            Jq_av[iav] = np.mean(self.Jq[ind])
+            Jq_std[iav] = np.std(self.Jq[ind])
+            q_av[iav] = np.mean(self.q[indq[ind]])
         fig = plt.figure(figsize=(8, 6))
         ax = fig.add_subplot(111)
         indPlus = np.where(Jq_av > 0.0)
@@ -2873,7 +2876,8 @@ class modelWE:
                     n_jobs=None,
                     skip=0,
                 )
-            except:
+            except Exception as e:
+                log.error(e)
                 sys.stdout.write(
                     "khbins (khbins_binCenters.dat) not found: initializing\n"
                 )
@@ -2901,7 +2905,7 @@ class modelWE:
                 alloc[i] = 0.0
                 bin_kh_var[i] = 0.0
             else:
-                n = indBin[0].size
+                # n = indBin[0].size
                 bin_kh_var[i] = np.var(self.kh[indBin])
                 wt = np.sum(self.pSS[indBin])
                 vw = np.sum(np.multiply(self.pSS[indBin] / wt, self.varh[indBin]))
@@ -3091,7 +3095,7 @@ class modelWE:
                 # alloc[i]=0.0
                 bin_kh_var[i] = 0.0
             else:
-                n = indBin[0].size
+                # n = indBin[0].size
                 bin_kh_var[i] = np.var(self.kh[indBin])
                 # wt=np.sum(self.pSS[indBin])
                 # vw=np.sum(np.multiply(self.pSS[indBin]/wt,self.varh[indBin]))
@@ -3101,7 +3105,7 @@ class modelWE:
         return self.total_bin_kh_var
 
     def get_bin_total_var(self, x):
-        nB = self.nB
+        # nB = self.nB
         self.kh_clusters = clustering.AssignCenters(
             x[:, np.newaxis], metric="euclidean", stride=1, n_jobs=None, skip=0
         )
@@ -3193,10 +3197,9 @@ class modelWE:
                     n_jobs=None,
                     skip=0,
                 )
-            except:
-                sys.stdout.write(
-                    "khbins (khbins_binCenters.dat) not found: initializing\n"
-                )
+            except Exception as e:
+                log.error(e)
+                log.debug("khbins (khbins_binCenters.dat) not found: initializing\n")
                 self.get_initial_khbins_equalAlloc()
                 self.kh_clusters = clustering.AssignCenters(
                     khbins_centers[:, np.newaxis],
@@ -3221,7 +3224,7 @@ class modelWE:
                 alloc[i] = 0.0
                 bin_kh_var[i] = 0.0
             else:
-                n = indBin[0].size
+                # n = indBin[0].size
                 bin_kh_var[i] = np.var(self.khList[indBin])
                 wt = np.sum(self.weightList[indBin])
                 vw = np.sum(np.multiply(self.weightList[indBin], varh_iter[indBin]))
@@ -3315,8 +3318,9 @@ class modelWE:
                             + " overwritten\n"
                         )
                         dataIn.close()
-            except:
-                sys.stdout.write(
+            except Exception as e:
+                log.error(e)
+                log.error(
                     "error overwriting pcoord from "
                     + westFile
                     + " , iter "
@@ -3390,7 +3394,7 @@ class modelWE:
         plt.scatter(self.binCenters, self.q, s=15, c="black")
         plt.yscale("log")
         plt.ylabel("Folding Committor", fontsize=12)
-        plt.xlabel("Average microstate RMSD ($\AA$)", fontsize=12)
+        plt.xlabel("Average microstate pcoord", fontsize=12)
         plt.pause(1)
         fig.savefig(
             self.modelName
