@@ -91,7 +91,7 @@ class modelWE:
         """str: Name used for storing files"""
         self.fileList = None
         """list of str: List of all filenames with data"""
-        self.nF = None
+        self.n_data_files = None
         """int: Number of files in :code:`fileList`
 
         **TODO**: Deprecate this, this could just be a property"""
@@ -131,8 +131,9 @@ class modelWE:
 
         self.vamp_lag = None
         self.vamp_dim = None
-        self.nB = None
 
+        # For optimized binning
+        self.nB = None
         self.nW = None
 
         self.min_walkers = None
@@ -241,6 +242,8 @@ class modelWE:
         log.debug("Initializing msm_we model")
 
         self.modelName = modelName
+
+        # TODO: Replace this with pathlib on the paths in fileSpecifier
         pCommand = "ls " + fileSpecifier
         p = subprocess.Popen(pCommand, stdout=subprocess.PIPE, shell=True)
         (output, err) = p.communicate()
@@ -249,7 +252,8 @@ class modelWE:
         fileList = fileList[0:-1]
         self.fileList = fileList
         nF = len(fileList)
-        self.nF = nF
+        self.n_data_files = nF
+        #####
 
         self.pcoord_ndim = 1
         self.pcoord_len = 2
@@ -260,9 +264,6 @@ class modelWE:
         self.set_topology(refPDBfile)
         self.set_basis(initPDBfile)
 
-        # self.WEtargetp1 = 1.25  # target def on WE p1
-        # self.WEbasisp1_min = 12.0  # WE bin where basis structure is mapped
-        # self.WEbasisp1_max = 12.5
         self.dimReduceMethod = "pca"
         self.vamp_lag = 10
         self.vamp_dim = 10
@@ -273,18 +274,6 @@ class modelWE:
         self.allocationMethod = (
             "adaptive"  # adaptive for dynamic allocation, uniform for equal allocation
         )
-
-
-
-        # # If neither of the target bin boundaries are infinity, then the bin center is their mean.
-        # if not abs(self.WEtargetp1_min) == np.inf and not abs(self.WEtargetp1_max) == np.inf:
-        #     self.target_bin_center = np.mean([self.WEtargetp1_min, self.WEtargetp1_max])
-        #
-        # # If one of them IS infinity, their "bin center" is the non-infinity one.
-        # else:
-        #     # Janky indexing, if p1_max == inf then that's True, and True == 1 so it picks the second element
-        #     self.target_bin_center = [self.WEtargetp1_min, self.WEtargetp1_max][self.WEtargetp1_min == np.inf]
-        #
 
         try:
             self.load_iter_data(1)
@@ -422,7 +411,7 @@ class modelWE:
             - `self.westList`
             - `self.segindList`
             - `self.weightList`
-            - `self.nSeg`
+            - `self.n_segs`
             - `self.pcoord0List`
             - `self.pcoord1List`
 
@@ -452,24 +441,25 @@ class modelWE:
 
         seg_weights = np.array([])
 
-        nSeg = 0
+        n_segs = 0
 
         # Iterate through each file index, trying to find a file that contains the iteration of interest
         # TODO: Can replace this with `for if, fileName in enumerate(self.\\)`
-        for iF in range(self.nF):
-            fileName = self.fileList[iF]
+        for file_idx in range(self.n_data_files):
+            fileName = self.fileList[file_idx]
             try:
                 # Try to find the h5 data file associated with this iteration
                 dataIn = h5py.File(fileName, "r")
                 dsetName = "/iterations/iter_%08d/seg_index" % int(n_iter)
 
                 # Check if the dataset
-                e = dsetName in dataIn
-                if e:
+                dataset_exists = dsetName in dataIn
+                if dataset_exists:
+
                     dset = dataIn[dsetName]
                     newSet = dset[:]
-                    nS = np.shape(newSet)
-                    nS = nS[0]
+                    n_segs_in_file = np.shape(newSet)
+                    n_segs_in_file = n_segs_in_file[0]
                     dsetNameP = "/iterations/iter_%08d/pcoord" % int(n_iter)
                     dsetP = dataIn[dsetNameP]
                     pcoord = dsetP[:]
@@ -477,29 +467,29 @@ class modelWE:
                     seg_weights = np.append(seg_weights, weights)
 
                     # Iterate over segments in this dataset
-                    for iS in range(nS):
-                        # if np.sum(pcoord[iS,self.pcoord_len-1,:])==0.0:
+                    for seg_idx in range(n_segs_in_file):
+                        # if np.sum(pcoord[seg_idx,self.pcoord_len-1,:])==0.0:
                         # # intentionally using this to write in dummy pcoords,
                         # # this is a good thing to have for post-analysis though!
                         #    raise ValueError('Sum pcoord is 0, probably middle of WE iteration, not using iteration') f
-                        westList = np.append(westList, iF)
-                        segindList = np.append(segindList, iS)
-                        weightList = np.append(weightList, newSet[iS][0])
+                        westList = np.append(westList, file_idx)
+                        segindList = np.append(segindList, seg_idx)
+                        weightList = np.append(weightList, newSet[seg_idx][0])
                         pcoord0List = np.append(
-                            pcoord0List, np.expand_dims(pcoord[iS, 0, :], 0), axis=0
+                            pcoord0List, np.expand_dims(pcoord[seg_idx, 0, :], 0), axis=0
                         )
                         pcoord1List = np.append(
                             pcoord1List,
-                            np.expand_dims(pcoord[iS, self.pcoord_len - 1, :], 0),
+                            np.expand_dims(pcoord[seg_idx, self.pcoord_len - 1, :], 0),
                             axis=0,
                         )
-                        nSeg = nSeg + 1
+                        n_segs = n_segs + 1
                 dataIn.close()
-            except Exception as e:
+            except Exception as dataset_exists:
                 sys.stdout.write("error in " + fileName + str(sys.exc_info()[0]) + "\n")
-                raise e
+                raise dataset_exists
 
-        log.debug(f"Found {nSeg} segments in iteration {n_iter}")
+        log.debug(f"Found {n_segs} segments in iteration {n_iter}")
 
         self.westList = westList.astype(int)
 
@@ -507,7 +497,7 @@ class modelWE:
         self.segindList = segindList.astype(int)
         self.seg_weights[n_iter] = seg_weights
         self.weightList = weightList
-        self.nSeg = nSeg
+        self.nSeg = n_segs
         self.pcoord0List = pcoord0List
         self.pcoord1List = pcoord1List
 
@@ -539,15 +529,15 @@ class modelWE:
 
             # Iterate through each filename in fileList, and see if it contains the iteration we're looking for
             # TODO: This loop is pretty common, this should be refactored into a find_iteration() or something
-            for iF in range(self.nF):
-                fileName = self.fileList[iF]
+            for file_index in range(self.n_data_files):
+                fileName = self.fileList[file_index]
                 try:
                     dataIn = h5py.File(fileName, "r")
                     dsetName = "/iterations/iter_%08d/seg_index" % int(n_iter)
-                    e = dsetName in dataIn
+                    dataset_exists = dsetName in dataIn
 
                     # If this file does contain the iteration of interest
-                    if e:
+                    if dataset_exists:
                         dset = dataIn[dsetName]
                         newSet = dset[:]
                         nS = np.shape(newSet)
@@ -594,13 +584,13 @@ class modelWE:
         nSeg = 1
         for n_iter in range(first_iter, last_iter + 1):
             nSeg = 0
-            for iF in range(self.nF):
+            for iF in range(self.n_data_files):
                 fileName = self.fileList[iF]
                 try:
                     dataIn = h5py.File(fileName, "r")
                     dsetName = "/iterations/iter_%08d/seg_index" % int(n_iter)
-                    e = dsetName in dataIn
-                    if e:
+                    dataset_exists = dsetName in dataIn
+                    if dataset_exists:
                         dset = dataIn[dsetName]
                         newSet = dset[:]
                         nS = np.shape(newSet)
@@ -744,13 +734,13 @@ class modelWE:
 
         # Go through each segment, and get pairs of coordinates at current iter (n_iter) and
         # lagged iter (n_iter-n_lag)
-        for iS in range(self.nSeg):
+        for seg_idx in range(self.nSeg):
 
             # FIXME: Try statements should encompass the smallest amount of code
             #  possible - anything could be tripping this
             # try:
-            if iS == 0:
-                westFile = self.fileList[self.westList[iS]]
+            if seg_idx == 0:
+                westFile = self.fileList[self.westList[seg_idx]]
                 dataIn = h5py.File(westFile, "r")
                 dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
                 dset = dataIn[dsetName]
@@ -760,11 +750,11 @@ class modelWE:
                 )
                 dset = dataIn[dsetName]
                 coords_lagged = dset[:]
-            elif self.westList[iS] != self.westList[iS - 1]:
+            elif self.westList[seg_idx] != self.westList[seg_idx - 1]:
                 # FIXME: I think you can just move this close to an if statement in the beginning, and then remove
                 #   this whole if/elif. Everything after that close() seems to be duplicated.
                 dataIn.close()
-                westFile = self.fileList[self.westList[iS]]
+                westFile = self.fileList[self.westList[seg_idx]]
                 dataIn = h5py.File(westFile, "r")
 
                 # Load the data for the current iteration
@@ -779,41 +769,41 @@ class modelWE:
                 dset = dataIn[dsetName]
                 coords_lagged = dset[:]
 
-            coordPairList[iS, :, :, 1] = coords_current[
-                self.segindList[iS], 1, :, :
+            coordPairList[seg_idx, :, :, 1] = coords_current[
+                self.segindList[seg_idx], 1, :, :
             ]
 
             # If this segment has no warps, then add the lagged coordinates
-            if warpList[iS] == 0:
+            if warpList[seg_idx] == 0:
                 # Try to set the previous coord in the transition pair to the segment's lagged coordinates
                 try:
-                    lagged_seg_index = segindList_lagged[iS]
-                    coordPairList[iS, :, :, 0] = coords_lagged[
+                    lagged_seg_index = segindList_lagged[seg_idx]
+                    coordPairList[seg_idx, :, :, 0] = coords_lagged[
                         lagged_seg_index, 0, :, :
                     ]
 
                 # If this fails, then there were no lagged coordinates for this structure.
                 except IndexError as e:
-                    log.critical(f"Lagged coordinates do not exist for the structure in segment {iS}")
+                    log.critical(f"Lagged coordinates do not exist for the structure in segment {seg_idx}")
                     raise e
-                    weightList_lagged[iS] = 0.0
+                    weightList_lagged[seg_idx] = 0.0
                     weightList[
-                        iS
+                        seg_idx
                     ] = 0.0  # set transitions without structures to zero weight
 
             # If something was recycled during this segment, then instead of using the lagged cooordinates,
             #   just use the basis coords.
             # But, also save the original structure before the warp!
-            elif warpList[iS] > 0:
+            elif warpList[seg_idx] > 0:
 
                 # St
                 prewarpedStructures[nWarped, :, :] = coords_lagged[
-                    segindList_lagged[iS], 0, :, :
+                    segindList_lagged[seg_idx], 0, :, :
                 ]
 
                 assert self.basis_coords is not None
 
-                coordPairList[iS, :, :, 0] = self.basis_coords
+                coordPairList[seg_idx, :, :, 0] = self.basis_coords
                 nWarped = nWarped + 1
 
             # # TODO: What triggers this? When that critical log hits, come update this comment and the main docstring.
@@ -822,9 +812,9 @@ class modelWE:
             #     log.critical("Document whatever's causing this exception!")
             #     log.warning(e)
             #     raise e
-            #     weightList_lagged[iS] = 0.0
+            #     weightList_lagged[seg_idx] = 0.0
             #     weightList[
-            #         iS
+            #         seg_idx
             #     ] = 0.0  # set transitions without structures to zero weight
 
         # Squeeze removes axes of length 1 -- this helps with np.where returning nested lists of indices
@@ -910,36 +900,36 @@ class modelWE:
 
         log.debug(f"Getting transition data for {self.nSeg} segs, at a lag of 0")
 
-        for iS in range(self.nSeg):
+        for seg_idx in range(self.nSeg):
             try:
                 # TODO: Brain locked on something else right now, but you can remove all this duplicate if/elif and just
                 #   put the close in an if, or at the end
-                if iS == 0:
-                    westFile = self.fileList[self.westList[iS]]
+                if seg_idx == 0:
+                    westFile = self.fileList[self.westList[seg_idx]]
                     dataIn = h5py.File(westFile, "r")
                     dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
                     dset = dataIn[dsetName]
                     coords = dset[:]
-                elif self.westList[iS] != self.westList[iS - 1]:
+                elif self.westList[seg_idx] != self.westList[seg_idx - 1]:
                     dataIn.close()
-                    westFile = self.fileList[self.westList[iS]]
+                    westFile = self.fileList[self.westList[seg_idx]]
                     dataIn = h5py.File(westFile, "r")
                     dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
                     dset = dataIn[dsetName]
                     coords = dset[:]
 
-                # Update segment iS in coordPairList with
-                coordPairList[iS, :, :, 1] = coords[
-                    self.segindList[iS], self.pcoord_len - 1, :, :
+                # Update segment seg_idx in coordPairList with
+                coordPairList[seg_idx, :, :, 1] = coords[
+                    self.segindList[seg_idx], self.pcoord_len - 1, :, :
                 ]
-                coordPairList[iS, :, :, 0] = coords[self.segindList[iS], 0, :, :]
+                coordPairList[seg_idx, :, :, 0] = coords[self.segindList[seg_idx], 0, :, :]
 
             # This trips if it can't find the object it's looking for in the H5 file
             # That might include things like looking for an iteration that doesn't exist
             except KeyError as e:
-                self.errorWeight = self.errorWeight + weightList[iS]
+                self.errorWeight = self.errorWeight + weightList[seg_idx]
                 weightList[
-                    iS
+                    seg_idx
                 ] = 0.0  # set transitions without structures to zero weight
                 self.errorCount = self.errorCount + 1
 
@@ -1057,7 +1047,7 @@ class modelWE:
             dsetP = f[dsetName]
             JdirectTimes = dsetP[:]
         f.close()
-        self.Jdirect = Jdirect / self.nF  # correct for number of trees
+        self.Jdirect = Jdirect / self.n_data_files  # correct for number of trees
         self.JdirectTimes = JdirectTimes
 
     def get_seg_histories(self, n_hist):
@@ -2227,39 +2217,39 @@ class modelWE:
         log.debug("Computing transition matrix")
 
         # Get a copy of the flux matrix
-        Mt = self.fluxMatrix.copy()
+        fluxmatrix = self.fluxMatrix.copy()
         # Get the dimension of the flux matrix
-        nR = np.shape(Mt)
+        fluxmatrix_shape = np.shape(fluxmatrix)
         # Add up the total flux on each row, i.e. from each state
-        sM = np.sum(Mt, 1)
+        fluxes_out = np.sum(fluxmatrix, 1)
 
         # For each state
-        for iR in range(nR[0]):
+        for state_idx in range(fluxmatrix_shape[0]):
             # For positive definite flux, set the matrix elements based on normalized fluxes
-            if sM[iR] > 0:
-                Mt[iR, :] = Mt[iR, :] / sM[iR]
+            if fluxes_out[state_idx] > 0:
+                fluxmatrix[state_idx, :] = fluxmatrix[state_idx, :] / fluxes_out[state_idx]
 
             # If the flux is zero, then consider it all self-transition
             # FIXME: this if can be an elif
-            if sM[iR] == 0.0:
-                Mt[iR, iR] = 1.0
+            if fluxes_out[state_idx] == 0.0:
+                fluxmatrix[state_idx, state_idx] = 1.0
 
         # Make the transition matrix a steady-state matrix
         # Identify the bins corresponding to target states.
         sinkBins = self.indTargets  # np.where(avBinPnoColor==0.0)
 
         # Get the number of sink bins
-        nsB = np.shape(sinkBins)
-        nsB = nsB[0]
+        n_sink_bins = np.shape(sinkBins)
+        n_sink_bins = n_sink_bins[0]
 
         # TODO: The goal here is to correct for the transition probabilities out of the sink state. Not
         #   sure I fully understand this implementation, but that's the goal.
         sinkRates = np.zeros((1, self.nBins))
         sinkRates[0, self.indBasis] = 1.0 / self.indBasis.size
-        Mss = Mt.copy()
-        Mss[sinkBins, :] = np.tile(sinkRates, (nsB, 1))
+        tmatrix = fluxmatrix.copy()
+        tmatrix[sinkBins, :] = np.tile(sinkRates, (n_sink_bins, 1))
 
-        self.Tmatrix = Mss
+        self.Tmatrix = tmatrix
 
     def get_eqTmatrix(self):
         Mt = self.fluxMatrix.copy()
