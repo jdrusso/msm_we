@@ -112,6 +112,7 @@ class modelWE:
         Used to check if a progress coord is in the target, and to set the RMSD of the target cluster when cleaning the
         fluxmatrix."""
         self.target_bin_center = None
+        self._WEtargetp1_bounds = None
 
 
         self.WEbasisp1_min = None
@@ -122,8 +123,8 @@ class modelWE:
         """float: Maximum progress coordinate value within basis state.
         Used to check if a progress coord is in the basis, and to set the RMSD of the basis cluster when cleaning the
         fluxmatrix."""
-
         self.basis_bin_center = None
+        self._WEbasisp1_bounds = None
 
         self.dimReduceMethod = None
         """str: Dimensionality reduction method. Must be one of "pca", "vamp", or "none" (**NOT** NoneType)"""
@@ -321,7 +322,7 @@ class modelWE:
         if not abs(self.WEbasisp1_min) == np.inf and not abs(self.WEbasisp1_max) == np.inf:
             self.basis_bin_center = np.mean([self.WEbasisp1_min, self.WEbasisp1_max])
         else:
-            self.basis_bin_center = [self.WEbasisp1_min, self.WEbasisp1_max][self.WEbasisp1_min == np.inf]
+            self.basis_bin_center = [self.WEbasisp1_min, self.WEbasisp1_max][abs(self.WEbasisp1_min) == np.inf]
 
     @property
     def WEtargetp1_bounds(self):
@@ -348,7 +349,7 @@ class modelWE:
         # If one of them IS infinity, their "bin center" is the non-infinity one.
         else:
             # Janky indexing, if p1_max == inf then that's True, and True == 1 so it picks the second element
-            self.target_bin_center = [self.WEtargetp1_min, self.WEtargetp1_max][self.WEtargetp1_min == np.inf]
+            self.target_bin_center = [self.WEtargetp1_min, self.WEtargetp1_max][abs(self.WEtargetp1_min) == np.inf]
 
     def initialize_from_h5(self, refPDBfile, initPDBfile, modelName):
         """
@@ -1737,28 +1738,28 @@ class modelWE:
         log.debug(f"Getting flux matrix for iter {n_iter} with {self.nSeg} segments")
         # If you used a lag of 0, transitions weights are just weightList
         # If you used a lag > 0, these include the weight histories from previous iterations
-        nT = np.shape(self.transitionWeights)[0]
+        num_transitions = np.shape(self.transitionWeights)[0]
 
         # Create dedicated clusters for the target and basis states,
         # and reassign any points within the target or basis to those
-        indTargetCluster = self.n_clusters + 1
-        indBasisCluster = self.n_clusters
+        target_cluster_index = self.n_clusters + 1
+        basis_cluster_index = self.n_clusters
 
         # (Segment, Atom, [lagged, current coord])
         log.debug(f"Coord pairlist shape is {self.coordPairList.shape}")
 
         # Assign a cluster to the lagged and the current coords
-        cluster0 = self.clusters.assign(
+        start_cluster = self.clusters.assign(
             self.reduceCoordinates(self.coordPairList[:, :, :, 0])
         )
-        cluster1 = self.clusters.assign(
+        end_cluster = self.clusters.assign(
             self.reduceCoordinates(self.coordPairList[:, :, :, 1])
         )
 
-        log.debug(f"Cluster 0 shape: {cluster0.shape}")
+        log.debug(f"Cluster 0 shape: {start_cluster.shape}")
 
         # Record every point where you're in the target
-        indTarget1 = np.where(self.is_WE_target(self.pcoord1List))
+        ind_end_in_target = np.where(self.is_WE_target(self.pcoord1List))
 
         # if indTarget1[0].size > 0:
         #     log.debug("Number of post-transition target1 entries: " + str(indTarget1[0].size) + "\n")
@@ -1766,28 +1767,26 @@ class modelWE:
         #     log.warning(f"No target1 entries. {indTarget1}")
 
         # Get the index of every point
-        indBasis0 = np.where(
-            self.is_WE_basis(self.pcoord0List)
-        )  # needs to fit definition of target in WE
-        if indBasis0[0].size > 0:
-            log.debug("Number of pre-transition points in basis0: " + str(indBasis0[0].size) + "\n")
+        ind_start_in_basis = np.where(self.is_WE_basis(self.pcoord0List))
+        if ind_start_in_basis[0].size > 0:
+            log.debug("Number of pre-transition points in basis0: " + str(ind_start_in_basis[0].size) + "\n")
 
-        indBasis1 = np.where(self.is_WE_basis(self.pcoord1List))
-        if indBasis1[0].size > 0:
-            log.debug("Number of post-transition points in basis1: " + str(indBasis1[0].size) + "\n")
+        ind_end_in_basis = np.where(self.is_WE_basis(self.pcoord1List))
+        if ind_end_in_basis[0].size > 0:
+            log.debug("Number of post-transition points in basis1: " + str(ind_end_in_basis[0].size) + "\n")
 
-        log.debug(f"Target cluster index is: {indTargetCluster},  basis cluster index is: {indBasisCluster}")
+        log.debug(f"Target cluster index is: {target_cluster_index},  basis cluster index is: {basis_cluster_index}")
 
         # Re-assign points that were in either the target or the basis to the target or basis clusters
-        cluster1[indTarget1] = indTargetCluster
-        cluster0[indBasis0] = indBasisCluster
-        cluster1[indBasis1] = indBasisCluster
+        end_cluster[ind_end_in_target] = target_cluster_index
+        start_cluster[ind_start_in_basis] = basis_cluster_index
+        end_cluster[ind_end_in_basis] = basis_cluster_index
 
         # coo_matrix takes in (Data, (x, y)) and then gives you a matrix, with the point at Data[i]
         #   placed at (x,y)[i]
         # Data here is just the number of segments since each segment is associated with 1 transition
         fluxMatrix = coo_matrix(
-            (self.transitionWeights, (cluster0, cluster1)),
+            (self.transitionWeights, (start_cluster, end_cluster)),
             shape=(self.n_clusters + 2, self.n_clusters + 2),
         ).todense()
 
@@ -2020,16 +2019,16 @@ class modelWE:
         log.debug("Cleaning flux matrix")
 
         # processes raw fluxMatrix
-        nT = np.shape(self.all_coords)
-        nT = nT[0]
+        # nT = np.shape(self.all_coords)[0]
 
         # Discretize trajectories via clusters
         dtraj = self.clusters.assign(self.reduceCoordinates(self.all_coords))
 
         # Get the indices of the target and basis clusters
-        indTargetCluster = self.n_clusters + 1  # Target at -1
-        indBasisCluster = self.n_clusters  # basis at -2
-        indBasisOrig = indBasisCluster
+        target_cluster_index = self.n_clusters + 1  # Target at -1
+        basis_cluster_index = self.n_clusters  # basis at -2
+        # In case it changes
+        original_basis_cluster_index = basis_cluster_index
 
         # ----- Unused code ------
         # targetRMSD=self.get_reference_rmsd(self.coordSet[:,:,:])
@@ -2042,79 +2041,80 @@ class modelWE:
 
         # This tracks which clusters are going to be cleaned from the flux matrix.
         # A 0 means it'll be cleaned, a 1 means it'll be kept.
-        indData = np.ones(self.n_clusters + 2)
+        good_clusters = np.ones(self.n_clusters + 2)
 
         targetRMSD_centers = np.zeros(self.n_clusters + 2)
         # targetRMSD_centers[indTargetCluster]=self.target_rmsd
-        targetRMSD_centers[indTargetCluster] = self.target_bin_center
+        targetRMSD_centers[target_cluster_index] = self.target_bin_center
         # targetRMSD_centers[indBasisCluster]=self.get_reference_rmsd(self.basis_coords)
-        targetRMSD_centers[indBasisCluster] = self.basis_bin_center
+        targetRMSD_centers[basis_cluster_index] = self.basis_bin_center
 
         # Just initialize this to some positive nonzero value to kick off the while loop
         nTraps = 1000
         fluxMatrixTraps = self.fluxMatrixRaw.copy()
         while nTraps > 0:
             nTraps = 0
-            for iC in range(self.n_clusters):
-                ind = np.where(dtraj == iC)
-                if np.shape(ind)[1] == 0:
-                    indData[iC] = 0
-                elif np.shape(ind)[1] > 0:
-                    # targetRMSD_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[ind[0],:,:]))
-                    targetRMSD_centers[iC] = np.mean(self.pcoordSet[ind[0], 0])
+            for cluster_index in range(self.n_clusters):
+                idx_traj_in_cluster = np.where(dtraj == cluster_index)
+                if np.shape(idx_traj_in_cluster)[1] == 0:
+                    good_clusters[cluster_index] = 0
+                elif np.shape(idx_traj_in_cluster)[1] > 0:
+                    # targetRMSD_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[idx_traj_in_cluster[0],:,:]))
+                    # The coordinate of this cluster center is the average pcoord of all points in it
+                    targetRMSD_centers[cluster_index] = np.mean(self.pcoordSet[idx_traj_in_cluster[0], 0])
 
                 # Get the total flux along the row and col of this index
-                statesum = np.sum(fluxMatrixTraps[:, iC]) + np.sum(
-                    fluxMatrixTraps[iC, :]
+                net_flux = np.sum(fluxMatrixTraps[:, cluster_index]) + np.sum(
+                    fluxMatrixTraps[cluster_index, :]
                 )
 
-                # If both the row and column are all zero, this is an unvisited state, so set indData to 0
-                if statesum == 0.0:
-                    indData[iC] = 0
+                # If both the row and column are all zero, this is an unvisited state, so set good_clusters to 0
+                if net_flux == 0.0:
+                    good_clusters[cluster_index] = 0
 
                 # If the sum along the row and column are nonzero
-                if statesum > 0:
+                if net_flux > 0:
                     # Get all the clusters that *aren't* the one we're looking at
-                    indNotSelf = np.setdiff1d(range(self.n_clusters), iC)
+                    all_other_cluster_indices = np.setdiff1d(range(self.n_clusters), cluster_index)
 
                     # Look at all the flux FROM other clusters
-                    fromSum = np.sum(fluxMatrixTraps[iC, indNotSelf])
+                    total_flux_in = np.sum(fluxMatrixTraps[cluster_index, all_other_cluster_indices])
 
                     # And look at all the flux TO other clusters
-                    toSum = np.sum(fluxMatrixTraps[indNotSelf, iC])
+                    total_flux_out = np.sum(fluxMatrixTraps[all_other_cluster_indices, cluster_index])
 
                     # If either the flux from or the flux to other clusters are all zero,
                     #   then this is a source or sink respectively.
                     # So, clean it
-                    if fromSum == 0.0 or toSum == 0.0:
-                        log.debug(f"Cluster with index {iC} is a trap")
+                    if total_flux_in == 0.0 or total_flux_out == 0.0:
+                        log.debug(f"Cluster with index {cluster_index} is a trap")
                         nTraps = nTraps + 1
-                        indData[iC] = 0
-                        fluxMatrixTraps[:, iC] = 0.0
-                        fluxMatrixTraps[iC, :] = 0.0
+                        good_clusters[cluster_index] = 0
+                        fluxMatrixTraps[:, cluster_index] = 0.0
+                        fluxMatrixTraps[cluster_index, :] = 0.0
 
             # Make sure we don't clean the target or basis clusters
-            indData[indBasisCluster] = 1
-            indData[indTargetCluster] = 1
+            good_clusters[basis_cluster_index] = 1
+            good_clusters[target_cluster_index] = 1
 
         # Store this array. 1 if a cluster is good, 0 otherwise.
-        clusters_good = np.copy(indData)
+        clusters_good = np.copy(good_clusters)
 
         # Get all the visited and non-trap clusters, which we want to keep, and make fluxMatrix from those
-        indData = np.squeeze(np.where(indData > 0))
-        fluxMatrix = self.fluxMatrixRaw[indData, :]
-        fluxMatrix = fluxMatrix[:, indData]
+        good_clusters = np.squeeze(np.where(good_clusters > 0))
+        fluxMatrix = self.fluxMatrixRaw[good_clusters, :]
+        fluxMatrix = fluxMatrix[:, good_clusters]
 
         # Get the RMSD centers for all of the clusters we want to keep
-        targetRMSD_centers = targetRMSD_centers[indData]
+        targetRMSD_centers = targetRMSD_centers[good_clusters]
         # Get the indices that sort it
-        indp1 = np.argsort(targetRMSD_centers)
+        pcoord_sort_indices = np.argsort(targetRMSD_centers)
         # And update the model's RMSD cluster centers to just include the sorted clusters to keep
-        self.targetRMSD_centers = targetRMSD_centers[indp1]
+        self.targetRMSD_centers = targetRMSD_centers[pcoord_sort_indices]
 
         # Sort fluxmatrix using the sorted indices, columns and then rows
-        fluxMatrix = fluxMatrix[indp1, :]
-        fluxMatrix = fluxMatrix[:, indp1]
+        fluxMatrix = fluxMatrix[pcoord_sort_indices, :]
+        fluxMatrix = fluxMatrix[:, pcoord_sort_indices]
 
         # Renormalize the new flux matrix
         self.fluxMatrix = fluxMatrix / np.sum(
@@ -2122,10 +2122,10 @@ class modelWE:
         )  # average weight transitioning or staying put should be 1
 
         # Update the index of the basis and target states to account for their position in the new sorted clusters
-        originalClusters = indData[indp1]
-        log.debug(f"indData: {indData}")
-        self.indBasis = np.where(originalClusters == indBasisCluster)[0]
-        self.indTargets = np.where(originalClusters == indTargetCluster)[0]
+        originalClusters = good_clusters[pcoord_sort_indices]
+        log.debug(f"indData: {good_clusters}")
+        self.indBasis = np.where(originalClusters == basis_cluster_index)[0]
+        self.indTargets = np.where(originalClusters == target_cluster_index)[0]
         log.debug(f"indBasis:  {self.indBasis}, indTargets: {self.indTargets}")
         log.debug(f"Sanity check -- basis:  {self.targetRMSD_centers[self.indBasis]}, target: {self.targetRMSD_centers[self.indTargets]}")
 
@@ -2133,7 +2133,7 @@ class modelWE:
         self.originalClusters = originalClusters
 
         # Update binCenters with the new, sorted centers
-        self.binCenters = targetRMSD_centers[indp1]
+        self.binCenters = targetRMSD_centers[pcoord_sort_indices]
         self.nBins = np.shape(self.binCenters)[0]
 
         # Remove the cluster structure dict entries corresponding to removed clusters
@@ -2293,9 +2293,9 @@ class modelWE:
         log.debug("Computing steady-state from eigenvectors")
 
         n = np.shape(self.Tmatrix)[0]
-        w, v = np.linalg.eig(np.transpose(self.Tmatrix))
+        eigenvalues, eigenvectors = np.linalg.eig(np.transpose(self.Tmatrix))
 
-        pSS = np.real(v[:, np.argmax(np.real(w))])
+        pSS = np.real(eigenvectors[:, np.argmax(np.real(eigenvalues))])
 
         # Flatten the array out.
         # For some reason, sometimes it's of the shape (n_eigenvectors, 1) instead of (n_eigenvectors,), meaning each
