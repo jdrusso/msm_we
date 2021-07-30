@@ -12,10 +12,9 @@ from scipy.sparse import coo_matrix
 
 import logging
 from rich.logging import RichHandler
+
 FORMAT = "%(message)s"
-logging.basicConfig(
-    format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
-)
+logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
 log = logging.getLogger("msm_we")
 log.setLevel(logging.INFO)
 
@@ -114,7 +113,6 @@ class modelWE:
         self.target_bin_center = None
         self._WEtargetp1_bounds = None
 
-
         self.WEbasisp1_min = None
         """float: Minimum progress coordinate value within basis state.
         Used to check if a progress coord is in the basis, and to set the RMSD of the basis cluster when cleaning the
@@ -199,7 +197,6 @@ class modelWE:
         self.cluster_structures = None
         self.cluster_structure_weights = None
         """dict: Mapping of cluster indices to structures in that cluster"""
-
 
     def initialize(
         self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
@@ -308,10 +305,15 @@ class modelWE:
         self._WEbasisp1_bounds = bounds
 
         # Same as in WEtargetp1_bounds
-        if not abs(self.WEbasisp1_min) == np.inf and not abs(self.WEbasisp1_max) == np.inf:
+        if (
+            not abs(self.WEbasisp1_min) == np.inf
+            and not abs(self.WEbasisp1_max) == np.inf
+        ):
             self.basis_bin_center = np.mean([self.WEbasisp1_min, self.WEbasisp1_max])
         else:
-            self.basis_bin_center = [self.WEbasisp1_min, self.WEbasisp1_max][abs(self.WEbasisp1_min) == np.inf]
+            self.basis_bin_center = [self.WEbasisp1_min, self.WEbasisp1_max][
+                abs(self.WEbasisp1_min) == np.inf
+            ]
 
     @property
     def WEtargetp1_bounds(self):
@@ -333,13 +335,18 @@ class modelWE:
         self._WEtargetp1_bounds = bounds
 
         # If neither of the target bin boundaries are infinity, then the bin center is their mean.
-        if not abs(self.WEtargetp1_min) == np.inf and not abs(self.WEtargetp1_max) == np.inf:
+        if (
+            not abs(self.WEtargetp1_min) == np.inf
+            and not abs(self.WEtargetp1_max) == np.inf
+        ):
             self.target_bin_center = np.mean([self.WEtargetp1_min, self.WEtargetp1_max])
 
         # If one of them IS infinity, their "bin center" is the non-infinity one.
         else:
             # Janky indexing, if p1_max == inf then that's True, and True == 1 so it picks the second element
-            self.target_bin_center = [self.WEtargetp1_min, self.WEtargetp1_max][abs(self.WEtargetp1_min) == np.inf]
+            self.target_bin_center = [self.WEtargetp1_min, self.WEtargetp1_max][
+                abs(self.WEtargetp1_min) == np.inf
+            ]
 
     def initialize_from_h5(self, refPDBfile, initPDBfile, modelName):
         """
@@ -464,7 +471,7 @@ class modelWE:
                     dsetNameP = "/iterations/iter_%08d/pcoord" % int(n_iter)
                     dsetP = dataIn[dsetNameP]
                     pcoord = dsetP[:]
-                    weights = dset['weight']
+                    weights = dset["weight"]
                     seg_weights = np.append(seg_weights, weights)
 
                     # Iterate over segments in this dataset
@@ -477,7 +484,9 @@ class modelWE:
                         segindList = np.append(segindList, seg_idx)
                         weightList = np.append(weightList, newSet[seg_idx][0])
                         pcoord0List = np.append(
-                            pcoord0List, np.expand_dims(pcoord[seg_idx, 0, :], 0), axis=0
+                            pcoord0List,
+                            np.expand_dims(pcoord[seg_idx, 0, :], 0),
+                            axis=0,
                         )
                         pcoord1List = np.append(
                             pcoord1List,
@@ -626,7 +635,9 @@ class modelWE:
 
         if type(topology) is str:
 
-            log.debug("Input reference topology was provided as a path, trying to load with mdtraj")
+            log.debug(
+                "Input reference topology was provided as a path, trying to load with mdtraj"
+            )
 
             if topology[-3:] == "dat":
                 self.reference_coord = np.loadtxt(topology)
@@ -637,11 +648,15 @@ class modelWE:
                 self.reference_coord = np.squeeze(struct._xyz)
                 self.nAtoms = struct.topology.n_atoms
             else:
-                log.critical("Topology is not a recognized type! Proceeding, but no guarantees.")
+                log.critical(
+                    "Topology is not a recognized type! Proceeding, but no guarantees."
+                )
                 # raise NotImplementedError("Topology is not a recognized filetype")
 
         else:
-            log.debug("Input reference topology  was provided as an mdtraj structure, loading that")
+            log.debug(
+                "Input reference topology  was provided as an mdtraj structure, loading that"
+            )
 
             struct = topology
             self.reference_structure = struct
@@ -665,7 +680,9 @@ class modelWE:
 
         if type(basis) is str:
 
-            log.debug("Input basis state topology was provided as a path, trying to load with mdtraj")
+            log.debug(
+                "Input basis state topology was provided as a path, trying to load with mdtraj"
+            )
 
             if basis[-3:] == "dat":
                 self.basis_coords = np.loadtxt(basis)
@@ -674,11 +691,15 @@ class modelWE:
                 self.basis_structure = struct
                 self.basis_coords = np.squeeze(struct._xyz)
             else:
-                log.critical("Basis is not a recognized type! Proceeding, but no guarantees.")
+                log.critical(
+                    "Basis is not a recognized type! Proceeding, but no guarantees."
+                )
                 # raise NotImplementedError("Basis coordinates are not a recognized filetype")
 
         else:
-            log.debug("Input reference topology  was provided as an mdtraj structure, loading that")
+            log.debug(
+                "Input reference topology  was provided as an mdtraj structure, loading that"
+            )
 
             struct = basis
             self.basis_structure = struct
@@ -785,7 +806,9 @@ class modelWE:
 
                 # If this fails, then there were no lagged coordinates for this structure.
                 except IndexError as e:
-                    log.critical(f"Lagged coordinates do not exist for the structure in segment {seg_idx}")
+                    log.critical(
+                        f"Lagged coordinates do not exist for the structure in segment {seg_idx}"
+                    )
                     raise e
                     weightList_lagged[seg_idx] = 0.0
                     weightList[
@@ -875,9 +898,7 @@ class modelWE:
         self.transitionWeights = transitionWeights
         self.departureWeights = departureWeights
 
-    def get_transition_data_lag0(
-        self,
-    ):
+    def get_transition_data_lag0(self,):
         """
         **TODO: What does this do exactly? What does it mean to get transition data at a lag of 0?**
 
@@ -923,7 +944,9 @@ class modelWE:
                 coordPairList[seg_idx, :, :, 1] = coords[
                     self.segindList[seg_idx], self.pcoord_len - 1, :, :
                 ]
-                coordPairList[seg_idx, :, :, 0] = coords[self.segindList[seg_idx], 0, :, :]
+                coordPairList[seg_idx, :, :, 0] = coords[
+                    self.segindList[seg_idx], 0, :, :
+                ]
 
             # This trips if it can't find the object it's looking for in the H5 file
             # That might include things like looking for an iteration that doesn't exist
@@ -944,9 +967,7 @@ class modelWE:
         self.transitionWeights = transitionWeights
         self.departureWeights = departureWeights
 
-    def get_warps_from_parent(
-        self, first_iter, last_iter
-    ):
+    def get_warps_from_parent(self, first_iter, last_iter):
         """
         Get all warps and weights over a range of iterations.
 
@@ -1087,7 +1108,6 @@ class modelWE:
 
         seg_histories = np.zeros((self.nSeg, self.n_hist + 1))
         weight_histories = np.zeros((self.nSeg, self.n_hist))
-
 
         # Loop over all segments
         for iS in range(self.nSeg):
@@ -1274,7 +1294,7 @@ class modelWE:
                     dset = dataIn[dsetName]
                     coord = dset[:]
                 elif self.westList[iS] != self.westList[iS - 1]:
-                    #TODO: Move this close() outside of the if/elif
+                    # TODO: Move this close() outside of the if/elif
                     dataIn.close()
                     westFile = self.fileList[self.westList[iS]]
                     dataIn = h5py.File(westFile, "r")
@@ -1340,7 +1360,9 @@ class modelWE:
         while numCoords < n_coords:
             self.load_iter_data(i)
             self.get_iter_coordinates()
-            indGood = np.squeeze(np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0))
+            indGood = np.squeeze(
+                np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0)
+            )
             coordSet = np.append(coordSet, self.cur_iter_coords[indGood, :, :], axis=0)
             pcoordSet = np.append(pcoordSet, self.pcoord1List[indGood, :], axis=0)
             numCoords = np.shape(coordSet)[0]
@@ -1537,7 +1559,9 @@ class modelWE:
 
         log.debug("Obtaining cluster structures...")
         log.debug(f"All coords shape: {self.all_coords.shape}")
-        log.debug(f"Dtrajs len: {len(self.clusters.dtrajs)}, [0] shape: {self.clusters.dtrajs[0].shape}")
+        log.debug(
+            f"Dtrajs len: {len(self.clusters.dtrajs)}, [0] shape: {self.clusters.dtrajs[0].shape}"
+        )
 
         cluster_structures = dict()
         cluster_structure_weights = dict()
@@ -1559,7 +1583,7 @@ class modelWE:
 
             assert not None in iter_weights, f"None in iter {_iter}, {iter_weights}"
 
-            all_seg_weights[i:i + num_segs_in_iter] = iter_weights
+            all_seg_weights[i : i + num_segs_in_iter] = iter_weights
 
             i += num_segs_in_iter
 
@@ -1586,12 +1610,14 @@ class modelWE:
 
         # log.debug(f"Cluster structure shape is {len(list(cluster_structures.keys()))}, weights shape is {len(list(cluster_structure_weights.keys()))}")
         # log.debug(f"First cluster has {len(cluster_structures[0])} structures and {len(cluster_structure_weights[0])} weights")
-        assert len(list(cluster_structures.keys())) == len(list(cluster_structure_weights.keys())),  \
-            "Structures and weights have different numbers of bins?"
+        assert len(list(cluster_structures.keys())) == len(
+            list(cluster_structure_weights.keys())
+        ), "Structures and weights have different numbers of bins?"
 
         test_cluster = list(cluster_structures.keys())[0]
-        assert len(cluster_structures[test_cluster]) == len(cluster_structure_weights[test_cluster]),  \
-            "First MSM bin has different numbers of structures and weights"
+        assert len(cluster_structures[test_cluster]) == len(
+            cluster_structure_weights[test_cluster]
+        ), "First MSM bin has different numbers of structures and weights"
 
         self.cluster_structures = cluster_structures
         self.cluster_structure_weights = cluster_structure_weights
@@ -1634,8 +1660,9 @@ class modelWE:
                     k=n_clusters,
                     fixed_seed=self.cluster_seed,
                     metric="minRMSD",
-                # )
-                max_iter=100)
+                    # )
+                    max_iter=100,
+                )
             # elif self.nAtoms == 1:
             # Else here is a little sketchy, but fractional nAtoms is useful for some debugging hacks.
             else:
@@ -1644,13 +1671,15 @@ class modelWE:
                     k=n_clusters,
                     fixed_seed=self.cluster_seed,
                     metric="euclidean",
-                    max_iter=100
+                    max_iter=100,
                 )
         if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
             self.clusters = coor.cluster_kmeans(
-                self.coordinates.get_output(), k=n_clusters, metric="euclidean",
+                self.coordinates.get_output(),
+                k=n_clusters,
+                metric="euclidean",
                 fixed_seed=self.cluster_seed,
-            max_iter=100,
+                max_iter=100,
             )
         self.clusterFile = (
             self.modelName
@@ -1760,13 +1789,23 @@ class modelWE:
         # Get the index of every point
         ind_start_in_basis = np.where(self.is_WE_basis(self.pcoord0List))
         if ind_start_in_basis[0].size > 0:
-            log.debug("Number of pre-transition points in basis0: " + str(ind_start_in_basis[0].size) + "\n")
+            log.debug(
+                "Number of pre-transition points in basis0: "
+                + str(ind_start_in_basis[0].size)
+                + "\n"
+            )
 
         ind_end_in_basis = np.where(self.is_WE_basis(self.pcoord1List))
         if ind_end_in_basis[0].size > 0:
-            log.debug("Number of post-transition points in basis1: " + str(ind_end_in_basis[0].size) + "\n")
+            log.debug(
+                "Number of post-transition points in basis1: "
+                + str(ind_end_in_basis[0].size)
+                + "\n"
+            )
 
-        log.debug(f"Target cluster index is: {target_cluster_index},  basis cluster index is: {basis_cluster_index}")
+        log.debug(
+            f"Target cluster index is: {target_cluster_index},  basis cluster index is: {basis_cluster_index}"
+        )
 
         # Re-assign points that were in either the target or the basis to the target or basis clusters
         end_cluster[ind_end_in_target] = target_cluster_index
@@ -1934,7 +1973,9 @@ class modelWE:
             # Then, save that matrix to the data file, along with the number of iterations used
             # FIXME: Duplicated code
             # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
-            for iS in tqdm.tqdm(range(first_iter + 1, last_iter + 1), desc="Constructing flux matrix"):
+            for iS in tqdm.tqdm(
+                range(first_iter + 1, last_iter + 1), desc="Constructing flux matrix"
+            ):
                 log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
 
                 fluxMatrixI = self.get_iter_fluxMatrix(iS)
@@ -2021,15 +2062,6 @@ class modelWE:
         # In case it changes
         original_basis_cluster_index = basis_cluster_index
 
-        # ----- Unused code ------
-        # targetRMSD=self.get_reference_rmsd(self.coordSet[:,:,:])
-        # basisRMSD=self.get_basis_rmsd(self.coordSet[:,:,:])
-        # indTarget=np.where(targetRMSD<self.target_rmsd)
-        # indBasis=np.where(basisRMSD<self.basis_rmsd)
-        # dtraj[indTarget]=indTargetCluster
-        # dtraj[indBasis]=indBasisCluster
-        # ------------------------
-
         # This tracks which clusters are going to be cleaned from the flux matrix.
         # A 0 means it'll be cleaned, a 1 means it'll be kept.
         good_clusters = np.ones(self.n_clusters + 2)
@@ -2052,7 +2084,9 @@ class modelWE:
                 elif np.shape(idx_traj_in_cluster)[1] > 0:
                     # cluster_pcoord_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[idx_traj_in_cluster[0],:,:]))
                     # The coordinate of this cluster center is the average pcoord of all points in it
-                    cluster_pcoord_centers[cluster_index] = np.mean(self.pcoordSet[idx_traj_in_cluster[0], 0])
+                    cluster_pcoord_centers[cluster_index] = np.mean(
+                        self.pcoordSet[idx_traj_in_cluster[0], 0]
+                    )
 
                 # Get the total flux along the row and col of this index
                 net_flux = np.sum(fluxMatrixTraps[:, cluster_index]) + np.sum(
@@ -2066,13 +2100,19 @@ class modelWE:
                 # If the sum along the row and column are nonzero
                 if net_flux > 0:
                     # Get all the clusters that *aren't* the one we're looking at
-                    all_other_cluster_indices = np.setdiff1d(range(self.n_clusters), cluster_index)
+                    all_other_cluster_indices = np.setdiff1d(
+                        range(self.n_clusters), cluster_index
+                    )
 
                     # Look at all the flux FROM other clusters
-                    total_flux_in = np.sum(fluxMatrixTraps[cluster_index, all_other_cluster_indices])
+                    total_flux_in = np.sum(
+                        fluxMatrixTraps[cluster_index, all_other_cluster_indices]
+                    )
 
                     # And look at all the flux TO other clusters
-                    total_flux_out = np.sum(fluxMatrixTraps[all_other_cluster_indices, cluster_index])
+                    total_flux_out = np.sum(
+                        fluxMatrixTraps[all_other_cluster_indices, cluster_index]
+                    )
 
                     # If either the flux from or the flux to other clusters are all zero,
                     #   then this is a source or sink respectively.
@@ -2118,7 +2158,9 @@ class modelWE:
         self.indBasis = np.where(originalClusters == basis_cluster_index)[0]
         self.indTargets = np.where(originalClusters == target_cluster_index)[0]
         log.debug(f"indBasis:  {self.indBasis}, indTargets: {self.indTargets}")
-        log.debug(f"Sanity check -- basis:  {self.targetRMSD_centers[self.indBasis]}, target: {self.targetRMSD_centers[self.indTargets]}")
+        log.debug(
+            f"Sanity check -- basis:  {self.targetRMSD_centers[self.indBasis]}, target: {self.targetRMSD_centers[self.indTargets]}"
+        )
 
         # Save the new, sorted clusters
         self.originalClusters = originalClusters
@@ -2141,14 +2183,13 @@ class modelWE:
         #   and clean cluster 2. Now, I'll still have clusters labeled as [0,1,3,4], but my steady-state distribution
         #   is only 4 elements. So indexing element 4 won't do anything.
 
-
         # TODO: Define this in __init__
-        cluster_mapping = {x:x for x in range(self.n_clusters + 2)}
+        cluster_mapping = {x: x for x in range(self.n_clusters + 2)}
         n_removed = 0
         for key in cluster_mapping.keys():
             if key in self.removed_clusters:
                 n_removed += 1
-            cluster_mapping[key] =  cluster_mapping[key] - n_removed
+            cluster_mapping[key] = cluster_mapping[key] - n_removed
 
         log.debug(f"New cluster mapping is  {cluster_mapping}")
         self.cluster_mapping = cluster_mapping
@@ -2156,11 +2197,18 @@ class modelWE:
         # Update self.n_clusters to account for any removed clusters
         self.n_clusters -= n_removed
 
-    def get_model_clusters(
-        self,
-    ):  # define new clusters from organized flux matrix corresponding to model
+    def get_model_clusters(self):
+        """
+        Used by get_iter_aristoffian(). Untested and un-debugged, use at your own risk.
 
-        log.critical("This function is untested, and may rely on other untested parts of this code. Use with extreme caution.")
+        Updates:
+        - self.model_clusters
+        """
+        # define new clusters from organized flux matrix corresponding to model
+
+        log.critical(
+            "This function is untested, and may rely on other untested parts of this code. Use with extreme caution."
+        )
 
         clustercenters = np.zeros((self.n_clusters + 2, self.ndim))
         clustercenters[0 : self.n_clusters, :] = self.clusters.clustercenters
@@ -2186,6 +2234,7 @@ class modelWE:
             clustercenters[self.n_clusters :, :] = np.squeeze(
                 coords
             )  # add in basis and target
+
             self.model_clusters = clustering.AssignCenters(
                 clustercenters[self.originalClusters, :],
                 metric="euclidean",
@@ -2220,7 +2269,9 @@ class modelWE:
         for state_idx in range(fluxmatrix_shape[0]):
             # For positive definite flux, set the matrix elements based on normalized fluxes
             if fluxes_out[state_idx] > 0:
-                fluxmatrix[state_idx, :] = fluxmatrix[state_idx, :] / fluxes_out[state_idx]
+                fluxmatrix[state_idx, :] = (
+                    fluxmatrix[state_idx, :] / fluxes_out[state_idx]
+                )
 
             # If the flux is zero, then consider it all self-transition
             # FIXME: this if can be an elif
@@ -2360,7 +2411,9 @@ class modelWE:
         Jt = 0.0
         # Add up the total flux into each of the targets
         for j in range(nTargets):
-            log.debug(f"Processing flux into target state with index {self.indTargets[j]}")
+            log.debug(
+                f"Processing flux into target state with index {self.indTargets[j]}"
+            )
 
             jj = self.indTargets[j]
 
@@ -3058,7 +3111,9 @@ class modelWE:
 
     def get_iter_aristoffian(self, iter):
 
-        log.critical("This function is untested, and may rely on other untested parts of this code. Use with extreme caution.")
+        log.critical(
+            "This function is untested, and may rely on other untested parts of this code. Use with extreme caution."
+        )
 
         self.load_iter_data(iter)
         if not hasattr(self, "model_clusters"):
@@ -3071,7 +3126,9 @@ class modelWE:
         #            self.khList=self.khList[:,np.newaxis]
         #        else:
         self.get_iter_coordinates()
-        dtraj_iter = self.model_clusters.assign(self.reduceCoordinates(self.cur_iter_coords))
+        dtraj_iter = self.model_clusters.assign(
+            self.reduceCoordinates(self.cur_iter_coords)
+        )
         kh_iter = self.kh[dtraj_iter]
         self.khList = np.array(kh_iter[:, 0])  # get k-means bins defined over walkers
         nB = self.nB
@@ -3208,11 +3265,15 @@ class modelWE:
         if not hasattr(self, "model_clusters"):
             self.get_model_clusters()
         self.get_iter_coordinates()  # post coordinates
-        dtraj_iter = self.model_clusters.assign(self.reduceCoordinates(self.cur_iter_coords))
+        dtraj_iter = self.model_clusters.assign(
+            self.reduceCoordinates(self.cur_iter_coords)
+        )
         kh_iter = self.kh[dtraj_iter]
         khList1 = np.array(kh_iter[:, 0])  # post pcoord
         self.get_iter_coordinates0()  # pre coordinates
-        dtraj_iter = self.model_clusters.assign(self.reduceCoordinates(self.cur_iter_coords))
+        dtraj_iter = self.model_clusters.assign(
+            self.reduceCoordinates(self.cur_iter_coords)
+        )
         kh_iter = self.kh[dtraj_iter]
         khList0 = np.array(kh_iter[:, 0])  # pre pcoord
         westFile = self.fileList[self.westList[0]]
