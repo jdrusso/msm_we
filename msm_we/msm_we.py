@@ -3330,32 +3330,75 @@ class modelWE:
                 )
 
     def get_committor(self, conv):
-        Mt = self.fluxMatrix.copy()
-        nR = np.shape(Mt)
-        sM = np.sum(Mt, 1)
-        for iR in range(nR[0]):
-            if sM[iR] > 0:
-                Mt[iR, :] = Mt[iR, :] / sM[iR]
-            if sM[iR] == 0.0:
-                Mt[iR, iR] = 1.0
-        sinkBins = self.indBasis  # np.where(avBinPnoColor==0.0)
-        nsB = np.shape(sinkBins)
-        nsB = nsB[0]
+        """
+        Iteratively obtain an estimate of the committor.
+
+        1. Take the flux matrix, and normalize it into a transition matrix.
+
+        2. Apply two-sided absorbing boundary conditions by setting self-transition probabilities for the basis and
+            target states to 1.0, and all transitions out to 0.0.
+
+        3. Starting with an initial committor "guess" of all 1s, iteratively multiply the guess by the transition matrix
+            until convergence is below conv.
+
+        Updates:
+            - self.q
+
+        Parameters
+        ----------
+        conv: numerical
+            Convergence criteria for committor calculation. Calculation stops when the total difference between q_p and q
+            is less than this.
+
+        Returns
+        -------
+
+        """
+
+        _fluxMatrix = self.fluxMatrix.copy()
+
+        # Number of bins/states in the fluxmatrix
+
+        num_bins = np.shape(_fluxMatrix)
+        flux_out = np.sum(_fluxMatrix, 1)
+
+        for bin_idx in range(num_bins[0]):
+
+            # If the flux out is positive semidefinite, then normalize that row to get transition probabilities
+            if flux_out[bin_idx] > 0:
+                _fluxMatrix[bin_idx, :] = _fluxMatrix[bin_idx, :] / flux_out[bin_idx]
+
+            # If the flux out is zero, then just set the self-transition to 1.0
+            # (This probably keeps a calculation later clean?)
+            if flux_out[bin_idx] == 0.0:
+                _fluxMatrix[bin_idx, bin_idx] = 1.0
+
+        #  The basis states are set to have 0 flux out, and only self-transition = 1.0.
+        #   These are the two-sided absorbing BCs for the committor.
+        sinkBins = self.indBasis
         for ii in sinkBins:
-            Mt[ii, :] = np.zeros((1, self.nBins))
-            Mt[ii, ii] = 1.0
+            _fluxMatrix[ii, :] = np.zeros((1, self.nBins))
+            _fluxMatrix[ii, ii] = 1.0
+
         q = np.zeros((self.nBins, 1))
+
+        # Committor to the target state is 1 by definition
         q[self.indTargets, 0] = 1.0
+
         dconv = 100.0
         qp = np.ones_like(q)
+
+        # Iteratively update the committor estimate until it converges to stationarity
+        # (The committor is the stationary distribution for two-sided absorbing boundary conditions)
         while dconv > conv:
             q[self.indTargets, 0] = 1.0
             q[self.indBasis, 0] = 0.0
-            q = np.matmul(Mt, q)
+            q = np.matmul(_fluxMatrix, q)
             dconv = np.sum(np.abs(qp - q))
-            sys.stdout.write("convergence: " + str(dconv) + "\n")
+            log.debug("convergence: " + str(dconv) + "\n")
             qp = q.copy()
             self.q = q
+
         self.q = q
 
     def get_backwards_committor(self, conv):
