@@ -1923,21 +1923,69 @@ class modelWE:
         self.pcoord1D_fluxMatrix = fluxMatrix
 
     def get_iter_pcoord1D_fluxMatrix_lag0(self, n_iter, binbounds):
-        # sys.stdout.write("iteration " + str(n_iter) + ": data \n")
+        """
+        Compute a flux-matrix in the space of the 1D progress coordinate, at a given iteration.
+
+        Parameters
+        ----------
+        n_iter: integer
+            Iteration to compute flux matrix for
+
+        binbounds: array-like
+            Array of progress coordinate bin boundaries
+
+        Returns
+        -------
+        The fluxmatrix at iteration n_iter.
+        """
+
+        # log.info(n_iter)
+        # log.info(binbounds)
+
+        log.debug("iteration " + str(n_iter) + ": solving fluxmatrix \n")
+
         self.load_iter_data(n_iter)
-        nT = np.shape(self.weightList)[0]
+
+        weightList = self.weightList.copy()
+
+        num_segments_in_iter = np.shape(self.weightList)[0]
+
         nBins = binbounds.size - 1
         fluxMatrix = np.zeros((nBins, nBins))
+
+        # Lists of all parent and child pcoords
         pcoord0 = self.pcoord0List[:, 0]
         pcoord1 = self.pcoord1List[:, 0]
+
+        # Assign parent/child pcoords to bins
         bins0 = np.digitize(pcoord0, binbounds)
         bins1 = np.digitize(pcoord1, binbounds)
-        for iP in range(nT):
-            dT0 = bins0[iP] - 1
-            dT1 = bins1[iP] - 1
-            if np.abs(dT0 - dT1) > 12:
-                self.weightList[iP] = 0.0
-            fluxMatrix[dT0, dT1] = fluxMatrix[dT0, dT1] + self.weightList[iP]
+
+        for seg_idx in range(num_segments_in_iter):
+            # I THINK WHAT'S HAPPENING HERE IS:
+            # The lowest binbound provided here should be smaller than the smallest possible
+            #   value in the trajectory.
+            # I.e., because of the way bins are defined for WE, you might have bin bounds like
+            #   [0,1,2,3], where x>3 is in the basis and 0<x<1 is in the target. However, digitize
+            #   would assign a point of 0.5, which should be in the target, to index 1.
+            # I think this -1 corrects for that.
+
+            from_bin_index = bins0[seg_idx] - 1
+            to_bin_index = bins1[seg_idx] - 1
+
+            # Set the weight of any segment that jumps more than 12 bins to 0?
+            #   This seems super risky, and also originally this function didn't copy weightList, so it
+            #   modified weightList in state for anything that runs after.
+            # In particular, I think that's bad because if you have more than 12 bins, going from the target to
+            #   the basis is going to be set to 0 by this logic.
+            # So, I'm going to disable this for now...
+            if False and np.abs(from_bin_index - to_bin_index) > 12:
+                weightList[seg_idx] = 0.0
+
+            fluxMatrix[from_bin_index, to_bin_index] = (
+                fluxMatrix[from_bin_index, to_bin_index] + weightList[seg_idx]
+            )
+
         return fluxMatrix
 
     def get_fluxMatrix(self, n_lag, first_iter, last_iter):
