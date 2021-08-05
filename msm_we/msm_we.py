@@ -1347,7 +1347,45 @@ class modelWE:
                 coordSet = np.append(coordSet, self.cur_iter_coords, axis=0)
         self.all_coords = coordSet
 
-    def get_coordSet(self, last_iter, n_coords):
+    def get_coordSet(self, last_iter):
+
+        total_segments = int(sum(self.numSegments[:-1]))
+        coordSet = np.zeros(
+            (total_segments, self.nAtoms, 3)
+        )  # extract coordinate libraries for clustering
+        pcoordSet = np.zeros((total_segments, self.pcoord_ndim))
+
+        last_seg = total_segments
+
+        # Update iterations N+1 -> 1
+        for i in tqdm.tqdm(range(last_iter, 0, -1)):
+
+            self.load_iter_data(i)
+            self.get_iter_coordinates()
+
+            first_seg = last_seg - len(self.segindList)
+            assert first_seg >= 0, "Referencing a segment that doesn't exist"
+
+            indGood = np.squeeze(
+                np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0)
+            )
+
+            coordSet[first_seg:last_seg] = self.cur_iter_coords[indGood, :, :]
+            pcoordSet[first_seg:last_seg] = self.pcoord1List[indGood, :]
+
+            last_seg = first_seg
+
+        # Set the coords, and pcoords
+        self.all_coords = coordSet
+        self.pcoordSet = pcoordSet
+
+        first_iter_cluster = i
+        self.first_iter = first_iter_cluster
+        self.last_iter = last_iter
+
+        self.n_coords = np.shape(self.all_coords)[0]
+
+    def get_coordSet_deprecated(self, last_iter, n_coords):
         last_iter_cluster = last_iter
         i = last_iter_cluster
         numCoords = 0
