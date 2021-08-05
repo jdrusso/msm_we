@@ -1877,12 +1877,15 @@ class modelWE:
             + "/pcoord1D_fluxMatrix"
         )
         e = dsetName in f
-        if not e:
+
+        # Again, disable this file
+        if True or not e:
             dsetP = f.create_dataset(dsetName, np.shape(fluxMatrix))
             for iS in range(first_iter + 1, last_iter + 1):
                 if n_lag > 0:
                     fluxMatrixI = self.get_iter_pcoord1D_fluxMatrix(iS, binbounds)
                 elif n_lag == 0:
+                    log.debug(f"Calling with {iS}, {binbounds}")
                     fluxMatrixI = self.get_iter_pcoord1D_fluxMatrix_lag0(iS, binbounds)
                 fluxMatrixI = fluxMatrixI / np.sum(
                     self.weightList
