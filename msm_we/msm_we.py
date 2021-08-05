@@ -147,7 +147,10 @@ class modelWE:
         # TODO: Describe segindList better.
         self.segindList = None
         """list: List of segment indices(?)"""
+
         self.weightList = None
+        """array-like: List of segment weights in an iteration"""
+
         self.nSeg = None
         self.pcoord0List = None
         self.pcoord1List = None
@@ -1902,6 +1905,7 @@ class modelWE:
             if nIter < last_iter:
                 for iS in range(nIter, last_iter + 1):
                     if n_lag > 0:
+                        # TODO: Is this even implemented..?
                         fluxMatrixI = self.get_iter_pcoord1D_fluxMatrix(iS, binbounds)
                     if n_lag == 0:
                         fluxMatrixI = self.get_iter_pcoord1D_fluxMatrix_lag0(
@@ -2071,8 +2075,9 @@ class modelWE:
         Do some cleaning on the flux matrix, and update state with the cleaned flux matrix.
 
         Namely:
+            - Remove unvisited clusters
             - Remove bins with no connectivity
-            - Sort along p1 (?)
+            - Sort along the bins' projection in pcoord 1
 
         Returns
         -------
@@ -2112,8 +2117,12 @@ class modelWE:
             nTraps = 0
             for cluster_index in range(self.n_clusters):
                 idx_traj_in_cluster = np.where(dtraj == cluster_index)
+
+                # If this cluster is unvisited in the trajectories, set good_cluster to False
                 if np.shape(idx_traj_in_cluster)[1] == 0:
                     good_clusters[cluster_index] = 0
+
+                # Otherwise, get the average pcoord of the points in the cluster
                 elif np.shape(idx_traj_in_cluster)[1] > 0:
                     # cluster_pcoord_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[idx_traj_in_cluster[0],:,:]))
                     # The coordinate of this cluster center is the average pcoord of all points in it
@@ -2126,7 +2135,7 @@ class modelWE:
                     fluxMatrixTraps[cluster_index, :]
                 )
 
-                # If both the row and column are all zero, this is an unvisited state, so set good_clusters to 0
+                # If both the row and column are all zero, this is an unvisited state, so set good_clusters to 0/False
                 if net_flux == 0.0:
                     good_clusters[cluster_index] = 0
 
@@ -2281,6 +2290,11 @@ class modelWE:
         Compute the transition matrix from the flux matrix.
         Corrects the "target" states to be true sink states.
 
+        More specifically:
+            - row-normalizes the flux matrix,
+            - sets any states with 0 flux ot (i.e. sinks) to have 1.0
+            - sets target bins to uniformly recycle into basis bins
+
         Updates:
             - `self.Tmatrix`
 
@@ -2321,6 +2335,7 @@ class modelWE:
 
         # TODO: The goal here is to correct for the transition probabilities out of the sink state. Not
         #   sure I fully understand this implementation, but that's the goal.
+        # Correction: I think this sets all the sink bins to recycle to the basis
         sinkRates = np.zeros((1, self.nBins))
         sinkRates[0, self.indBasis] = 1.0 / self.indBasis.size
         tmatrix = fluxmatrix.copy()
@@ -3439,6 +3454,7 @@ class modelWE:
 
         self.q = q
 
+    # TODO: This should probably just be a call to get_committor, followed by self.q = 1 - self.q
     def get_backwards_committor(self, conv):
         Mt = self.fluxMatrix.copy()
         nR = np.shape(Mt)
