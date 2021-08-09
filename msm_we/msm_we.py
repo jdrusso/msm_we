@@ -87,7 +87,7 @@ class modelWE:
 
         self.cluster_seed = False
 
-        self.n_lag = None
+        self.n_lag = 0
         self.pcoord_ndim = None
         """int: Number of dimensions in the progress coordinate"""
         self.pcoord_len = None
@@ -192,7 +192,11 @@ class modelWE:
         """dict: Mapping of cluster indices to structures in that cluster"""
 
     def initialize(
-        self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
+        # self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
+        self,
+        fileSpecifier: str,
+        refPDBfile: str,
+        modelName: str,
     ):
         """
         Initialize the model-builder.
@@ -251,8 +255,9 @@ class modelWE:
         tau = 10.0e-12
         self.tau = tau
 
+        # This is really only used for nAtoms
         self.set_topology(refPDBfile)
-        self.set_basis(initPDBfile)
+        # self.set_basis(initPDBfile)
 
         self.dimReduceMethod = "pca"
         self.vamp_lag = 10
@@ -305,6 +310,21 @@ class modelWE:
             self.basis_bin_center = [self.WEbasisp1_min, self.WEbasisp1_max][
                 abs(self.WEbasisp1_min) == np.inf
             ]
+
+    @property
+    def n_lag(self):
+        return self._n_lag
+
+    @n_lag.setter
+    def n_lag(self, lag):
+
+        if not lag == 0:
+            raise NotImplementedError(
+                "Only a lag of 1 tau (n_lag = 0) is currently supported"
+            )
+
+        else:
+            self._n_lag = lag
 
     @property
     def WEtargetp1_bounds(self):
@@ -723,6 +743,7 @@ class modelWE:
         segindList_lagged = self.seg_histories[:, n_lag]
 
         # TODO: What exactly is this a list of?
+        # seg_histories is a list of indices of the segments
         warpList = self.seg_histories[:, 0:n_lag]  # check for warps
         warpList = np.sum(warpList < 0, 1)
 
@@ -1857,6 +1878,10 @@ class modelWE:
             shape=(self.n_clusters + 2, self.n_clusters + 2),
         ).todense()
 
+        # While the sparse matrix implementation is nice and efficient, using the np.matrix type is a little weird
+        #   and fragile, and it's possible it'll be deprecated in the future.
+        fluxMatrix = fluxMatrix.A
+
         return fluxMatrix
 
     def get_pcoord1D_fluxMatrix(self, n_lag, first_iter, last_iter, binbounds):
@@ -2717,6 +2742,13 @@ class modelWE:
             self.J = J
 
     def get_flux_committor(self):
+        """
+        Get the flux binned according to committors
+
+        Returns
+        -------
+
+        """
 
         J = np.zeros_like(self.binCenters)
         nBins = np.shape(self.binCenters)[0]
@@ -2734,7 +2766,7 @@ class modelWE:
             for j in indForward:
                 JF = JF + np.sum(fluxMatrix[indBack, j * np.ones_like(indBack)])
             J[i] = JR - JF
-            self.Jq = J / self.tau
+            self.Jq = J.squeeze() / self.tau
             sys.stdout.write("%s " % i)
 
     def plot_flux_committor(self, nwin):
@@ -3503,7 +3535,7 @@ class modelWE:
             qp = q.copy()
             self.q = q
 
-        self.q = q
+        self.q = q.squeeze()
 
     # TODO: This should probably just be a call to get_committor, followed by self.q = 1 - self.q
     def get_backwards_committor(self, conv):
