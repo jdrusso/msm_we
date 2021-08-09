@@ -12,10 +12,10 @@ from scipy.sparse import coo_matrix
 import logging
 from rich.logging import RichHandler
 
-FORMAT = "%(message)s"
-logging.basicConfig(format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
-log = logging.getLogger("msm_we")
+log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
+log.addHandler(RichHandler())
+log.propagate = False
 
 # Using the tkinter backend makes matplotlib run better on a cluster, maybe?
 # import matplotlib
