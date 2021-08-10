@@ -2749,6 +2749,10 @@ class modelWE:
             pass
 
     def get_flux(self):
+        """
+        Get the measured flux (i.e. from the flux matrix) into the target.
+        """
+
         J = np.zeros_like(self.binCenters)
         nBins = np.shape(self.binCenters)[0]
         fluxMatrix = self.fluxMatrix.copy()
