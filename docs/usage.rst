@@ -57,11 +57,29 @@ Model building and preparation
 
     :code:`model_name` is what it sounds like, and is used to label various output files.
 
+5. Manually set the following parameters.
+
+    .. code-block:: python
+
+        model.WEtargetp1_bounds = [
+            #lower bound of the target state in progress coordinate,
+            #upper bound of the target state in progress coordinate,
+        ]
+
+        model.WEbasisp1_bounds = [
+            #lower bound of the basis state in progress coordinate,
+            #upper bound of the basis state in progress coordinate,
+        ]
+
+        model.pcoord_ndim0 = # Number of pcoord dimensions
+        model.dimReduceMethod = # Dimensionality reduction method. Must be "pca", "vamp", or "none"
+
+
 6. Load all coords and pcoords up to the last iteration you want to use for analysis with
 
     .. code-block:: python
 
-        model.get_coordSet(last_iter)`.
+        model.get_coordSet(last_iter)
 
 7. Prepare dimensionality reduction transformer by running
 
@@ -85,7 +103,7 @@ Model building and preparation
 
     .. code-block:: python
 
-        model.organize_fluxMatrix
+        model.organize_fluxMatrix()
 
 Analysis
 --------
