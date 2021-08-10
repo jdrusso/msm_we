@@ -1683,7 +1683,7 @@ class modelWE:
         log.debug("Cluster structure mapping completed.")
         log.debug(f"Cluster keys are {cluster_structures.keys()}")
 
-    def cluster_coordinates(self, n_clusters):
+    def cluster_coordinates(self, n_clusters, **_cluster_args):
         """
         Use k-means to cluster coordinates into `n_clusters` cluster centers, and saves the resulting cluster object
         to a file.
@@ -1701,6 +1701,9 @@ class modelWE:
         n_clusters: int
             Number of cluster centers to use.
 
+        **_cluster_args:
+            Keyword arguments that will be passed directly to cluster_kmeans
+
         Returns
         -------
 
@@ -1711,34 +1714,52 @@ class modelWE:
         self.n_clusters = n_clusters
         nC = np.shape(self.all_coords)
         nC = nC[0]
+
+        # Set some default arguments, and overwrite them with the user's choices if provided
+        cluster_args = {
+            "k": n_clusters,
+            "fixed_seed": self.cluster_seed,
+            "metric": "euclidean",
+            "max_iter": 100,
+        }
+        if self.dimReduceMethod == "none" and self.nAtoms > 1:
+            cluster_args["metric"] = "minRMSD"
+
+        cluster_args.update(_cluster_args)
+
         if self.dimReduceMethod == "none":
             if self.nAtoms > 1:
+
                 self.clusters = coor.cluster_kmeans(
                     [self.all_coords.reshape(nC, 3 * self.nAtoms)],
-                    k=n_clusters,
-                    fixed_seed=self.cluster_seed,
-                    metric="minRMSD",
-                    # )
-                    max_iter=100,
+                    **cluster_args
+                    # k=n_clusters,
+                    # fixed_seed=self.cluster_seed,
+                    # metric="minRMSD",
+                    # # )
+                    # max_iter=100,
                 )
             # elif self.nAtoms == 1:
             # Else here is a little sketchy, but fractional nAtoms is useful for some debugging hacks.
             else:
                 self.clusters = coor.cluster_kmeans(
                     [self.all_coords.reshape(nC, int(3 * self.nAtoms))],
-                    k=n_clusters,
-                    fixed_seed=self.cluster_seed,
-                    metric="euclidean",
-                    max_iter=100,
+                    **cluster_args
+                    # k=n_clusters,
+                    # fixed_seed=self.cluster_seed,
+                    # metric="euclidean",
+                    # max_iter=100,
                 )
         if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
             self.clusters = coor.cluster_kmeans(
                 self.coordinates.get_output(),
-                k=n_clusters,
-                metric="euclidean",
-                fixed_seed=self.cluster_seed,
-                max_iter=100,
+                **cluster_args
+                # k=n_clusters,
+                # metric="euclidean",
+                # fixed_seed=self.cluster_seed,
+                # max_iter=100,
             )
+
         self.clusterFile = (
             self.modelName
             + "_clusters_s"
@@ -2470,7 +2491,9 @@ class modelWE:
         # Normalize after removing these very small values
         pSS = pSS / np.sum(pSS)
 
-        assert np.all(pSS >= 0), "Some negative elements in steady-state distribution"
+        assert np.all(
+            pSS >= 0
+        ), f"Some negative elements in steady-state distribution: {pSS}"
 
         self.pSS = pSS
 
