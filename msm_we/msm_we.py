@@ -908,20 +908,18 @@ class modelWE:
 
     def get_transition_data_lag0(self,):
         """
-        **TODO: What does this do exactly? What does it mean to get transition data at a lag of 0?**
+        Get coordinate pairs as the position at the beginning and end of this iteration (i.e. at a lag of 0).
+        At a lag of 0, it's not possible to have warps, since warps/recycles are handled between iterations.
 
-        Get coordinate pairs as the position at the beginning and end of this iteration.
-        In this scheme, it's not possible to have warps, since warps/recycles are handled between iterations.
+        Updates:
+            - self.coordPairList, a list of  parent/child coordinate pairs
+            - self.transitionWeights, a copy of self.weightList
+            - self.departureWeights, a copy of self.weightList
 
         Returns
         -------
         None
 
-
-
-        Todo
-        ----
-        How is this different from :code:`get_transition_data()`?
         """
 
         # get segment history data at lag time n_lag from current iter
@@ -931,30 +929,14 @@ class modelWE:
         log.debug(f"Getting transition data for {self.nSeg} segs, at a lag of 0")
 
         for seg_idx in range(self.nSeg):
-            try:
-                # TODO: Brain locked on something else right now, but you can remove all this duplicate if/elif and just
-                #   put the close in an if, or at the end
-                if seg_idx == 0:
-                    westFile = self.fileList[self.westList[seg_idx]]
-                    dataIn = h5py.File(westFile, "r")
-                    dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
-                    dset = dataIn[dsetName]
-                    coords = dset[:]
-                elif self.westList[seg_idx] != self.westList[seg_idx - 1]:
-                    dataIn.close()
-                    westFile = self.fileList[self.westList[seg_idx]]
-                    dataIn = h5py.File(westFile, "r")
-                    dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
-                    dset = dataIn[dsetName]
-                    coords = dset[:]
 
-                # Update segment seg_idx in coordPairList with
-                coordPairList[seg_idx, :, :, 1] = coords[
-                    self.segindList[seg_idx], self.pcoord_len - 1, :, :
-                ]
-                coordPairList[seg_idx, :, :, 0] = coords[
-                    self.segindList[seg_idx], 0, :, :
-                ]
+            # Open the WEST file corresponding to this segment
+            westFile = self.fileList[self.westList[seg_idx]]
+            dataIn = h5py.File(westFile, "r")
+            dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+
+            try:
+                dset = dataIn[dsetName]
 
             # This trips if it can't find the object it's looking for in the H5 file
             # That might include things like looking for an iteration that doesn't exist
@@ -965,9 +947,18 @@ class modelWE:
                 ] = 0.0  # set transitions without structures to zero weight
                 self.errorCount = self.errorCount + 1
 
-                # TODO: Raise this and don't handle it until you can make it more specific! What error happens here?
                 log.error(e)
                 raise e
+
+            coords = dset[:]
+
+            # Update segment seg_idx in coordPairList with
+            coordPairList[seg_idx, :, :, 1] = coords[
+                self.segindList[seg_idx], self.pcoord_len - 1, :, :
+            ]
+            coordPairList[seg_idx, :, :, 0] = coords[self.segindList[seg_idx], 0, :, :]
+
+            dataIn.close()
 
         transitionWeights = weightList.copy()
         departureWeights = weightList.copy()
