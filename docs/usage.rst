@@ -2,9 +2,9 @@
 Usage
 =====
 
-To use msm_we in a project::
+To use :code:`msm_we` in a project::
 
-    import msm_we
+    from msm_we import msm_we
 
 
 The basic workflow of this module is as follows.
