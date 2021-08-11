@@ -28,6 +28,8 @@ Model building and preparation
 
         # A trivial example processCoordinates
         def processCoordinates(self, coords):
+            # Do some stuff in here
+            # This is NOT a complete example!
             return coords
 
         # Monkey-patch, i.e. replace the placeholder processCoordinates
