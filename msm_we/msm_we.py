@@ -213,7 +213,7 @@ class modelWE:
             and *all* the files returned by this are used in the analysis.
 
         refPDBfile : string
-            Path to PDB file that defines topology
+            Path to PDB file that defines topology. Does *not* resolve ~
 
         initPDBfile : string
             Path to PDB file that defines the basis state
@@ -237,7 +237,7 @@ class modelWE:
 
         self.modelName = modelName
 
-        # TODO: Replace this with pathlib on the paths in fileSpecifier
+        # TODO: Replace this with pathlib on the paths in fileSpecifier, this is pretty dangerous
         pCommand = "ls " + fileSpecifier
         p = subprocess.Popen(pCommand, stdout=subprocess.PIPE, shell=True)
         (output, err) = p.communicate()
@@ -276,7 +276,7 @@ class modelWE:
             self.coordsExist = True
 
         except KeyError:
-            log.warning("problem getting coordinates, they don't exist yet \n")
+            log.error("Problem getting coordinates, they don't exist yet \n")
             self.coordsExist = False
 
         log.debug("msm_we model successfully initialized")
@@ -1762,6 +1762,8 @@ class modelWE:
             + ".h5"
         )
 
+        self.dtrajs = self.clusters.dtrajs
+
         log.debug("Clustering completed.")
         # log.debug(f"Dtrajs: {self.clusters.dtrajs}")
         # self.clusters.save(self.clusterFile, save_streaming_chain=True, overwrite=True)
@@ -2182,7 +2184,8 @@ class modelWE:
         # nT = np.shape(self.all_coords)[0]
 
         # Discretize trajectories via clusters
-        dtraj = self.clusters.assign(self.reduceCoordinates(self.all_coords))
+        # dtraj = self.clusters.assign(self.reduceCoordinates(self.all_coords))
+        dtraj = self.dtrajs
 
         # Get the indices of the target and basis clusters
         target_cluster_index = self.n_clusters + 1  # Target at -1
