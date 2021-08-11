@@ -81,6 +81,7 @@ Model building and preparation
 
     .. code-block:: python
 
+        model.get_iterations()
         model.get_coordSet(last_iter)
 
 7. Prepare dimensionality reduction transformer by running
