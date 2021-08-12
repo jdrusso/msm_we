@@ -20,7 +20,7 @@ jobs:
       run: |
         pip install -r requirements_dev.txt
         pip install .
-        conda install -c conda-forge pyemma h5py<3
+        conda install -c conda-forge pyemma "h5py<3.2"
     - name: Lint with flake8
       run: |
         conda install flake8
