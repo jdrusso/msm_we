@@ -2069,7 +2069,7 @@ class modelWE:
 
         fileName = (
             self.modelName
-            + "_s"
+            + "-fluxmatrix-_s"
             + str(first_iter)
             + "_e"
             + str(last_iter)
@@ -2088,10 +2088,11 @@ class modelWE:
 
         # FIXME: name this something descriptive or just use the 'in' statement in the if/elif
         fluxmatrix_exists_in_h5 = dsetName in f
+        always_overwrite_fluxmatrix = True
 
         # If this data file does not contain a fluxMatrix entry, create it
         # For now, don't use a saved fluxmatrix, annoying to debug
-        if True or not fluxmatrix_exists_in_h5:
+        if always_overwrite_fluxmatrix or not fluxmatrix_exists_in_h5:
             # Create the fluxMatrix dataset
             dsetP = f.create_dataset(dsetName, np.shape(fluxMatrix))
             dsetP[:] = fluxMatrix
