@@ -275,8 +275,9 @@ class modelWE:
             self.get_iter_coordinates0()
             self.coordsExist = True
 
+        # Nothing is raised here because this might be fine, depending on what you're doing.
         except KeyError:
-            log.error("Problem getting coordinates, they don't exist yet \n")
+            log.error("Problem getting coordinates, they don't exist yet.\n")
             self.coordsExist = False
 
         log.debug("msm_we model successfully initialized")
