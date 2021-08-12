@@ -2,6 +2,9 @@
 msm_we
 ======
 
+.. image:: https://github.com/jdrusso/msm_we/actions/workflows/test.yml/badge.svg
+        :target: https://github.com/jdrusso/msm_we/actions/workflows/test.yml
+        
 .. image:: https://github.com/jdrusso/msm_we/actions/workflows/main.yml/badge.svg
         :target: https://github.com/jdrusso/msm_we/actions/workflows/main.yml
 
