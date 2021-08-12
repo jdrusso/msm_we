@@ -29,9 +29,10 @@ Code development TODOs
 -----
 *  Provide option for user to override :code:`dimReduce()` in case they want to do something other than PCA/VAMP
 *  Add TICA option to :code:`dimReduce()`
-*  Add monkey-patching directly into :code:`msm_we` code. I.e., add a function like :code:`register_featurization(func)`
-    which takes the featurization function as input and overloads :code:`msm_we.processCoordinates()` with it.
-    Right now, this has to be done manually.
+*  Add monkey-patching directly into :code:`msm_we` code.
+   I.e., add a function like :code:`register_featurization(func)` which takes the featurization function as input and
+   overloads :code:`msm_we.processCoordinates()` with it.
+   Right now, this has to be done manually.
 
 
 Credits
