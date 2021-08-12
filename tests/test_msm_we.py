@@ -12,6 +12,9 @@ from msm_we import msm_we
 
 # Process coordinates override
 def processCoordinates(self, coords):
+    """
+    Featurization override. Feature-coordinates are pairwise alpha-carbon distances.
+    """
     if self.dimReduceMethod == "none":
         nC = np.shape(coords)
         nC = nC[0]
@@ -85,16 +88,6 @@ def initialized_model():
     with open("reference/1000ns_ntl9/models/initialized.obj", "rb") as model_file:
         model = pickle.load(model_file)
 
-    return model
-
-
-@pytest.fixture
-def loaded_model():
-    """
-    An initialized haMSM model.
-    """
-    with open("reference/1000ns_ntl9/models/loaded.obj", "rb") as model_file:
-        model = pickle.load(model_file)
     return model
 
 
@@ -217,6 +210,7 @@ def test_dim_reduce_and_cluster(modelParams, clustered_model):
     loaded_model = deepcopy(clustered_model)
     loaded_model.ndim = None
     loaded_model.coordinates = None
+    loaded_model.clusters = None
 
     # Dimensionality reduction first
     loaded_model.dimReduce()
