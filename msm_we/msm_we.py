@@ -196,30 +196,32 @@ class modelWE:
         fileSpecifier: str,
         refPDBfile: str,
         modelName: str,
+        basis_pcoord_bounds: list = None,
+        target_pcoord_bounds: list = None,
+        dim_reduce_method: str = "pca",
     ):
         """
         Initialize the model-builder.
 
         Parameters
         ----------
-        fileSpecifier : string
-            Glob that will produce a list of the output WESTPA files to analyze.
-
-            This is passed to ::
-
-                $ ls fileSpecifier
-
-            and *all* the files returned by this are used in the analysis.
+        fileSpecifier : list
+            List of paths to H5 files to analyze.
 
         refPDBfile : string
-            Path to PDB file that defines topology. Does *not* resolve ~
-
-        initPDBfile : string
-            Path to PDB file that defines the basis state
-            **TODO** can this be states plural? Does it need to be extended to that?
+            Path to PDB file that defines topology.
 
         modelName : string
             Name to use in output filenames.
+
+        basis_pcoord_bounds: list
+            List of [lower bound, upper bound] in pcoord-space for the basis state
+
+        target_pcoord_bounds: list
+            List of [lower bound, upper bound] in pcoord-space for the target state
+
+        dim_reduce_method: str
+            Dimensionality reduction method. "pca", "vamp", or "none".
 
         Returns
         -------
@@ -245,9 +247,24 @@ class modelWE:
                 "of paths."
             )
 
+        if basis_pcoord_bounds is None:
+            log.warning(
+                "No basis coord bounds provided to initialize(). "
+                "You can manually set this for now, but that will be deprecated eventually."
+            )
+        else:
+            self.WEbasisp1_bounds = basis_pcoord_bounds
+
+        if target_pcoord_bounds is None:
+            log.warning(
+                "No target coord bounds provided to initialize(). "
+                "You can manually set this for now, but that will be deprecated eventually."
+            )
+        else:
+            self.WEtargetp1_bounds = target_pcoord_bounds
+
         self.fileList = fileList
-        nF = len(fileList)
-        self.n_data_files = nF
+        self.n_data_files = len(fileList)
         #####
 
         self.pcoord_ndim = 1
@@ -260,7 +277,15 @@ class modelWE:
         self.set_topology(refPDBfile)
         # self.set_basis(initPDBfile)
 
-        self.dimReduceMethod = "pca"
+        if dim_reduce_method is None:
+            log.warning(
+                "No dimensionality reduction method provided to initialize(). Defaulting to pca."
+                "You can manually set this for now, but that will be deprecated eventually."
+            )
+            self.dimReduceMethod = "pca"
+        else:
+            self.dimReduceMethod = dim_reduce_method
+
         self.vamp_lag = 10
         self.vamp_dim = 10
         self.nB = 48  # number of bins for optimized WE a la Aristoff
