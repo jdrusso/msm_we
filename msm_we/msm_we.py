@@ -5,7 +5,6 @@ __metaclass__ = type
 import numpy as np
 import tqdm
 import sys
-import subprocess
 import h5py
 from scipy.sparse import coo_matrix
 
@@ -237,13 +236,15 @@ class modelWE:
 
         self.modelName = modelName
 
-        # TODO: Replace this with pathlib on the paths in fileSpecifier, this is pretty dangerous
-        pCommand = "ls " + fileSpecifier
-        p = subprocess.Popen(pCommand, stdout=subprocess.PIPE, shell=True)
-        (output, err) = p.communicate()
-        output = output.decode()
-        fileList = output.split("\n")
-        fileList = fileList[0:-1]
+        if type(fileSpecifier) is list:
+            fileList = fileSpecifier
+        elif type(fileSpecifier) is str:
+            fileList = "\n".join(fileSpecifier.split(" "))
+            log.warning(
+                "HDF5 file paths were provided in a string -- this is now deprecated, please pass as a list "
+                "of paths."
+            )
+
         self.fileList = fileList
         nF = len(fileList)
         self.n_data_files = nF
