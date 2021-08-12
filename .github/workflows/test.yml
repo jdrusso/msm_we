@@ -24,7 +24,7 @@ jobs:
         #conda env update --file environment.yml --name base
         pip install -r requirements_dev.txt
         pip install .
-        conda install -c conda-forge pyemma h5py=3.2.1
+        conda install -c conda-forge pyemma h5py<3.2
     - name: Lint with flake8
       run: |
         conda install flake8
