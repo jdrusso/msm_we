@@ -6,8 +6,20 @@ import numpy as np
 import mdtraj as md
 from copy import deepcopy
 import pickle
+import bz2
+import _pickle as cPickle
 
 from msm_we import msm_we
+
+
+def decompress_pickle(file):
+    """
+    Convenience function for loading compressed pickles.
+    Annoying, but necessary for some files that exceed Github's 100MB limit.
+    """
+    data = bz2.BZ2File(file, "rb")
+    data = cPickle.load(data)
+    return data
 
 
 # Process coordinates override
@@ -96,8 +108,8 @@ def clustered_model():
     """
     An initialized haMSM model.
     """
-    with open("reference/1000ns_ntl9/models/clustered.obj", "rb") as model_file:
-        model = pickle.load(model_file)
+
+    model = decompress_pickle("reference/1000ns_ntl9/models/clustered.obj.pbz2")
 
     # When loading from a pickle, some of the PCA parameters are nuked, so regenerate them.
     model.coordinates.estimate(model.processCoordinates(model.all_coords))
