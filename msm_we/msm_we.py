@@ -731,6 +731,10 @@ class modelWE:
         None
         """
 
+        log.warning(
+            "Getting transition data at arbitrary lags > 0 is not yet supported! Use at your own risk."
+        )
+
         # get segment history data at lag time n_lag from current iter
         if n_lag > self.n_iter:
             sys.stdout.write(
@@ -1400,29 +1404,6 @@ class modelWE:
         self.first_iter = first_iter_cluster
         self.last_iter = last_iter
 
-        self.n_coords = np.shape(self.all_coords)[0]
-
-    def get_coordSet_deprecated(self, last_iter, n_coords):
-        last_iter_cluster = last_iter
-        i = last_iter_cluster
-        numCoords = 0
-        coordSet = np.zeros((0, self.nAtoms, 3))
-        pcoordSet = np.zeros((0, self.pcoord_ndim))
-        while numCoords < n_coords:
-            self.load_iter_data(i)
-            self.get_iter_coordinates()
-            indGood = np.squeeze(
-                np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0)
-            )
-            coordSet = np.append(coordSet, self.cur_iter_coords[indGood, :, :], axis=0)
-            pcoordSet = np.append(pcoordSet, self.pcoord1List[indGood, :], axis=0)
-            numCoords = np.shape(coordSet)[0]
-            i = i - 1
-        self.all_coords = coordSet
-        self.pcoordSet = pcoordSet
-        first_iter_cluster = i
-        self.first_iter = first_iter_cluster
-        self.last_iter = last_iter_cluster
         self.n_coords = np.shape(self.all_coords)[0]
 
     def get_traj_coordinates(self, from_iter, traj_length):
