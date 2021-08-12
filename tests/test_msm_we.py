@@ -119,7 +119,7 @@ def clustered_model():
     """
 
     return load_model(
-        "reference/1000ns_ntl9/models/completed.obj",
+        "reference/1000ns_ntl9/models/clustered.obj.pbz2",
         regenerate_coords=True,
         compressed=True,
     )
