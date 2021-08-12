@@ -241,7 +241,7 @@ class modelWE:
         if type(fileSpecifier) is list:
             fileList = fileSpecifier
         elif type(fileSpecifier) is str:
-            fileList = "\n".join(fileSpecifier.split(" "))
+            fileList = fileSpecifier.split(" ")
             log.warning(
                 "HDF5 file paths were provided in a string -- this is now deprecated, please pass as a list "
                 "of paths."
