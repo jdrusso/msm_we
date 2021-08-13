@@ -204,6 +204,19 @@ def JtargetSS():
     return load_numeric("reference/1000ns_ntl9/models/JtargetSS.npy")
 
 
+@pytest.fixture
+def cleanup_generated(generated_filename):
+    """
+    Fixture to automatically delete all generated h5 files in the root test directory.
+    """
+
+    # Run the test
+    yield
+
+    # Remove the generated file
+    os.remove(generated_filename)
+
+
 def load_numeric(relative_path):
     path = os.path.join(BASE_PATH, relative_path)
     numeric_result = np.load(path)
@@ -261,8 +274,11 @@ def test_dim_reduce_and_cluster(clustered_model):
     assert np.isclose(pca_params["eigenvectors"], ref_params["eigenvectors"]).all()
 
 
+@pytest.mark.parametrize(
+    "generated_filename", ["initialized_model_s1_e100_lag0_clust100.h5"]
+)
 @pytest.mark.xfail
-def test_cluster(modelParams, clustered_model):
+def test_cluster(modelParams, clustered_model, cleanup_generated):
     """
     Test k-means clustering. This is an xfail for now, because there's occasional variation in the cluster centers
     that I haven't quite ironed out yet.
@@ -287,7 +303,12 @@ def test_cluster(modelParams, clustered_model):
     ).all()
 
 
-def test_get_flux_matrix(fluxmatrix_raw, fluxmatrix, clustered_model):
+@pytest.mark.parametrize(
+    "generated_filename", ["initialized_model-fluxmatrix-_s1_e100_lag0_clust100.h5"]
+)
+def test_get_flux_matrix(
+    fluxmatrix_raw, fluxmatrix, clustered_model, cleanup_generated
+):
     """
     Test flux matrix calculation and organizing.
 
