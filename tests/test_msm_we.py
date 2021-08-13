@@ -252,7 +252,7 @@ def test_get_coord_set(initialized_model, modelParams, clustered_model):
     assert (initialized_model.all_coords == clustered_model.all_coords).all()
 
 
-def test_dim_reduce_and_cluster(clustered_model):
+def test_dim_reduce(clustered_model):
     """
     Test dimensionality reduction and clustering.
 
