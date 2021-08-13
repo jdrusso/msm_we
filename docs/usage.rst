@@ -1,6 +1,19 @@
 =====
-Usage
+Installation/Usage
 =====
+
+
+To install :code:`msm_we`:
+
+.. code-block:: bash
+
+    cd </path/to/msm_we>
+
+    conda env create -f environment.yml
+    conda activate hamsm_env
+    pip install .
+
+.. highlight:: python
 
 To use :code:`msm_we` in a project::
 
@@ -24,7 +37,7 @@ Model building and preparation
     This function is responsible for featurization. It should take in an array of all coordinates,
     and produce an array of feature-coordinates.
 
-    .. code-block:: python
+    ::
 
         # A trivial example processCoordinates
         def processCoordinates(self, coords):
