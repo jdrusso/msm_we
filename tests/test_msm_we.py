@@ -30,6 +30,8 @@ def decompress_pickle(file):
 def processCoordinates(self, coords):
     """
     Featurization override. Feature-coordinates are pairwise alpha-carbon distances.
+
+    The first dimension of coords is the number of segments.
     """
     if self.dimReduceMethod == "none":
         nC = np.shape(coords)
@@ -106,9 +108,9 @@ def ref_cluster_structures():
     Fixture containing reference cluster structures.
     """
     path = os.path.join(
-        BASE_PATH, "reference/1000ns_ntl9/models/cluster_structures.npy"
+        BASE_PATH, "reference/1000ns_ntl9/models/bin10_cluster_structures.npy"
     )
-    return np.load(path, allow_pickle=True).item()
+    return np.load(path, allow_pickle=True)
 
 
 @pytest.fixture
@@ -161,7 +163,8 @@ def load_model(relative_path, regenerate_coords=False, compressed=False):
 
     if regenerate_coords:
         # When loading from a pickle, some of the PCA parameters are nuked, so regenerate them.
-        model.coordinates.estimate(model.processCoordinates(model.all_coords))
+        # model.coordinates.estimate(model.processCoordinates(model.all_coords))
+        pass
 
     # Patch paths in filelist. As constructed, they're
     old_paths = model.fileList
@@ -282,10 +285,10 @@ def test_dim_reduce(clustered_model):
     assert loaded_model.ndim == clustered_model.ndim
 
     # Make sure the PCA decomposition gave the correct result
-    pca_params = loaded_model.coordinates.model.get_model_params()
-    ref_params = clustered_model.coordinates.model.get_model_params()
-    assert np.isclose(pca_params["mean"], ref_params["mean"]).all()
-    assert np.isclose(pca_params["eigenvectors"], ref_params["eigenvectors"]).all()
+    ref_covariance = clustered_model.coordinates.get_covariance()
+    test_covariance = loaded_model.coordinates.get_covariance()
+
+    assert np.isclose(ref_covariance, test_covariance).all()
 
 
 @pytest.mark.parametrize(
@@ -381,11 +384,5 @@ def test_get_cluster_structures(clustered_model, ref_cluster_structures):
     clustered_model.update_cluster_structures()
     cluster_structures = clustered_model.cluster_structures
 
-    cluster_structs_equal = [
-        (
-            np.array(ref_cluster_structures[key]) == np.array(cluster_structures[key])
-        ).all()
-        for key in ref_cluster_structures.keys()
-    ]
-
-    assert np.all(cluster_structs_equal)
+    # Just check one bin, otherwise the ref file is huge
+    assert (np.array(ref_cluster_structures) == np.array(cluster_structures[10])).all()
