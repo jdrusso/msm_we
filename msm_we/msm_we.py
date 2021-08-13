@@ -1720,8 +1720,6 @@ class modelWE:
         log.debug("Doing clustering")
 
         self.n_clusters = n_clusters
-        nC = np.shape(self.all_coords)
-        nC = nC[0]
 
         # Set some default arguments, and overwrite them with the user's choices if provided
         cluster_args = {
@@ -1739,7 +1737,7 @@ class modelWE:
             if self.nAtoms > 1:
 
                 self.clusters = coor.cluster_kmeans(
-                    [self.all_coords.reshape(nC, 3 * self.nAtoms)],
+                    [self.all_coords.reshape(-1, 3 * self.nAtoms)],
                     **cluster_args
                     # k=n_clusters,
                     # fixed_seed=self.cluster_seed,
@@ -1751,7 +1749,7 @@ class modelWE:
             # Else here is a little sketchy, but fractional nAtoms is useful for some debugging hacks.
             else:
                 self.clusters = coor.cluster_kmeans(
-                    [self.all_coords.reshape(nC, int(3 * self.nAtoms))],
+                    [self.all_coords.reshape(-1, int(3 * self.nAtoms))],
                     **cluster_args
                     # k=n_clusters,
                     # fixed_seed=self.cluster_seed,
