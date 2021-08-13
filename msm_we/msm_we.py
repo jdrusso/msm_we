@@ -7,6 +7,7 @@ import tqdm
 import sys
 import h5py
 from scipy.sparse import coo_matrix
+from sklearn.decomposition import IncrementalPCA as iPCA
 
 import logging
 from rich.logging import RichHandler
@@ -1411,6 +1412,26 @@ class modelWE:
         self.all_coords = coordSet
 
     def get_coordSet(self, last_iter):
+        """
+        Loads all coordinates and progress coordinates into memory for later usage.
+
+        Todo
+        ----
+        I want to avoid loading full coordinates into memory as much as possible.
+        That means trying to replace usage of all_coords here.
+
+        Parameters
+        ----------
+        last_iter
+        streaming
+
+        Returns
+        -------
+
+        """
+
+        if self.dimReduceMethod == "pca":
+            streaming = True
 
         total_segments = int(sum(self.numSegments[:-1]))
         coordSet = np.zeros(
@@ -1433,20 +1454,26 @@ class modelWE:
                 np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0)
             )
 
-            coordSet[first_seg:last_seg] = self.cur_iter_coords[indGood, :, :]
+            if not streaming:
+                coordSet[first_seg:last_seg] = self.cur_iter_coords[indGood, :, :]
+
             pcoordSet[first_seg:last_seg] = self.pcoord1List[indGood, :]
 
             last_seg = first_seg
 
         # Set the coords, and pcoords
-        self.all_coords = coordSet
+        if not streaming:
+            self.all_coords = coordSet
+            self.n_coords = np.shape(self.all_coords)[0]
+        else:
+            pass
+            # self.n_coords = np.shape(pcoordSet)[0]
+
         self.pcoordSet = pcoordSet
 
         first_iter_cluster = i
         self.first_iter = first_iter_cluster
         self.last_iter = last_iter
-
-        self.n_coords = np.shape(self.all_coords)[0]
 
     def get_traj_coordinates(self, from_iter, traj_length):
         if traj_length > from_iter:
@@ -1522,16 +1549,55 @@ class modelWE:
 
         # log.debug(self.coordSet)
         if self.dimReduceMethod == "pca":
-            data = self.processCoordinates(self.all_coords)
 
-            assert not data.shape[-1] == 0, "Processed coordinates are empty!"
+            # # Set data manually by transforming the full set of coordinates
+            # data = self.processCoordinates(self.all_coords)
+            #
+            # assert not data.shape[-1] == 0, "Processed coordinates are empty!"
+            #
+            # self.coordinates = coor.pca(
+            #     data, dim=-1, var_cutoff=0.95, mean=None, stride=1, skip=0
+            # )
+            # self.ndim = self.coordinates.dimension()
 
-            self.coordinates = coor.pca(
-                data, dim=-1, var_cutoff=0.95, mean=None, stride=1, skip=0
+            # Do this in a streaming way, iteration by iteration
+            # First, do a "rough" PCA on the last 10% of the data to get the number of components that explain the
+            #   variance cutoff.
+            # This is necessary because with incremental PCA, there's no way to do this ahead of time.
+            variance_cutoff = 0.95
+            total_num_iterations = len(self.numSegments)
+            first_iter = max(1, int(total_num_iterations * 0.9))
+            rough_ipca = iPCA()
+            for iteration in range(first_iter, total_num_iterations):
+                iter_coords = self.get_iter_coordinates(iteration)
+                processed_iter_coords = self.processCoordinates(iter_coords)
+                rough_ipca.partial_fit(processed_iter_coords)
+
+            components_for_var = (
+                np.argmax(
+                    np.cumsum(rough_ipca.explained_variance_ratio_) > variance_cutoff
+                )
+                + 1
             )
-            self.ndim = self.coordinates.dimension()
+            log.debug(f"Keeping {components_for_var} components")
+
+            # Now do the PCA again, with that many components, using all the iterations.
+            ipca = iPCA(n_components=components_for_var)
+            for iteration in range(1, total_num_iterations):
+                iter_coords = self.get_iter_coordinates(iteration)
+                processed_iter_coords = self.processCoordinates(iter_coords)
+                ipca.partial_fit(processed_iter_coords)
+
+            self.coordinates = ipca
+            self.ndim = components_for_var
 
         elif self.dimReduceMethod == "vamp":
+            # TODO: I  don't think trajSet is initialized by itself -- you need to manually call get_traj_coordinates
+            log.warning(
+                "VAMP dimensionality reduction requires you to *manually* call get_traj_coordinates first, "
+                "or self.trajSet will be all None. Make sure you've done that!"
+            )
+
             ntraj = len(self.trajSet)
             data = [None] * ntraj
             for itraj in range(ntraj):
@@ -1669,7 +1735,9 @@ class modelWE:
 
             for _seg in range(segs_in_iter):
 
-                cluster_idx = self.clusters.dtrajs[0][seg_idx]
+                # log.debug(f"Iteration {iteration}, segment {_seg}, segs in iter {segs_in_iter}")
+                # iteration-1 because dtrajs has n_iterations-1 elements
+                cluster_idx = self.clusters.dtrajs[iteration - 1][_seg]
 
                 if cluster_idx in self.removed_clusters:
                     # log.debug(f"Skipping cluster {cluster_idx}")
@@ -1766,9 +1834,21 @@ class modelWE:
                     # max_iter=100,
                 )
 
+        if self.dimReduceMethod == "pca":
+            transformed_data = []
+
+            for iteration in range(1, self.last_iter + 1):
+                iter_coords = self.get_iter_coordinates(iteration)
+                transformed_data.append(
+                    self.coordinates.transform(self.processCoordinates(iter_coords))
+                )
+
+        elif self.dimReduceMethod == "vamp":
+            transformed_data = self.coordinates.get_output()
+
         if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
             self.clusters = coor.cluster_kmeans(
-                self.coordinates.get_output(),
+                transformed_data,
                 **cluster_args
                 # k=n_clusters,
                 # metric="euclidean",
