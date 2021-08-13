@@ -101,6 +101,17 @@ def ref_ntl9_structure_path():
 
 
 @pytest.fixture
+def ref_cluster_structures():
+    """
+    Fixture containing reference cluster structures.
+    """
+    path = os.path.join(
+        BASE_PATH, "reference/1000ns_ntl9/models/cluster_structures.npy"
+    )
+    return np.load(path, allow_pickle=True).item()
+
+
+@pytest.fixture
 def initialized_model():
     """
     An initialized haMSM model.
@@ -357,3 +368,21 @@ def test_get_steady_state_target_flux(completed_model, JtargetSS):
     completed_model.get_steady_state_target_flux()
 
     assert completed_model.JtargetSS == JtargetSS
+
+
+def test_get_cluster_structures(clustered_model, ref_cluster_structures):
+    """
+    Tests obtaining the library of structures in each MSM bin.
+    """
+
+    clustered_model.update_cluster_structures()
+    cluster_structures = clustered_model.cluster_structures
+
+    cluster_structs_equal = [
+        (
+            np.array(ref_cluster_structures[key]) == np.array(cluster_structures[key])
+        ).all()
+        for key in ref_cluster_structures.keys()
+    ]
+
+    assert np.all(cluster_structs_equal)
