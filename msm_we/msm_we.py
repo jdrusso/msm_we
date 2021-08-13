@@ -1396,6 +1396,20 @@ class modelWE:
         self.cur_iter_coords = coordList
 
     def get_coordinates(self, first_iter, last_iter):
+        """
+        Unused
+
+        Parameters
+        ----------
+        first_iter
+        last_iter
+
+        Returns
+        -------
+        """
+
+        log.warning("This function is not tested or supported, use at your own risk!")
+
         self.first_iter = first_iter
         self.last_iter = last_iter
         iters = range(self.first_iter, self.last_iter + 1)
@@ -1715,8 +1729,8 @@ class modelWE:
             # This is an array, not a dict, so index by... well, index, and not iter_number
             num_segs_in_iter = int(self.numSegments[_iter - 1])
 
-            log.debug(f"Found {num_segs_in_iter} in iter {_iter}")
-            log.debug(f"Updating indices {i} :  {i + num_segs_in_iter}")
+            # log.debug(f"Found {num_segs_in_iter} in iter {_iter}")
+            # log.debug(f"Updating indices {i} :  {i + num_segs_in_iter}")
 
             assert None not in iter_weights, f"None in iter {_iter}, {iter_weights}"
 
@@ -1727,6 +1741,7 @@ class modelWE:
         log.debug(f"Got {all_seg_weights.shape} seg weights")
 
         # Assign each segment to a cluster by iterating over coords
+        # Track the "absolute" segment index because all_seg_weights is a flat list
         seg_idx = 0
         for iteration in range(1, total_num_iterations):
 
