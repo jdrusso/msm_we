@@ -97,7 +97,7 @@ def ref_ntl9_structure_path():
     Fixture containing the path to the NTL9 reference structure.
     """
 
-    return "reference/1000ns_ntl9/reference.pdb"
+    return os.path.join(BASE_PATH, "reference/1000ns_ntl9/reference.pdb")
 
 
 @pytest.fixture
