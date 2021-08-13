@@ -5,7 +5,6 @@ __metaclass__ = type
 import numpy as np
 import tqdm
 import sys
-import subprocess
 import h5py
 from scipy.sparse import coo_matrix
 
@@ -197,30 +196,32 @@ class modelWE:
         fileSpecifier: str,
         refPDBfile: str,
         modelName: str,
+        basis_pcoord_bounds: list = None,
+        target_pcoord_bounds: list = None,
+        dim_reduce_method: str = "pca",
     ):
         """
         Initialize the model-builder.
 
         Parameters
         ----------
-        fileSpecifier : string
-            Glob that will produce a list of the output WESTPA files to analyze.
-
-            This is passed to ::
-
-                $ ls fileSpecifier
-
-            and *all* the files returned by this are used in the analysis.
+        fileSpecifier : list
+            List of paths to H5 files to analyze.
 
         refPDBfile : string
-            Path to PDB file that defines topology. Does *not* resolve ~
-
-        initPDBfile : string
-            Path to PDB file that defines the basis state
-            **TODO** can this be states plural? Does it need to be extended to that?
+            Path to PDB file that defines topology.
 
         modelName : string
             Name to use in output filenames.
+
+        basis_pcoord_bounds: list
+            List of [lower bound, upper bound] in pcoord-space for the basis state
+
+        target_pcoord_bounds: list
+            List of [lower bound, upper bound] in pcoord-space for the target state
+
+        dim_reduce_method: str
+            Dimensionality reduction method. "pca", "vamp", or "none".
 
         Returns
         -------
@@ -237,16 +238,33 @@ class modelWE:
 
         self.modelName = modelName
 
-        # TODO: Replace this with pathlib on the paths in fileSpecifier, this is pretty dangerous
-        pCommand = "ls " + fileSpecifier
-        p = subprocess.Popen(pCommand, stdout=subprocess.PIPE, shell=True)
-        (output, err) = p.communicate()
-        output = output.decode()
-        fileList = output.split("\n")
-        fileList = fileList[0:-1]
+        if type(fileSpecifier) is list:
+            fileList = fileSpecifier
+        elif type(fileSpecifier) is str:
+            fileList = fileSpecifier.split(" ")
+            log.warning(
+                "HDF5 file paths were provided in a string -- this is now deprecated, please pass as a list "
+                "of paths."
+            )
+
+        if basis_pcoord_bounds is None:
+            log.warning(
+                "No basis coord bounds provided to initialize(). "
+                "You can manually set this for now, but that will be deprecated eventually."
+            )
+        else:
+            self.WEbasisp1_bounds = basis_pcoord_bounds
+
+        if target_pcoord_bounds is None:
+            log.warning(
+                "No target coord bounds provided to initialize(). "
+                "You can manually set this for now, but that will be deprecated eventually."
+            )
+        else:
+            self.WEtargetp1_bounds = target_pcoord_bounds
+
         self.fileList = fileList
-        nF = len(fileList)
-        self.n_data_files = nF
+        self.n_data_files = len(fileList)
         #####
 
         self.pcoord_ndim = 1
@@ -259,7 +277,15 @@ class modelWE:
         self.set_topology(refPDBfile)
         # self.set_basis(initPDBfile)
 
-        self.dimReduceMethod = "pca"
+        if dim_reduce_method is None:
+            log.warning(
+                "No dimensionality reduction method provided to initialize(). Defaulting to pca."
+                "You can manually set this for now, but that will be deprecated eventually."
+            )
+            self.dimReduceMethod = "pca"
+        else:
+            self.dimReduceMethod = dim_reduce_method
+
         self.vamp_lag = 10
         self.vamp_dim = 10
         self.nB = 48  # number of bins for optimized WE a la Aristoff
@@ -729,6 +755,10 @@ class modelWE:
         -------
         None
         """
+
+        log.warning(
+            "Getting transition data at arbitrary lags > 0 is not yet supported! Use at your own risk."
+        )
 
         # get segment history data at lag time n_lag from current iter
         if n_lag > self.n_iter:
@@ -1399,29 +1429,6 @@ class modelWE:
         self.first_iter = first_iter_cluster
         self.last_iter = last_iter
 
-        self.n_coords = np.shape(self.all_coords)[0]
-
-    def get_coordSet_deprecated(self, last_iter, n_coords):
-        last_iter_cluster = last_iter
-        i = last_iter_cluster
-        numCoords = 0
-        coordSet = np.zeros((0, self.nAtoms, 3))
-        pcoordSet = np.zeros((0, self.pcoord_ndim))
-        while numCoords < n_coords:
-            self.load_iter_data(i)
-            self.get_iter_coordinates()
-            indGood = np.squeeze(
-                np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0)
-            )
-            coordSet = np.append(coordSet, self.cur_iter_coords[indGood, :, :], axis=0)
-            pcoordSet = np.append(pcoordSet, self.pcoord1List[indGood, :], axis=0)
-            numCoords = np.shape(coordSet)[0]
-            i = i - 1
-        self.all_coords = coordSet
-        self.pcoordSet = pcoordSet
-        first_iter_cluster = i
-        self.first_iter = first_iter_cluster
-        self.last_iter = last_iter_cluster
         self.n_coords = np.shape(self.all_coords)[0]
 
     def get_traj_coordinates(self, from_iter, traj_length):

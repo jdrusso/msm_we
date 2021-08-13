@@ -1,12 +1,18 @@
-name: test_env
+name: hamsm_env
 channels:
   - conda-forge
   - defaults
 dependencies:
-#  - python
  - numpy
  - h5py
  - matplotlib
  - mdtraj
  - pyemma
  - sphinx_rtd_theme
+ - flake8
+ - Sphinx
+ - pytest
+ - rich
+ - sphinx_rtd_theme
+ - tqdm
+ - scipy

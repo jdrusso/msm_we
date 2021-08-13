@@ -1,6 +1,19 @@
 =====
-Usage
+Installation/Usage
 =====
+
+
+To install :code:`msm_we`:
+
+.. code-block:: bash
+
+    cd </path/to/msm_we>
+
+    conda env create -f environment.yml
+    conda activate hamsm_env
+    pip install .
+
+.. highlight:: python
 
 To use :code:`msm_we` in a project::
 
@@ -24,7 +37,7 @@ Model building and preparation
     This function is responsible for featurization. It should take in an array of all coordinates,
     and produce an array of feature-coordinates.
 
-    .. code-block:: python
+    ::
 
         # A trivial example processCoordinates
         def processCoordinates(self, coords):
@@ -50,7 +63,9 @@ Model building and preparation
 
     .. code-block:: python
 
-        model.initialize(h5_glob, reference_structure_file, model_name)
+        model.initialize(h5_glob, reference_structure_file, model_name,
+                        basis_pcoord1_bounds, target_pcoord1_bounds,
+                        dim_reduce_method)
 
 
     :code:`h5_glob` is a list of paths to your WESTPA h5 files.
@@ -59,23 +74,11 @@ Model building and preparation
 
     :code:`model_name` is what it sounds like, and is used to label various output files.
 
-5. Manually set the following parameters.
+    :code:`basis_pcoord1_bounds` is a list of [lower bound, upper bound]  of the basis in pcoord 1 space
 
-    .. code-block:: python
+    :code:`target_pcoord1_bounds` is a list of [lower bound, upper bound]  of the target in pcoord 1 space
 
-        model.WEtargetp1_bounds = [
-            #lower bound of the target state in progress coordinate,
-            #upper bound of the target state in progress coordinate,
-        ]
-
-        model.WEbasisp1_bounds = [
-            #lower bound of the basis state in progress coordinate,
-            #upper bound of the basis state in progress coordinate,
-        ]
-
-        model.pcoord_ndim0 = # Number of pcoord dimensions
-        model.dimReduceMethod = # Dimensionality reduction method. Must be "pca", "vamp", or "none"
-
+    :code:`dim_reduce_method` is the dimensionality reduction method ("pca", "vamp", or "none")
 
 6. Load all coords and pcoords up to the last iteration you want to use for analysis with
 
