@@ -1610,12 +1610,10 @@ class modelWE:
             in that cluster.
         """
 
+        log.debug("Obtaining cluster structures...")
+
         assert self.clusters is not None, "Clusters have not been computed!"
 
-        assert self.all_coords is not None, "Coordinates have not been loaded!"
-
-        log.debug("Obtaining cluster structures...")
-        log.debug(f"All coords shape: {self.all_coords.shape}")
         log.debug(
             f"Dtrajs len: {len(self.clusters.dtrajs)}, [0] shape: {self.clusters.dtrajs[0].shape}"
         )
@@ -1645,28 +1643,39 @@ class modelWE:
             i += num_segs_in_iter
 
         log.debug(f"Got {all_seg_weights.shape} seg weights")
-        # ####
 
-        #  Assign each segment to a cluster
-        #   INCLUDING the segments in clusters in the final iteration (i.e. the N+1,  where dynamics didn't run)
-        for seg_idx in range(self.all_coords.shape[0]):
+        # Assign each segment to a cluster by iterating over coords
+        seg_idx = 0
+        for iteration in range(1, total_num_iterations):
 
-            cluster_idx = self.clusters.dtrajs[0][seg_idx]
+            self.load_iter_data(iteration)
+            self.get_iter_coordinates()
+            indGood = np.squeeze(
+                np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0)
+            )
+            iter_coords = self.cur_iter_coords[indGood]
+            segs_in_iter = int(iter_coords.shape[0])
 
-            if cluster_idx in self.removed_clusters:
-                # log.debug(f"Skipping cluster {cluster_idx}")
-                continue
+            for _seg in range(segs_in_iter):
 
-            if cluster_idx not in cluster_structures.keys():
-                cluster_structures[cluster_idx] = []
-                cluster_structure_weights[cluster_idx] = []
+                assert iter_coords.shape[0] > 0, indGood
 
-            cluster_structures[cluster_idx].append(self.all_coords[seg_idx])
+                cluster_idx = self.clusters.dtrajs[0][seg_idx]
 
-            cluster_structure_weights[cluster_idx].append(all_seg_weights[seg_idx])
+                if cluster_idx in self.removed_clusters:
+                    # log.debug(f"Skipping cluster {cluster_idx}")
+                    continue
 
-        # log.debug(f"Cluster structure shape is {len(list(cluster_structures.keys()))}, weights shape is {len(list(cluster_structure_weights.keys()))}")
-        # log.debug(f"First cluster has {len(cluster_structures[0])} structures and {len(cluster_structure_weights[0])} weights")
+                if cluster_idx not in cluster_structures.keys():
+                    cluster_structures[cluster_idx] = []
+                    cluster_structure_weights[cluster_idx] = []
+
+                seg_coords = iter_coords[_seg]
+                cluster_structures[cluster_idx].append(seg_coords)
+                cluster_structure_weights[cluster_idx].append(all_seg_weights[seg_idx])
+
+                seg_idx += 1
+
         assert len(list(cluster_structures.keys())) == len(
             list(cluster_structure_weights.keys())
         ), "Structures and weights have different numbers of bins?"
