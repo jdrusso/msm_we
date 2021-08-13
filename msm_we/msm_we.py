@@ -1755,6 +1755,7 @@ class modelWE:
                     # metric="euclidean",
                     # max_iter=100,
                 )
+
         if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
             self.clusters = coor.cluster_kmeans(
                 self.coordinates.get_output(),
@@ -2195,11 +2196,7 @@ class modelWE:
 
         log.debug("Cleaning flux matrix")
 
-        # processes raw fluxMatrix
-        # nT = np.shape(self.all_coords)[0]
-
         # Discretize trajectories via clusters
-        # dtraj = self.clusters.assign(self.reduceCoordinates(self.all_coords))
         dtraj = self.dtrajs
 
         # Get the indices of the target and basis clusters
