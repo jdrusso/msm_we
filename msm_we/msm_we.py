@@ -298,7 +298,7 @@ class modelWE:
 
         try:
             self.load_iter_data(1)
-            self.get_iter_coordinates0()
+            self.load_iter_coordinates0()
             self.coordsExist = True
 
         # Nothing is raised here because this might be fine, depending on what you're doing.
@@ -537,7 +537,7 @@ class modelWE:
                 sys.stdout.write("error in " + fileName + str(sys.exc_info()[0]) + "\n")
                 raise dataset_exists
 
-        log.debug(f"Found {n_segs} segments in iteration {n_iter}")
+        # log.debug(f"Found {n_segs} segments in iteration {n_iter}")
 
         self.westList = westList.astype(int)
 
@@ -1307,7 +1307,24 @@ class modelWE:
                 )
                 log.error(e)
 
-    def get_iter_coordinates(self):
+    def get_iter_coordinates(self, iteration):
+        """
+        Return the valid coordinates for a certain iteration
+
+        Parameters
+        ----------
+        iteration: int
+            The iteration to return coordinates for
+        """
+
+        self.load_iter_data(iteration)
+        self.load_iter_coordinates()
+        indGood = np.squeeze(np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0))
+        iter_coords = self.cur_iter_coords[indGood]
+
+        return iter_coords
+
+    def load_iter_coordinates(self):
         """
         Updates state with the coordinates from the last iteration (or whichever iteration is in `self.n_iter`)
 
@@ -1358,7 +1375,7 @@ class modelWE:
                 self.coordsExist = False
         self.cur_iter_coords = cur_iter_coords
 
-    def get_iter_coordinates0(self):  # get iteration initial coordinates
+    def load_iter_coordinates0(self):  # get iteration initial coordinates
         coordList = np.zeros((self.nSeg, self.nAtoms, 3))
         for iS in range(self.nSeg):
             if iS == 0:
@@ -1388,7 +1405,7 @@ class modelWE:
                     "    gathering structures from iteration " + str(iter) + "...\n"
                 )
             self.load_iter_data(iter)
-            self.get_iter_coordinates()
+            self.load_iter_coordinates()
             if self.coordsExist:
                 coordSet = np.append(coordSet, self.cur_iter_coords, axis=0)
         self.all_coords = coordSet
@@ -1407,7 +1424,7 @@ class modelWE:
         for i in tqdm.tqdm(range(last_iter, 0, -1)):
 
             self.load_iter_data(i)
-            self.get_iter_coordinates()
+            self.load_iter_coordinates()
 
             first_seg = last_seg - len(self.segindList)
             assert first_seg >= 0, "Referencing a segment that doesn't exist"
@@ -1449,7 +1466,7 @@ class modelWE:
                 "    gathering structures from iteration " + str(i) + "...\n"
             )
             self.load_iter_data(i)
-            self.get_iter_coordinates()
+            self.load_iter_coordinates()
             seg_history = self.seg_histories[:, iH]
             seg_history_index = np.zeros(nS).astype(int)
             last_index = np.zeros(nS).astype(
@@ -1647,17 +1664,10 @@ class modelWE:
         seg_idx = 0
         for iteration in range(1, total_num_iterations):
 
-            self.load_iter_data(iteration)
-            self.get_iter_coordinates()
-            indGood = np.squeeze(
-                np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0)
-            )
-            iter_coords = self.cur_iter_coords[indGood]
+            iter_coords = self.get_iter_coordinates(iteration)
             segs_in_iter = int(iter_coords.shape[0])
 
             for _seg in range(segs_in_iter):
-
-                assert iter_coords.shape[0] > 0, indGood
 
                 cluster_idx = self.clusters.dtrajs[0][seg_idx]
 
@@ -3309,7 +3319,7 @@ class modelWE:
         #            self.khList=np.array(self.pcoord1List[:,1]) #kh is pcoord 2 from optimized WE sims
         #            self.khList=self.khList[:,np.newaxis]
         #        else:
-        self.get_iter_coordinates()
+        self.load_iter_coordinates()
         dtraj_iter = self.model_clusters.assign(
             self.reduceCoordinates(self.cur_iter_coords)
         )
@@ -3447,13 +3457,13 @@ class modelWE:
         nS = self.nSeg
         if not hasattr(self, "model_clusters"):
             self.get_model_clusters()
-        self.get_iter_coordinates()  # post coordinates
+        self.load_iter_coordinates()  # post coordinates
         dtraj_iter = self.model_clusters.assign(
             self.reduceCoordinates(self.cur_iter_coords)
         )
         kh_iter = self.kh[dtraj_iter]
         khList1 = np.array(kh_iter[:, 0])  # post pcoord
-        self.get_iter_coordinates0()  # pre coordinates
+        self.load_iter_coordinates0()  # pre coordinates
         dtraj_iter = self.model_clusters.assign(
             self.reduceCoordinates(self.cur_iter_coords)
         )
