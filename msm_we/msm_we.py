@@ -1503,8 +1503,6 @@ class modelWE:
 
         log.debug(f"Running dimensionality reduction -- method: {self.dimReduceMethod}")
 
-        nC = np.shape(self.all_coords)
-        nC = nC[0]
         # log.debug(self.coordSet)
         if self.dimReduceMethod == "pca":
             data = self.processCoordinates(self.all_coords)
@@ -1535,7 +1533,8 @@ class modelWE:
         elif self.dimReduceMethod == "none":
             self.ndim = int(3 * self.nAtoms)
 
-            data = self.all_coords.reshape(nC, self.ndim)
+            # TODO: Why is this unused?
+            data = self.all_coords.reshape(-1, self.ndim)
             self.coordinates = self.Coordinates()
             # self.coordinates.transform=self.processCoordinates
 
