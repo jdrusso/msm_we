@@ -106,11 +106,6 @@ def initialized_model():
     An initialized haMSM model.
     """
     return load_model("reference/1000ns_ntl9/models/initialized.obj")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/initialized.obj")
-    # with open(path, "rb") as model_file:
-    #     model = pickle.load(model_file)
-    #
-    # return model
 
 
 @pytest.fixture
@@ -124,13 +119,6 @@ def clustered_model():
         regenerate_coords=True,
         compressed=True,
     )
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/clustered.obj.pbz2")
-    # model = decompress_pickle(path)
-    #
-    # # When loading from a pickle, some of the PCA parameters are nuked, so regenerate them.
-    # model.coordinates.estimate(model.processCoordinates(model.all_coords))
-    #
-    # return model
 
 
 @pytest.fixture
@@ -139,12 +127,6 @@ def organized_model():
     An initialized haMSM model.
     """
     return load_model("reference/1000ns_ntl9/models/organized.obj")
-    #
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/organized.obj")
-    # with open(path, "rb") as model_file:
-    #     model = pickle.load(model_file)
-    #
-    # return model
 
 
 @pytest.fixture
@@ -153,11 +135,6 @@ def completed_model():
     An initialized haMSM model.
     """
     return load_model("reference/1000ns_ntl9/models/completed.obj")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/completed.obj")
-    # with open(path, "rb") as model_file:
-    #     model = pickle.load(model_file)
-    #
-    # return model
 
 
 def load_model(relative_path, regenerate_coords=False, compressed=False):
@@ -193,9 +170,6 @@ def fluxmatrix_raw():
     An initialized haMSM model.
     """
     return load_numeric("reference/1000ns_ntl9/models/fluxmatrix_raw.npy")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/fluxmatrix_raw.npy")
-    # fluxmatrix_raw = np.load(path)
-    # return fluxmatrix_raw
 
 
 @pytest.fixture
@@ -204,9 +178,6 @@ def fluxmatrix():
     An initialized haMSM model.
     """
     return load_numeric("reference/1000ns_ntl9/models/fluxmatrix.npy")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/fluxmatrix.npy")
-    # fluxmatrix = np.load(path)
-    # return fluxmatrix
 
 
 @pytest.fixture
@@ -215,9 +186,6 @@ def tmatrix():
     An initialized haMSM model.
     """
     return load_numeric("reference/1000ns_ntl9/models/tmatrix.npy")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/tmatrix.npy")
-    # tmatrix = np.load(path)
-    # return tmatrix
 
 
 @pytest.fixture
@@ -226,9 +194,6 @@ def pSS():
     An initialized haMSM model.
     """
     return load_numeric("reference/1000ns_ntl9/models/pSS.npy")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/pSS.npy")
-    # pSS = np.load(path)
-    # return pSS
 
 
 @pytest.fixture
@@ -236,11 +201,7 @@ def JtargetSS():
     """
     An initialized haMSM model.
     """
-
     return load_numeric("reference/1000ns_ntl9/models/JtargetSS.npy")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/JtargetSS.npy")
-    # JtargetSS = np.load(path)
-    # return JtargetSS
 
 
 def load_numeric(relative_path):
