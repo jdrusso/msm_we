@@ -2197,7 +2197,7 @@ class modelWE:
         log.debug("Cleaning flux matrix")
 
         # Discretize trajectories via clusters
-        dtraj = self.dtrajs
+        dtrajs = self.dtrajs
 
         # Get the indices of the target and basis clusters
         target_cluster_index = self.n_clusters + 1  # Target at -1
@@ -2219,18 +2219,31 @@ class modelWE:
         while nTraps > 0:
             nTraps = 0
             for cluster_index in range(self.n_clusters):
-                idx_traj_in_cluster = np.where(dtraj == cluster_index)
+                # Get the indices of the dtraj points in this cluster
+                idx_traj_in_cluster = [np.where(dtraj == 3) for dtraj in dtrajs]
+
+                # Get the pcoord points that correspond to these dtraj points
+                offset = 0
+                pcoord_indices = []
+                for i, idxs in enumerate(idx_traj_in_cluster):
+                    pcoord_idxs = offset + idxs[0]
+                    pcoord_indices.extend(pcoord_idxs)
+                    offset += len(self.dtrajs[i])
+
+                # Get the number of dtraj points in this cluster
+                n_in_cluster = np.sum([x[0].shape for x in idx_traj_in_cluster])
 
                 # If this cluster is unvisited in the trajectories, set good_cluster to False
-                if np.shape(idx_traj_in_cluster)[1] == 0:
+                # if np.shape(idx_traj_in_cluster)[1] == 0:
+                if n_in_cluster == 0:
                     good_clusters[cluster_index] = 0
 
                 # Otherwise, get the average pcoord of the points in the cluster
-                elif np.shape(idx_traj_in_cluster)[1] > 0:
+                elif n_in_cluster > 0:
                     # cluster_pcoord_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[idx_traj_in_cluster[0],:,:]))
                     # The coordinate of this cluster center is the average pcoord of all points in it
                     cluster_pcoord_centers[cluster_index] = np.mean(
-                        self.pcoordSet[idx_traj_in_cluster[0], 0]
+                        self.pcoordSet[pcoord_indices, 0]
                     )
 
                 # Get the total flux along the row and col of this index
@@ -2263,7 +2276,6 @@ class modelWE:
                     #   then this is a source or sink respectively.
                     # So, clean it
                     if total_flux_in == 0.0 or total_flux_out == 0.0:
-                        log.debug(f"Cluster with index {cluster_index} is a trap")
                         nTraps = nTraps + 1
                         good_clusters[cluster_index] = 0
                         fluxMatrixTraps[:, cluster_index] = 0.0
@@ -2299,7 +2311,7 @@ class modelWE:
 
         # Update the index of the basis and target states to account for their position in the new sorted clusters
         originalClusters = good_clusters[pcoord_sort_indices]
-        log.debug(f"indData: {good_clusters}")
+        log.debug(f"Good clusters: {good_clusters}")
         self.indBasis = np.where(originalClusters == basis_cluster_index)[0]
         self.indTargets = np.where(originalClusters == target_cluster_index)[0]
         log.debug(f"indBasis:  {self.indBasis}, indTargets: {self.indTargets}")
