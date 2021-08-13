@@ -225,7 +225,10 @@ def cleanup_generated(generated_filename):
     yield
 
     # Remove the generated file
-    os.remove(generated_filename)
+    try:
+        os.remove(generated_filename)
+    except FileNotFoundError:
+        pass
 
 
 def load_numeric(relative_path):
