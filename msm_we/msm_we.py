@@ -1478,10 +1478,8 @@ class modelWE:
         # Set the coords, and pcoords
         if not streaming:
             self.all_coords = coordSet
-            self.n_coords = np.shape(self.all_coords)[0]
         else:
             pass
-            # self.n_coords = np.shape(pcoordSet)[0]
 
         self.pcoordSet = pcoordSet
 

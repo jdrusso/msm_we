@@ -262,11 +262,9 @@ def test_get_coord_set(initialized_model, modelParams, clustered_model):
     initialized_model.get_iterations()
     initialized_model.get_coordSet(last_iter=modelParams["last_iter"])
 
-    assert initialized_model.n_coords == clustered_model.n_coords
     assert initialized_model.first_iter == clustered_model.first_iter
     assert initialized_model.last_iter == clustered_model.last_iter
     assert (initialized_model.pcoordSet == clustered_model.pcoordSet).all()
-    assert (initialized_model.all_coords == clustered_model.all_coords).all()
 
 
 def test_dim_reduce(clustered_model):
