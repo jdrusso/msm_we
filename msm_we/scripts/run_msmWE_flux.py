@@ -14,6 +14,7 @@ import subprocess
 
 import logging
 from rich.logging import RichHandler
+
 FORMAT = "%(message)s"
 logging.basicConfig(
     level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
@@ -43,7 +44,7 @@ model.initialize(fileSpecifier, refPDBfile, initPDBfile, modelName)
 # model.WEbasisp1_max = 12.5  # upper edge
 # model.pcoord_ndim = 1  # number of pcoords
 model.WEtargetp1 = 2.6  # target def on WE p1
-model.WEbasisp1_min = 12.0 # WE bin where basis structure is mapped- lower edge
+model.WEbasisp1_min = 12.0  # WE bin where basis structure is mapped- lower edge
 model.WEbasisp1_max = 13.0  # upper edge
 model.pcoord_ndim = 1  # number of pcoords
 # model.pcoord_len = 50  # number of pcoords
@@ -53,7 +54,7 @@ model.dimReduceMethod = "pca"  # dimensionality reduction method
 
 last_iter_cluster = last_iter  # model.maxIter-1 #last iter often not complete
 # ncoords = 10000 # TODO: what on earth is this
-ncoords = 285 # TODO: this is like the total number of segments over all iterations?
+ncoords = 285  # TODO: this is like the total number of segments over all iterations?
 ncoords = 125
 i = last_iter_cluster
 
@@ -65,11 +66,14 @@ log.debug("Loading in iteration data.. (this could take a while)")
 
 # Keep adding iterations until the total number of segments is equal to ncoords
 while numCoords < ncoords:
-    print(f"Doing iteration {i}/{last_iter_cluster} (goes backwards to 0) | {numCoords}", end='\r')
+    print(
+        f"Doing iteration {i}/{last_iter_cluster} (goes backwards to 0) | {numCoords}",
+        end="\r",
+    )
     # TODO: Replace this, which iterates over a set of trajectory files, with something that just looks at auxdata
     # Load data into the model's state
     model.load_iter_data(i)
-    model.get_iter_coordinates()
+    model.load_iter_coordinates()
 
     # TODO: Slowwwwwww appends
     indGood = np.squeeze(np.where(np.sum(np.sum(model.cur_iter_coords, 2), 1) != 0))
@@ -110,7 +114,8 @@ clusterFile = (
     + ".h5"
 )
 exists = os.path.isfile(clusterFile)
-exists = False; log.warning("Skipping any potential cluster reloading!")
+exists = False
+log.warning("Skipping any potential cluster reloading!")
 
 # If a cluster file with the name corresponding to these parameters exists, load clusters from it.
 if exists:

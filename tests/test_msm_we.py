@@ -30,6 +30,8 @@ def decompress_pickle(file):
 def processCoordinates(self, coords):
     """
     Featurization override. Feature-coordinates are pairwise alpha-carbon distances.
+
+    The first dimension of coords is the number of segments.
     """
     if self.dimReduceMethod == "none":
         nC = np.shape(coords)
@@ -97,7 +99,18 @@ def ref_ntl9_structure_path():
     Fixture containing the path to the NTL9 reference structure.
     """
 
-    return "reference/1000ns_ntl9/reference.pdb"
+    return os.path.join(BASE_PATH, "reference/1000ns_ntl9/reference.pdb")
+
+
+@pytest.fixture
+def ref_cluster_structures():
+    """
+    Fixture containing reference cluster structures.
+    """
+    path = os.path.join(
+        BASE_PATH, "reference/1000ns_ntl9/models/bin10_cluster_structures.npy"
+    )
+    return np.load(path, allow_pickle=True)
 
 
 @pytest.fixture
@@ -106,11 +119,6 @@ def initialized_model():
     An initialized haMSM model.
     """
     return load_model("reference/1000ns_ntl9/models/initialized.obj")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/initialized.obj")
-    # with open(path, "rb") as model_file:
-    #     model = pickle.load(model_file)
-    #
-    # return model
 
 
 @pytest.fixture
@@ -124,13 +132,6 @@ def clustered_model():
         regenerate_coords=True,
         compressed=True,
     )
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/clustered.obj.pbz2")
-    # model = decompress_pickle(path)
-    #
-    # # When loading from a pickle, some of the PCA parameters are nuked, so regenerate them.
-    # model.coordinates.estimate(model.processCoordinates(model.all_coords))
-    #
-    # return model
 
 
 @pytest.fixture
@@ -139,12 +140,6 @@ def organized_model():
     An initialized haMSM model.
     """
     return load_model("reference/1000ns_ntl9/models/organized.obj")
-    #
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/organized.obj")
-    # with open(path, "rb") as model_file:
-    #     model = pickle.load(model_file)
-    #
-    # return model
 
 
 @pytest.fixture
@@ -153,11 +148,6 @@ def completed_model():
     An initialized haMSM model.
     """
     return load_model("reference/1000ns_ntl9/models/completed.obj")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/completed.obj")
-    # with open(path, "rb") as model_file:
-    #     model = pickle.load(model_file)
-    #
-    # return model
 
 
 def load_model(relative_path, regenerate_coords=False, compressed=False):
@@ -173,7 +163,8 @@ def load_model(relative_path, regenerate_coords=False, compressed=False):
 
     if regenerate_coords:
         # When loading from a pickle, some of the PCA parameters are nuked, so regenerate them.
-        model.coordinates.estimate(model.processCoordinates(model.all_coords))
+        # model.coordinates.estimate(model.processCoordinates(model.all_coords))
+        pass
 
     # Patch paths in filelist. As constructed, they're
     old_paths = model.fileList
@@ -193,9 +184,6 @@ def fluxmatrix_raw():
     An initialized haMSM model.
     """
     return load_numeric("reference/1000ns_ntl9/models/fluxmatrix_raw.npy")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/fluxmatrix_raw.npy")
-    # fluxmatrix_raw = np.load(path)
-    # return fluxmatrix_raw
 
 
 @pytest.fixture
@@ -204,9 +192,6 @@ def fluxmatrix():
     An initialized haMSM model.
     """
     return load_numeric("reference/1000ns_ntl9/models/fluxmatrix.npy")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/fluxmatrix.npy")
-    # fluxmatrix = np.load(path)
-    # return fluxmatrix
 
 
 @pytest.fixture
@@ -215,9 +200,6 @@ def tmatrix():
     An initialized haMSM model.
     """
     return load_numeric("reference/1000ns_ntl9/models/tmatrix.npy")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/tmatrix.npy")
-    # tmatrix = np.load(path)
-    # return tmatrix
 
 
 @pytest.fixture
@@ -226,9 +208,6 @@ def pSS():
     An initialized haMSM model.
     """
     return load_numeric("reference/1000ns_ntl9/models/pSS.npy")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/pSS.npy")
-    # pSS = np.load(path)
-    # return pSS
 
 
 @pytest.fixture
@@ -236,11 +215,23 @@ def JtargetSS():
     """
     An initialized haMSM model.
     """
-
     return load_numeric("reference/1000ns_ntl9/models/JtargetSS.npy")
-    # path = os.path.join(BASE_PATH, "reference/1000ns_ntl9/models/JtargetSS.npy")
-    # JtargetSS = np.load(path)
-    # return JtargetSS
+
+
+@pytest.fixture
+def cleanup_generated(generated_filename):
+    """
+    Fixture to automatically delete all generated h5 files in the root test directory.
+    """
+
+    # Run the test
+    yield
+
+    # Remove the generated file
+    try:
+        os.remove(generated_filename)
+    except FileNotFoundError:
+        pass
 
 
 def load_numeric(relative_path):
@@ -271,14 +262,12 @@ def test_get_coord_set(initialized_model, modelParams, clustered_model):
     initialized_model.get_iterations()
     initialized_model.get_coordSet(last_iter=modelParams["last_iter"])
 
-    assert initialized_model.n_coords == clustered_model.n_coords
     assert initialized_model.first_iter == clustered_model.first_iter
     assert initialized_model.last_iter == clustered_model.last_iter
     assert (initialized_model.pcoordSet == clustered_model.pcoordSet).all()
-    assert (initialized_model.all_coords == clustered_model.all_coords).all()
 
 
-def test_dim_reduce_and_cluster(clustered_model):
+def test_dim_reduce(clustered_model):
     """
     Test dimensionality reduction and clustering.
 
@@ -294,14 +283,17 @@ def test_dim_reduce_and_cluster(clustered_model):
     assert loaded_model.ndim == clustered_model.ndim
 
     # Make sure the PCA decomposition gave the correct result
-    pca_params = loaded_model.coordinates.model.get_model_params()
-    ref_params = clustered_model.coordinates.model.get_model_params()
-    assert np.isclose(pca_params["mean"], ref_params["mean"]).all()
-    assert np.isclose(pca_params["eigenvectors"], ref_params["eigenvectors"]).all()
+    ref_covariance = clustered_model.coordinates.get_covariance()
+    test_covariance = loaded_model.coordinates.get_covariance()
+
+    assert np.isclose(ref_covariance, test_covariance).all()
 
 
+@pytest.mark.parametrize(
+    "generated_filename", ["initialized_model_s1_e100_lag0_clust100.h5"]
+)
 @pytest.mark.xfail
-def test_cluster(modelParams, clustered_model):
+def test_cluster(modelParams, clustered_model, cleanup_generated):
     """
     Test k-means clustering. This is an xfail for now, because there's occasional variation in the cluster centers
     that I haven't quite ironed out yet.
@@ -326,7 +318,12 @@ def test_cluster(modelParams, clustered_model):
     ).all()
 
 
-def test_get_flux_matrix(fluxmatrix_raw, fluxmatrix, clustered_model):
+@pytest.mark.parametrize(
+    "generated_filename", ["initialized_model-fluxmatrix-_s1_e100_lag0_clust100.h5"]
+)
+def test_get_flux_matrix(
+    fluxmatrix_raw, fluxmatrix, clustered_model, cleanup_generated
+):
     """
     Test flux matrix calculation and organizing.
 
@@ -375,3 +372,15 @@ def test_get_steady_state_target_flux(completed_model, JtargetSS):
     completed_model.get_steady_state_target_flux()
 
     assert completed_model.JtargetSS == JtargetSS
+
+
+def test_get_cluster_structures(clustered_model, ref_cluster_structures):
+    """
+    Tests obtaining the library of structures in each MSM bin.
+    """
+
+    clustered_model.update_cluster_structures()
+    cluster_structures = clustered_model.cluster_structures
+
+    # Just check one bin, otherwise the ref file is huge
+    assert (np.array(ref_cluster_structures) == np.array(cluster_structures[10])).all()
