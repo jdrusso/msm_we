@@ -688,6 +688,7 @@ class modelWE:
             self.reference_structure = struct
             self.reference_coord = np.squeeze(struct._xyz)
             self.nAtoms = struct.topology.n_atoms
+            return
 
         else:
             log.debug(
@@ -953,6 +954,12 @@ class modelWE:
         -------
         None
 
+        Todo
+        -----
+        This function is pretty slow, and profiling says it's because of coords = dset[:], so it must be something
+        to do with how I'm reading my HDF5 files. Maybe that's just my HDF5 file, or maybe I'm accessing it in some
+        really inefficient way in here that I'm not seeing.  Surprisingly, it doesn't seem to be the constant file
+        opening/closing.
         """
 
         # get segment history data at lag time n_lag from current iter
@@ -964,8 +971,21 @@ class modelWE:
         for seg_idx in range(self.nSeg):
 
             # Open the WEST file corresponding to this segment
-            westFile = self.fileList[self.westList[seg_idx]]
-            dataIn = h5py.File(westFile, "r")
+            west_file = self.fileList[self.westList[seg_idx]]
+
+            if seg_idx == 0:
+                dataIn = h5py.File(west_file, "r")
+                open_west_file = west_file
+            else:
+                # if we're opening a new file
+                if not west_file == open_west_file:
+                    dataIn.close()
+                    dataIn = h5py.File(west_file, "r")
+                    open_west_file = west_file
+                # If we're reading from the same file, it's already open, so use that.
+                elif west_file == open_west_file:
+                    pass
+
             dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
 
             try:
@@ -995,7 +1015,7 @@ class modelWE:
             if np.isnan(coordPairList[seg_idx]).any():
                 weightList[seg_idx] = 0.0
 
-            dataIn.close()
+        dataIn.close()
 
         transitionWeights = weightList.copy()
         departureWeights = weightList.copy()
@@ -1946,6 +1966,7 @@ class modelWE:
 
         TODO
         ----
+        This function is slow because of the call to get_transition_data_lag0(). See that function for more info.
         """
 
         # 1. Update state with data from the iteration you want to compute the flux matrix for
