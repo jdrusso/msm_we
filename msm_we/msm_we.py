@@ -2331,7 +2331,9 @@ class modelWE:
             nTraps = 0
             for cluster_index in range(self.n_clusters):
                 # Get the indices of the dtraj points in this cluster
-                idx_traj_in_cluster = [np.where(dtraj == 3) for dtraj in dtrajs]
+                idx_traj_in_cluster = [
+                    np.where(dtraj == cluster_index) for dtraj in dtrajs
+                ]
 
                 # Get the pcoord points that correspond to these dtraj points
                 offset = 0
