@@ -87,6 +87,8 @@ Model building and preparation
         model.get_iterations()
         model.get_coordSet(last_iter)
 
+    where `last_iter` is the number of iterations you have (AKA, the last iteration it'll load data from.)
+
 7. Prepare dimensionality reduction transformer by running
 
     .. code-block:: python
