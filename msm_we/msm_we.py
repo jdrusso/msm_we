@@ -1448,12 +1448,14 @@ class modelWE:
             streaming = True
 
         total_segments = int(sum(self.numSegments[:-1]))
-        coordSet = np.zeros(
-            (total_segments, self.nAtoms, 3)
-        )  # extract coordinate libraries for clustering
-        pcoordSet = np.zeros((total_segments, self.pcoord_ndim))
+        # coordSet = np.zeros(
+        #     (total_segments, self.nAtoms, 3)
+        # )  # extract coordinate libraries for clustering
+        coordSet = np.full((total_segments, self.nAtoms, 3), fill_value=np.nan)
+        # pcoordSet = np.zeros((total_segments, self.pcoord_ndim))
+        pcoordSet = np.full((total_segments, self.pcoord_ndim), fill_value=np.nan)
 
-        last_seg = total_segments
+        last_seg_idx = total_segments
 
         # Update iterations N+1 -> 1
         for i in tqdm.tqdm(range(last_iter, 0, -1)):
@@ -1461,19 +1463,23 @@ class modelWE:
             self.load_iter_data(i)
             self.load_iter_coordinates()
 
-            first_seg = last_seg - len(self.segindList)
-            assert first_seg >= 0, "Referencing a segment that doesn't exist"
+            first_seg_idx = last_seg_idx - len(self.segindList)
+            assert first_seg_idx >= 0, "Referencing a segment that doesn't exist"
 
+            # Get the indices of all "good" coordinates, where a  valid coordinate has been obtained
             indGood = np.squeeze(
-                np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0)
+                np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != np.nan)
             )
+            # indGood = np.argwhere(~np.isnan(self.cur_iter_coords))
 
             if not streaming:
-                coordSet[first_seg:last_seg] = self.cur_iter_coords[indGood, :, :]
+                coordSet[first_seg_idx:last_seg_idx] = self.cur_iter_coords[
+                    indGood, :, :
+                ]
 
-            pcoordSet[first_seg:last_seg] = self.pcoord1List[indGood, :]
+            pcoordSet[first_seg_idx:last_seg_idx] = self.pcoord1List[indGood, :]
 
-            last_seg = first_seg
+            last_seg_idx = first_seg_idx
 
         # Set the coords, and pcoords
         if not streaming:
