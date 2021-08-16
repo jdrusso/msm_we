@@ -990,10 +990,15 @@ class modelWE:
             ]
             coordPairList[seg_idx, :, :, 0] = coords[self.segindList[seg_idx], 0, :, :]
 
+            # Check for NaNs
+            if np.isnan(coordPairList[seg_idx]).any():
+                weightList[seg_idx] = 0.0
+
             dataIn.close()
 
         transitionWeights = weightList.copy()
         departureWeights = weightList.copy()
+
         self.coordPairList = coordPairList
         self.transitionWeights = transitionWeights
         self.departureWeights = departureWeights
@@ -1320,8 +1325,13 @@ class modelWE:
 
         self.load_iter_data(iteration)
         self.load_iter_coordinates()
-        indGood = np.squeeze(np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0))
-        iter_coords = self.cur_iter_coords[indGood]
+        # indGood = np.squeeze(np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0))
+
+        bad_coords = np.isnan(self.cur_iter_coords).any(axis=(1, 2))
+        good_coords = ~bad_coords
+
+        # iter_coords = self.cur_iter_coords[indGood]
+        iter_coords = self.cur_iter_coords[good_coords]
 
         return iter_coords
 
@@ -1343,7 +1353,7 @@ class modelWE:
 
         """
         # get iteration final coordinates
-        cur_iter_coords = np.zeros((self.nSeg, self.nAtoms, 3))
+        cur_iter_coords = np.full((self.nSeg, self.nAtoms, 3), fill_value=np.nan)
         for iS in range(self.nSeg):
             try:
                 if iS == 0:
@@ -1372,12 +1382,12 @@ class modelWE:
                     + str(self.segindList[iS])
                     + "\n"
                 )
-                cur_iter_coords[iS, :, :] = np.zeros((self.nAtoms, 3))
+                cur_iter_coords[iS, :, :] = np.full((self.nAtoms, 3), fill_value=np.nan)
                 self.coordsExist = False
         self.cur_iter_coords = cur_iter_coords
 
     def load_iter_coordinates0(self):  # get iteration initial coordinates
-        coordList = np.zeros((self.nSeg, self.nAtoms, 3))
+        coordList = np.full((self.nSeg, self.nAtoms, 3), fill_value=np.nan)
         for iS in range(self.nSeg):
             if iS == 0:
                 westFile = self.fileList[self.westList[iS]]
@@ -1475,11 +1485,13 @@ class modelWE:
                 )
 
             if not streaming:
-                coordSet[first_seg_idx:last_seg_idx] = self.cur_iter_coords[
-                    good_coords, :, :
-                ]
+                coordSet[first_seg_idx:last_seg_idx][
+                    good_coords
+                ] = self.cur_iter_coords[good_coords, :, :]
 
-            pcoordSet[first_seg_idx:last_seg_idx] = self.pcoord1List[good_coords, :]
+            pcoordSet[first_seg_idx:last_seg_idx][good_coords] = self.pcoord1List[
+                good_coords, :
+            ]
 
             last_seg_idx = first_seg_idx
 
@@ -1966,13 +1978,17 @@ class modelWE:
         # (Segment, Atom, [lagged, current coord])
         log.debug(f"Coord pairlist shape is {self.coordPairList.shape}")
 
+        # Get which coords are not NaN
+        good_coords = ~np.isnan(self.coordPairList).any(axis=(1, 2, 3))
+
         # Assign a cluster to the lagged and the current coords
-        start_cluster = self.clusters.assign(
-            self.reduceCoordinates(self.coordPairList[:, :, :, 0])
+        reduced_initial = self.reduceCoordinates(
+            self.coordPairList[good_coords, :, :, 0]
         )
-        end_cluster = self.clusters.assign(
-            self.reduceCoordinates(self.coordPairList[:, :, :, 1])
-        )
+        reduced_final = self.reduceCoordinates(self.coordPairList[good_coords, :, :, 1])
+
+        start_cluster = self.clusters.assign(reduced_initial)
+        end_cluster = self.clusters.assign(reduced_final)
 
         log.debug(f"Cluster 0 shape: {start_cluster.shape}")
 
@@ -1985,7 +2001,7 @@ class modelWE:
         #     log.warning(f"No target1 entries. {indTarget1}")
 
         # Get the index of every point
-        ind_start_in_basis = np.where(self.is_WE_basis(self.pcoord0List))
+        ind_start_in_basis = np.where(self.is_WE_basis(self.pcoord0List[good_coords]))
         if ind_start_in_basis[0].size > 0:
             log.debug(
                 "Number of pre-transition points in basis0: "
@@ -1993,7 +2009,7 @@ class modelWE:
                 + "\n"
             )
 
-        ind_end_in_basis = np.where(self.is_WE_basis(self.pcoord1List))
+        ind_end_in_basis = np.where(self.is_WE_basis(self.pcoord1List[good_coords]))
         if ind_end_in_basis[0].size > 0:
             log.debug(
                 "Number of post-transition points in basis1: "
@@ -2014,7 +2030,7 @@ class modelWE:
         #   placed at (x,y)[i]
         # Data here is just the number of segments since each segment is associated with 1 transition
         fluxMatrix = coo_matrix(
-            (self.transitionWeights, (start_cluster, end_cluster)),
+            (self.transitionWeights[good_coords], (start_cluster, end_cluster)),
             shape=(self.n_clusters + 2, self.n_clusters + 2),
         ).todense()
 
@@ -2355,7 +2371,7 @@ class modelWE:
                 elif n_in_cluster > 0:
                     # cluster_pcoord_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[idx_traj_in_cluster[0],:,:]))
                     # The coordinate of this cluster center is the average pcoord of all points in it
-                    cluster_pcoord_centers[cluster_index] = np.mean(
+                    cluster_pcoord_centers[cluster_index] = np.nanmean(
                         self.pcoordSet[pcoord_indices, 0]
                     )
 

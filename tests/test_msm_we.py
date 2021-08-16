@@ -264,7 +264,9 @@ def test_get_coord_set(initialized_model, modelParams, clustered_model):
 
     assert initialized_model.first_iter == clustered_model.first_iter
     assert initialized_model.last_iter == clustered_model.last_iter
-    assert (initialized_model.pcoordSet == clustered_model.pcoordSet).all()
+    assert np.isclose(
+        initialized_model.pcoordSet, clustered_model.pcoordSet, equal_nan=True
+    ).all()
 
 
 def test_dim_reduce(clustered_model):
