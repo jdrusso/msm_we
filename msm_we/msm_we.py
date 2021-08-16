@@ -677,16 +677,17 @@ class modelWE:
             if topology[-3:] == "dat":
                 self.reference_coord = np.loadtxt(topology)
                 self.nAtoms = 1
-            elif topology[-3:] == "pdb":
-                struct = md.load(topology)
-                self.reference_structure = struct
-                self.reference_coord = np.squeeze(struct._xyz)
-                self.nAtoms = struct.topology.n_atoms
-            else:
+                return
+
+            elif not topology[-3:] == "pdb":
                 log.critical(
-                    "Topology is not a recognized type! Proceeding, but no guarantees."
+                    "Topology is not a recognized type (PDB)! Proceeding, but no guarantees."
                 )
-                # raise NotImplementedError("Topology is not a recognized filetype")
+
+            struct = md.load(topology)
+            self.reference_structure = struct
+            self.reference_coord = np.squeeze(struct._xyz)
+            self.nAtoms = struct.topology.n_atoms
 
         else:
             log.debug(
