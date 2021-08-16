@@ -1437,7 +1437,6 @@ class modelWE:
         Parameters
         ----------
         last_iter
-        streaming
 
         Returns
         -------
@@ -1446,14 +1445,15 @@ class modelWE:
 
         if self.dimReduceMethod == "pca":
             streaming = True
+        else:
+            streaming = False
 
         total_segments = int(sum(self.numSegments[:-1]))
-        coordSet = np.zeros(
-            (total_segments, self.nAtoms, 3)
-        )  # extract coordinate libraries for clustering
-        pcoordSet = np.zeros((total_segments, self.pcoord_ndim))
 
-        last_seg = total_segments
+        coordSet = np.full((total_segments, self.nAtoms, 3), fill_value=np.nan)
+        pcoordSet = np.full((total_segments, self.pcoord_ndim), fill_value=np.nan)
+
+        last_seg_idx = total_segments
 
         # Update iterations N+1 -> 1
         for i in tqdm.tqdm(range(last_iter, 0, -1)):
@@ -1461,19 +1461,27 @@ class modelWE:
             self.load_iter_data(i)
             self.load_iter_coordinates()
 
-            first_seg = last_seg - len(self.segindList)
-            assert first_seg >= 0, "Referencing a segment that doesn't exist"
+            first_seg_idx = last_seg_idx - len(self.segindList)
+            assert first_seg_idx >= 0, "Referencing a segment that doesn't exist"
 
-            indGood = np.squeeze(
-                np.where(np.sum(np.sum(self.cur_iter_coords, 2), 1) != 0)
-            )
+            # Get the indices of all "good" coordinates, where a  valid coordinate has been obtained
+            # Boolean mask for coords that have been successfully initialized
+            bad_coords = np.isnan(self.cur_iter_coords).any(axis=(1, 2))
+            good_coords = ~bad_coords
+
+            if bad_coords.any():
+                log.warning(
+                    f"Walker {np.argwhere(bad_coords).squeeze()} has bad coords in iteration(s) {self.n_iter}"
+                )
 
             if not streaming:
-                coordSet[first_seg:last_seg] = self.cur_iter_coords[indGood, :, :]
+                coordSet[first_seg_idx:last_seg_idx] = self.cur_iter_coords[
+                    good_coords, :, :
+                ]
 
-            pcoordSet[first_seg:last_seg] = self.pcoord1List[indGood, :]
+            pcoordSet[first_seg_idx:last_seg_idx] = self.pcoord1List[good_coords, :]
 
-            last_seg = first_seg
+            last_seg_idx = first_seg_idx
 
         # Set the coords, and pcoords
         if not streaming:
