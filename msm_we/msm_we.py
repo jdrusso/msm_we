@@ -1822,7 +1822,7 @@ class modelWE:
         log.debug("Cluster structure mapping completed.")
         log.debug(f"Cluster keys are {cluster_structures.keys()}")
 
-    def cluster_coordinates(self, n_clusters, **_cluster_args):
+    def cluster_coordinates(self, n_clusters, streaming=False, **_cluster_args):
         """
         Use k-means to cluster coordinates into `n_clusters` cluster centers, and saves the resulting cluster object
         to a file.
@@ -1840,6 +1840,9 @@ class modelWE:
         n_clusters: int
             Number of cluster centers to use.
 
+        streaming: boolean
+            Whether to stream k-means clustering, or load all from memory.
+
         **_cluster_args:
             Keyword arguments that will be passed directly to cluster_kmeans
 
@@ -1851,6 +1854,9 @@ class modelWE:
         log.debug("Doing clustering")
 
         self.n_clusters = n_clusters
+        streaming = False
+
+        cluster_func = coor.cluster_kmeans
 
         # Set some default arguments, and overwrite them with the user's choices if provided
         cluster_args = {
@@ -1859,36 +1865,46 @@ class modelWE:
             "metric": "euclidean",
             "max_iter": 100,
         }
+
         if self.dimReduceMethod == "none" and self.nAtoms > 1:
             cluster_args["metric"] = "minRMSD"
+
+        if streaming:
+            cluster_func = coor.cluster_mini_batch_kmeans
+            # Update some of the arguments to mini_batch_kmeans
+            pass
 
         cluster_args.update(_cluster_args)
 
         if self.dimReduceMethod == "none":
             if self.nAtoms > 1:
 
-                self.clusters = coor.cluster_kmeans(
-                    [self.all_coords.reshape(-1, 3 * self.nAtoms)],
-                    **cluster_args
-                    # k=n_clusters,
-                    # fixed_seed=self.cluster_seed,
-                    # metric="minRMSD",
-                    # # )
-                    # max_iter=100,
-                )
-            # elif self.nAtoms == 1:
-            # Else here is a little sketchy, but fractional nAtoms is useful for some debugging hacks.
-            else:
-                self.clusters = coor.cluster_kmeans(
-                    [self.all_coords.reshape(-1, int(3 * self.nAtoms))],
-                    **cluster_args
-                    # k=n_clusters,
-                    # fixed_seed=self.cluster_seed,
-                    # metric="euclidean",
-                    # max_iter=100,
+                self.clusters = cluster_func(
+                    [
+                        self.get_iter_coordinates(iteration).reshape(
+                            -1, 3 * self.nAtoms
+                        )
+                        for iteration in range(1, self.last_iter + 1)
+                    ],
+                    **cluster_args,
                 )
 
-        if self.dimReduceMethod == "pca":
+            # Else here is a little sketchy, but fractional nAtoms is useful for some debugging hacks.
+            else:
+                self.clusters = cluster_func(
+                    [
+                        self.get_iter_coordinates(iteration).reshape(
+                            -1, 3 * self.nAtoms
+                        )
+                        for iteration in range(1, self.last_iter + 1)
+                    ],
+                    **cluster_args,
+                )
+
+        # Right now, this doesn't do anything differently, and is just a placeholder.
+        elif self.dimReduceMethod == "pca" and streaming:
+
+            raise NotImplementedError("PCA + streaming clustering is not yet supported")
             transformed_data = []
 
             for iteration in range(1, self.last_iter + 1):
@@ -1897,18 +1913,33 @@ class modelWE:
                     self.coordinates.transform(self.processCoordinates(iter_coords))
                 )
 
-        elif self.dimReduceMethod == "vamp":
-            transformed_data = self.coordinates.get_output()
+                # Do partial clustering based on this iteration here
+                pass
 
-        if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
-            self.clusters = coor.cluster_kmeans(
-                transformed_data,
-                **cluster_args
-                # k=n_clusters,
-                # metric="euclidean",
-                # fixed_seed=self.cluster_seed,
-                # max_iter=100,
-            )
+        elif self.dimReduceMethod == "vamp" and streaming:
+
+            raise NotImplementedError("VAMP + streaming clustering is not supported.")
+
+        elif (
+            self.dimReduceMethod == "pca"
+            or self.dimReduceMethod == "vamp"
+            and not streaming
+        ):
+
+            if self.dimReduceMethod == "pca":
+                transformed_data = []
+
+                for iteration in range(1, self.last_iter + 1):
+                    iter_coords = self.get_iter_coordinates(iteration)
+                    transformed_data.append(
+                        self.coordinates.transform(self.processCoordinates(iter_coords))
+                    )
+
+            # TODO: Make sure this is returned in the shape (iteration, ...)
+            elif self.dimReduceMethod == "vamp":
+                transformed_data = self.coordinates.get_output()
+
+            self.clusters = cluster_func(transformed_data, **cluster_args)
 
         self.clusterFile = (
             self.modelName
