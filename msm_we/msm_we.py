@@ -2098,7 +2098,7 @@ class modelWE:
         nBins = binbounds.size - 1
         fluxMatrix = np.zeros((nBins, nBins))
         nI = 0
-        f = h5py.File(self.modelName + ".h5", "a")
+        f = h5py.File(self.modelName + ".h5", "w")
         dsetName = (
             "/s"
             + str(first_iter)
