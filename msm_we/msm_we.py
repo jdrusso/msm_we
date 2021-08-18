@@ -200,6 +200,7 @@ class modelWE:
         basis_pcoord_bounds: list = None,
         target_pcoord_bounds: list = None,
         dim_reduce_method: str = "pca",
+        tau: float = None,
     ):
         """
         Initialize the model-builder.
@@ -223,6 +224,9 @@ class modelWE:
 
         dim_reduce_method: str
             Dimensionality reduction method. "pca", "vamp", or "none".
+
+        tau: float
+            Resampling time (i.e. time of 1 WE iteration). Used to map fluxes to physical times.
 
         Returns
         -------
@@ -271,7 +275,11 @@ class modelWE:
         self.pcoord_ndim = 1
         self.pcoord_len = 2
         # self.pcoord_len = 50
-        tau = 10.0e-12
+
+        if tau is None:
+            log.warning("No tau provided, defaulting to 1.")
+            tau = 1.0
+
         self.tau = tau
 
         # This is really only used for nAtoms

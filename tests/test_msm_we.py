@@ -249,7 +249,9 @@ def test_initialize(ref_ntl9_hdf5_paths, ref_ntl9_structure_path):
 
     h5_path_string = " ".join(ref_ntl9_hdf5_paths)
 
-    model.initialize(h5_path_string, ref_ntl9_structure_path, "test_initialize_model")
+    model.initialize(
+        h5_path_string, ref_ntl9_structure_path, "test_initialize_model", tau=10e-12
+    )
 
     assert model.coordsExist, "Coords were not successfully loaded"
 

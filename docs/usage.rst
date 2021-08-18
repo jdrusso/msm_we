@@ -65,7 +65,7 @@ Model building and preparation
 
         model.initialize(h5_glob, reference_structure_file, model_name,
                         basis_pcoord1_bounds, target_pcoord1_bounds,
-                        dim_reduce_method)
+                        dim_reduce_method, tau)
 
 
     :code:`h5_glob` is a list of paths to your WESTPA h5 files.
@@ -79,6 +79,8 @@ Model building and preparation
     :code:`target_pcoord1_bounds` is a list of [lower bound, upper bound]  of the target in pcoord 1 space
 
     :code:`dim_reduce_method` is the dimensionality reduction method ("pca", "vamp", or "none")
+
+    :code:`tau` is the resampling time, or the length of one WE iteration in physical units.
 
 6. Load all coords and pcoords up to the last iteration you want to use for analysis with
 
