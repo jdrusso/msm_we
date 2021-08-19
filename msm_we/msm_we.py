@@ -8,6 +8,8 @@ import sys
 import h5py
 from scipy.sparse import coo_matrix
 from sklearn.decomposition import IncrementalPCA as iPCA
+from sklearn.cluster import KMeans as kmeans
+from sklearn.cluster import MiniBatchKMeans as mini_kmeans
 
 import logging
 from rich.logging import RichHandler
@@ -84,8 +86,6 @@ class modelWE:
         """int: Number of files in :code:`fileList`
 
         **TODO**: Deprecate this, this could just be a property"""
-
-        self.cluster_seed = False
 
         self.n_lag = 0
         self.pcoord_ndim = None
@@ -200,6 +200,7 @@ class modelWE:
         basis_pcoord_bounds: list = None,
         target_pcoord_bounds: list = None,
         dim_reduce_method: str = "pca",
+        tau: float = None,
     ):
         """
         Initialize the model-builder.
@@ -223,6 +224,9 @@ class modelWE:
 
         dim_reduce_method: str
             Dimensionality reduction method. "pca", "vamp", or "none".
+
+        tau: float
+            Resampling time (i.e. time of 1 WE iteration). Used to map fluxes to physical times.
 
         Returns
         -------
@@ -271,7 +275,11 @@ class modelWE:
         self.pcoord_ndim = 1
         self.pcoord_len = 2
         # self.pcoord_len = 50
-        tau = 10.0e-12
+
+        if tau is None:
+            log.warning("No tau provided, defaulting to 1.")
+            tau = 1.0
+
         self.tau = tau
 
         # This is really only used for nAtoms
@@ -677,16 +685,18 @@ class modelWE:
             if topology[-3:] == "dat":
                 self.reference_coord = np.loadtxt(topology)
                 self.nAtoms = 1
-            elif topology[-3:] == "pdb":
-                struct = md.load(topology)
-                self.reference_structure = struct
-                self.reference_coord = np.squeeze(struct._xyz)
-                self.nAtoms = struct.topology.n_atoms
-            else:
+                return
+
+            elif not topology[-3:] == "pdb":
                 log.critical(
-                    "Topology is not a recognized type! Proceeding, but no guarantees."
+                    "Topology is not a recognized type (PDB)! Proceeding, but no guarantees."
                 )
-                # raise NotImplementedError("Topology is not a recognized filetype")
+
+            struct = md.load(topology)
+            self.reference_structure = struct
+            self.reference_coord = np.squeeze(struct._xyz)
+            self.nAtoms = struct.topology.n_atoms
+            return
 
         else:
             log.debug(
@@ -952,6 +962,12 @@ class modelWE:
         -------
         None
 
+        Todo
+        -----
+        This function is pretty slow, and profiling says it's because of coords = dset[:], so it must be something
+        to do with how I'm reading my HDF5 files. Maybe that's just my HDF5 file, or maybe I'm accessing it in some
+        really inefficient way in here that I'm not seeing.  Surprisingly, it doesn't seem to be the constant file
+        opening/closing.
         """
 
         # get segment history data at lag time n_lag from current iter
@@ -963,8 +979,21 @@ class modelWE:
         for seg_idx in range(self.nSeg):
 
             # Open the WEST file corresponding to this segment
-            westFile = self.fileList[self.westList[seg_idx]]
-            dataIn = h5py.File(westFile, "r")
+            west_file = self.fileList[self.westList[seg_idx]]
+
+            if seg_idx == 0:
+                dataIn = h5py.File(west_file, "r")
+                open_west_file = west_file
+            else:
+                # if we're opening a new file
+                if not west_file == open_west_file:
+                    dataIn.close()
+                    dataIn = h5py.File(west_file, "r")
+                    open_west_file = west_file
+                # If we're reading from the same file, it's already open, so use that.
+                elif west_file == open_west_file:
+                    pass
+
             dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
 
             try:
@@ -994,7 +1023,7 @@ class modelWE:
             if np.isnan(coordPairList[seg_idx]).any():
                 weightList[seg_idx] = 0.0
 
-            dataIn.close()
+        dataIn.close()
 
         transitionWeights = weightList.copy()
         departureWeights = weightList.copy()
@@ -1728,9 +1757,7 @@ class modelWE:
 
         assert self.clusters is not None, "Clusters have not been computed!"
 
-        log.debug(
-            f"Dtrajs len: {len(self.clusters.dtrajs)}, [0] shape: {self.clusters.dtrajs[0].shape}"
-        )
+        log.debug(f"Dtrajs len: {len(self.dtrajs)}, [0] shape: {self.dtrajs[0].shape}")
 
         cluster_structures = dict()
         cluster_structure_weights = dict()
@@ -1770,7 +1797,7 @@ class modelWE:
 
                 # log.debug(f"Iteration {iteration}, segment {_seg}, segs in iter {segs_in_iter}")
                 # iteration-1 because dtrajs has n_iterations-1 elements
-                cluster_idx = self.clusters.dtrajs[iteration - 1][_seg]
+                cluster_idx = self.dtrajs[iteration - 1][_seg]
 
                 if cluster_idx in self.removed_clusters:
                     # log.debug(f"Skipping cluster {cluster_idx}")
@@ -1801,7 +1828,7 @@ class modelWE:
         log.debug("Cluster structure mapping completed.")
         log.debug(f"Cluster keys are {cluster_structures.keys()}")
 
-    def cluster_coordinates(self, n_clusters, **_cluster_args):
+    def cluster_coordinates(self, n_clusters, streaming=False, **_cluster_args):
         """
         Use k-means to cluster coordinates into `n_clusters` cluster centers, and saves the resulting cluster object
         to a file.
@@ -1819,6 +1846,9 @@ class modelWE:
         n_clusters: int
             Number of cluster centers to use.
 
+        streaming: boolean
+            Whether to stream k-means clustering, or load all from memory.
+
         **_cluster_args:
             Keyword arguments that will be passed directly to cluster_kmeans
 
@@ -1827,67 +1857,120 @@ class modelWE:
 
         """
 
-        log.debug("Doing clustering")
+        log.debug(f"Doing clustering on {n_clusters} clusters")
 
         self.n_clusters = n_clusters
+        # streaming = False
+
+        if "metric" in _cluster_args.keys() or "k" in _cluster_args.keys():
+            log.error(
+                "You're passing pyemma-style arguments to k-means. K-means now uses sklearn, please update"
+                "your code accordingly."
+            )
+            raise Exception(
+                "PyEmma style arguments passed to kmeans, which is now based on sklearn"
+            )
 
         # Set some default arguments, and overwrite them with the user's choices if provided
         cluster_args = {
-            "k": n_clusters,
-            "fixed_seed": self.cluster_seed,
-            "metric": "euclidean",
+            "n_clusters": n_clusters,
             "max_iter": 100,
         }
-        if self.dimReduceMethod == "none" and self.nAtoms > 1:
-            cluster_args["metric"] = "minRMSD"
-
         cluster_args.update(_cluster_args)
 
-        if self.dimReduceMethod == "none":
-            if self.nAtoms > 1:
+        if streaming and not self.dimReduceMethod == "none":
+            cluster_model = mini_kmeans(**cluster_args)
+            # TODO: Any mini_batch_kmeans specific arguments?
 
-                self.clusters = coor.cluster_kmeans(
-                    [self.all_coords.reshape(-1, 3 * self.nAtoms)],
-                    **cluster_args
-                    # k=n_clusters,
-                    # fixed_seed=self.cluster_seed,
-                    # metric="minRMSD",
-                    # # )
-                    # max_iter=100,
-                )
-            # elif self.nAtoms == 1:
+        elif streaming and self.dimReduceMethod == "none":
+            log.warning(
+                "Streaming clustering is not supported for dimReduceMethod 'none'. Using standard k-means."
+            )
+            cluster_model = kmeans(**cluster_args)
+
+        else:
+            cluster_model = kmeans(**cluster_args)
+
+        if self.dimReduceMethod == "none":
+
+            _data = [
+                self.get_iter_coordinates(iteration).reshape(-1, 3 * self.nAtoms)
+                for iteration in range(1, self.last_iter + 1)
+            ]
+            stacked_data = np.vstack(_data)
+
+            if self.nAtoms > 1:
+                self.clusters = cluster_model.fit(stacked_data)
+
             # Else here is a little sketchy, but fractional nAtoms is useful for some debugging hacks.
             else:
-                self.clusters = coor.cluster_kmeans(
-                    [self.all_coords.reshape(-1, int(3 * self.nAtoms))],
-                    **cluster_args
-                    # k=n_clusters,
-                    # fixed_seed=self.cluster_seed,
-                    # metric="euclidean",
-                    # max_iter=100,
-                )
+                self.clusters = cluster_model.fit(stacked_data)
 
-        if self.dimReduceMethod == "pca":
-            transformed_data = []
+            self.dtrajs = [cluster_model.predict(iter_trajs) for iter_trajs in _data]
+
+        # Right now, this doesn't do anything differently, and is just a placeholder.
+        elif self.dimReduceMethod == "pca" and streaming:
+
+            # raise NotImplementedError("PCA + streaming clustering is not yet supported")
+            self.dtrajs = []
 
             for iteration in range(1, self.last_iter + 1):
                 iter_coords = self.get_iter_coordinates(iteration)
-                transformed_data.append(
-                    self.coordinates.transform(self.processCoordinates(iter_coords))
+                transformed_coords = self.coordinates.transform(
+                    self.processCoordinates(iter_coords)
                 )
 
-        elif self.dimReduceMethod == "vamp":
-            transformed_data = self.coordinates.get_output()
+                # This better pass, but just be sure.
+                assert type(cluster_model) is mini_kmeans
 
-        if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
-            self.clusters = coor.cluster_kmeans(
-                transformed_data,
-                **cluster_args
-                # k=n_clusters,
-                # metric="euclidean",
-                # fixed_seed=self.cluster_seed,
-                # max_iter=100,
-            )
+                cluster_model.partial_fit(transformed_coords)
+
+            self.clusters = cluster_model
+
+            # Now compute dtrajs from the final model
+            for iteration in range(1, self.last_iter + 1):
+                iter_coords = self.get_iter_coordinates(iteration)
+                transformed_coords = self.coordinates.transform(
+                    self.processCoordinates(iter_coords)
+                )
+
+                self.dtrajs.append(cluster_model.predict(transformed_coords))
+
+        elif self.dimReduceMethod == "vamp" and streaming:
+
+            raise NotImplementedError("VAMP + streaming clustering is not supported.")
+
+        elif (
+            self.dimReduceMethod == "pca"
+            or self.dimReduceMethod == "vamp"
+            and not streaming
+        ):
+
+            if self.dimReduceMethod == "pca":
+                transformed_data = []
+
+                for iteration in range(1, self.last_iter + 1):
+                    iter_coords = self.get_iter_coordinates(iteration)
+                    transformed_data.append(
+                        self.coordinates.transform(self.processCoordinates(iter_coords))
+                    )
+
+                stacked_data = np.vstack(transformed_data)
+                self.clusters = cluster_model.fit(stacked_data)
+                self.dtrajs = [
+                    cluster_model.predict(iter_trajs) for iter_trajs in transformed_data
+                ]
+
+            # TODO: Make sure this is returned in the shape (iteration, ...)
+            elif self.dimReduceMethod == "vamp":
+                log.warning("Clustering VAMP-reduced data still very experimental!")
+
+                transformed_data = self.coordinates.get_output()
+
+                self.clusters = cluster_model.fit(transformed_data)
+                self.dtrajs = [
+                    cluster_model.predict(iter_trajs) for iter_trajs in transformed_data
+                ]
 
         self.clusterFile = (
             self.modelName
@@ -1900,7 +1983,8 @@ class modelWE:
             + ".h5"
         )
 
-        self.dtrajs = self.clusters.dtrajs
+        # self.dtrajs = self.clusters.dtrajs
+        assert self.dtrajs is not None
 
         log.debug("Clustering completed.")
         # log.debug(f"Dtrajs: {self.clusters.dtrajs}")
@@ -1945,6 +2029,7 @@ class modelWE:
 
         TODO
         ----
+        This function is slow because of the call to get_transition_data_lag0(). See that function for more info.
         """
 
         # 1. Update state with data from the iteration you want to compute the flux matrix for
@@ -1987,8 +2072,8 @@ class modelWE:
         )
         reduced_final = self.reduceCoordinates(self.coordPairList[good_coords, :, :, 1])
 
-        start_cluster = self.clusters.assign(reduced_initial)
-        end_cluster = self.clusters.assign(reduced_final)
+        start_cluster = self.clusters.predict(reduced_initial)
+        end_cluster = self.clusters.predict(reduced_final)
 
         log.debug(f"Cluster 0 shape: {start_cluster.shape}")
 
@@ -2045,7 +2130,7 @@ class modelWE:
         nBins = binbounds.size - 1
         fluxMatrix = np.zeros((nBins, nBins))
         nI = 0
-        f = h5py.File(self.modelName + ".h5", "a")
+        f = h5py.File(self.modelName + ".h5", "w")
         dsetName = (
             "/s"
             + str(first_iter)
@@ -2324,8 +2409,6 @@ class modelWE:
         log.debug("Cleaning flux matrix")
 
         # Discretize trajectories via clusters
-        dtrajs = self.dtrajs
-
         # Get the indices of the target and basis clusters
         target_cluster_index = self.n_clusters + 1  # Target at -1
         basis_cluster_index = self.n_clusters  # basis at -2
@@ -2348,7 +2431,7 @@ class modelWE:
             for cluster_index in range(self.n_clusters):
                 # Get the indices of the dtraj points in this cluster
                 idx_traj_in_cluster = [
-                    np.where(dtraj == cluster_index) for dtraj in dtrajs
+                    np.where(dtraj == cluster_index) for dtraj in self.dtrajs
                 ]
 
                 # Get the pcoord points that correspond to these dtraj points
