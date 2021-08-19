@@ -1848,6 +1848,7 @@ class modelWE:
 
         streaming: boolean
             Whether to stream k-means clustering, or load all from memory.
+            Not supported for vamp dimensionality reduction.
 
         **_cluster_args:
             Keyword arguments that will be passed directly to cluster_kmeans
@@ -1878,35 +1879,62 @@ class modelWE:
         }
         cluster_args.update(_cluster_args)
 
-        if streaming and not self.dimReduceMethod == "none":
+        if streaming and not self.dimReduceMethod == "vamp":
             cluster_model = mini_kmeans(**cluster_args)
             # TODO: Any mini_batch_kmeans specific arguments?
 
-        elif streaming and self.dimReduceMethod == "none":
+        elif streaming and self.dimReduceMethod == "vamp":
             log.warning(
                 "Streaming clustering is not supported for dimReduceMethod 'none'. Using standard k-means."
             )
             cluster_model = kmeans(**cluster_args)
+            streaming = False
 
         else:
             cluster_model = kmeans(**cluster_args)
 
         if self.dimReduceMethod == "none":
 
-            _data = [
-                self.get_iter_coordinates(iteration).reshape(-1, 3 * self.nAtoms)
-                for iteration in range(1, self.last_iter + 1)
-            ]
-            stacked_data = np.vstack(_data)
+            if not streaming:
 
-            if self.nAtoms > 1:
-                self.clusters = cluster_model.fit(stacked_data)
+                _data = [
+                    self.get_iter_coordinates(iteration).reshape(-1, 3 * self.nAtoms)
+                    for iteration in range(1, self.last_iter + 1)
+                ]
+                stacked_data = np.vstack(_data)
 
-            # Else here is a little sketchy, but fractional nAtoms is useful for some debugging hacks.
+                if self.nAtoms > 1:
+                    self.clusters = cluster_model.fit(stacked_data)
+
+                # Else here is a little sketchy, but fractional nAtoms is useful for some debugging hacks.
+                else:
+                    self.clusters = cluster_model.fit(stacked_data)
+
+                self.dtrajs = [
+                    cluster_model.predict(iter_trajs) for iter_trajs in _data
+                ]
+
             else:
-                self.clusters = cluster_model.fit(stacked_data)
+                self.dtrajs = []
 
-            self.dtrajs = [cluster_model.predict(iter_trajs) for iter_trajs in _data]
+                for iteration in range(1, self.last_iter + 1):
+                    iter_coords = self.get_iter_coordinates(iteration).reshape(
+                        -1, 3 * self.nAtoms
+                    )
+
+                    # This better pass, but just be sure.
+                    assert type(cluster_model) is mini_kmeans
+
+                    cluster_model.partial_fit(iter_coords)
+
+                self.clusters = cluster_model
+
+                # Now compute dtrajs from the final model
+                for iteration in range(1, self.last_iter + 1):
+                    iter_coords = self.get_iter_coordinates(iteration).reshape(
+                        -1, 3 * self.nAtoms
+                    )
+                    self.dtrajs.append(cluster_model.predict(iter_coords))
 
         # Right now, this doesn't do anything differently, and is just a placeholder.
         elif self.dimReduceMethod == "pca" and streaming:

@@ -141,3 +141,15 @@ Analysis
     .. code-block:: python
 
         model.get_steady_state_target_flux()
+
+Streaming
+---------
+
+:code:`msm_we` supports streaming dimensionality reduction and clustering when dimensionality reduction is
+done through PCA or not done.
+
+Streaming dimensionality reduction is automatically done for PCA.
+
+To use streaming clustering, pass :code:`streaming=True` to :code:`cluster_coordinates()`.
+
+Streaming is not supported for VAMP, because I don't know of a streaming implementation of VAMP dimensionality reduction.
