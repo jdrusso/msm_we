@@ -2875,12 +2875,22 @@ class modelWE:
             )
             last_flux = new_flux
 
+            # Set the convergence criterion after one iteration, in case the original result is really junk
+            if N == 1:
+                flux_convergence_criterion = last_flux * flux_fractional_convergence
+                log.debug(f"Flux convergence is at {flux_convergence_criterion}")
+                continue
+
             if flux_change < flux_convergence_criterion:
                 log.info(
-                    f"\nFluxes converged to {last_flux:.4e} after {N + 1} iterations of inverse iteration."
+                    f"\nFlux converged to {last_flux:.4e} after {N + 1} iterations of inverse iteration."
                 )
                 break
 
+            elif N == max_iters - 1 and not last_flux == 0:
+                log.warning("Flux is nonzero and did not converge!")
+
+        log.info("DONE")
         self.pSS = last_pSS
 
     def get_steady_state_algebraic(self):
