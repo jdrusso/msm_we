@@ -2526,9 +2526,15 @@ class modelWE:
                 elif n_in_cluster > 0:
                     # cluster_pcoord_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[idx_traj_in_cluster[0],:,:]))
                     # The coordinate of this cluster center is the average pcoord of all points in it
-                    cluster_pcoord_centers[cluster_index] = np.nanmean(
-                        self.pcoordSet[pcoord_indices, 0]
-                    )
+
+                    try:
+                        cluster_pcoord_centers[cluster_index] = np.nanmean(
+                            self.pcoordSet[pcoord_indices, 0]
+                        )
+                    except IndexError as e:
+                        log.error(f"Offset is {offset}")
+                        log.error(pcoord_indices)
+                        raise e
 
                 # Get the total flux along the row and col of this index
                 net_flux = np.sum(fluxMatrixTraps[:, cluster_index]) + np.sum(
