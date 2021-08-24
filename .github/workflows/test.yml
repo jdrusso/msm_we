@@ -18,9 +18,10 @@ jobs:
         echo $CONDA/bin >> $GITHUB_PATH
     - name: Install dependencies
       run: |
-        pip install -r requirements_dev.txt
+       # pip install -r requirements_dev.txt
+        conda env create -f environment.yml
+        conda activate hamsm_env
         pip install .
-        conda install -c conda-forge pyemma "h5py<3.2"
     - name: Lint with flake8
       run: |
         conda install flake8
