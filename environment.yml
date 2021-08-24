@@ -4,7 +4,7 @@ channels:
   - defaults
 dependencies:
  - numpy
- - h5py
+ - h5py<3.2
  - matplotlib
  - mdtraj
  - pyemma
