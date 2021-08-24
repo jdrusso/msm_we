@@ -1494,9 +1494,11 @@ class modelWE:
                 coordSet = np.append(coordSet, self.cur_iter_coords, axis=0)
         self.all_coords = coordSet
 
-    def get_coordSet(self, last_iter):
+    def get_coordSet(self, last_iter, streaming=None):
         """
         Loads all coordinates and progress coordinates into memory for later usage.
+
+        If streaming, then this only loads pcoords
 
         Todo
         ----
@@ -1512,10 +1514,10 @@ class modelWE:
 
         """
 
-        if self.dimReduceMethod == "pca":
-            streaming = True
-        else:
+        if streaming is None and self.dimReduceMethod == "vamp":
             streaming = False
+        elif streaming is None:
+            streaming = True
 
         log.debug(f"CoordSet loading up to {last_iter}")
         total_segments = int(sum(self.numSegments[:last_iter]))
