@@ -128,7 +128,7 @@ Analysis
 
     .. code-block:: python
 
-        model.get_steady_state_algebraic()
+        model.get_steady_state()
 
 12. Update cluster structures
 
