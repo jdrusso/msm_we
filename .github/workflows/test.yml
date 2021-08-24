@@ -16,11 +16,12 @@ jobs:
       run: |
         # $CONDA is an environment variable pointing to the root of the miniconda directory
         echo $CONDA/bin >> $GITHUB_PATH
-        conda init bash
+        conda init --all
         source /home/runner/.bashrc
     - name: Install dependencies
       run: |
        # pip install -r requirements_dev.txt
+        source /home/runner/.bashrc
         conda env create -f environment.yml
         conda activate hamsm_env
         pip install .
