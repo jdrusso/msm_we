@@ -2804,6 +2804,32 @@ class modelWE:
         self.Tmatrix = Mt
 
     def get_steady_state(self, flux_fractional_convergence=1e-4, max_iters=100):
+        """"
+        Get the steady-state distribution for the transition matrix.
+        Uses scipy eigensolver to obtain an initial guess, then refines that using inverse iteration.
+
+        Parameters
+        ----------
+        flux_fractional_convergence: (optional, default=1e-4) float
+            Convergence of the
+
+        max_iters: (optional, default=100) int
+
+        Notes
+        -----
+        Transition matrices generated from WE data may have entries spanning many orders of magnitude, and may have
+        extremely high condition numbers.
+        Furthermore, the smallest entries may be those near the target state, which are also the most important
+        for computing target fluxes, meaning values near machine precision can't just be truncated.
+        All this means that floating-point error may substantially affect the results of eigensolvers, and may produce
+        bad/negative/inaccurate values for small probability bins.
+
+        In order to obtain better estimates, sparse matrices are used to reduce the number of floating point operations
+        being performed.
+        A stationary distribution is first estimated using scipy's eigensolver for sparse matrices.
+        This is then used as an initial guess for the inverse iteration method, to further refine it.
+        Convergence of the inverse iteration is determined using change in the flux estimate.
+        """
 
         # Cast the matrix to a sparse matrix, to reduce floating point operations
         sparse_mat = sparse.csr_matrix(self.Tmatrix)
