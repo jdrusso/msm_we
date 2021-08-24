@@ -699,6 +699,12 @@ class modelWE:
                 self.reference_coord = np.loadtxt(topology)
                 self.nAtoms = 1
                 return
+            
+            elif topology[-6:] == "prmtop":
+                struct = md.load_prmtop(topology)
+                self.reference_structure = struct
+                self.nAtoms = struct.n_atoms
+                return
 
             elif not topology[-3:] == "pdb":
                 log.critical(
