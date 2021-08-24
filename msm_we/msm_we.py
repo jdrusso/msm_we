@@ -7,6 +7,7 @@ import tqdm
 import sys
 import h5py
 from scipy.sparse import coo_matrix
+import scipy.sparse as sparse
 from sklearn.decomposition import IncrementalPCA as iPCA
 from sklearn.cluster import KMeans as kmeans
 from sklearn.cluster import MiniBatchKMeans as mini_kmeans
@@ -28,6 +29,38 @@ import mdtraj as md
 import pyemma.coordinates as coor
 import pyemma.coordinates.clustering as clustering
 import pyemma
+
+
+def inverse_iteration(guess, matrix):
+    """
+    Do one iteration of inverse iteration.
+
+    Parameters
+    ----------
+    guess: array-like  (N elements)
+        Vector of weights to be used as the initial guess.
+
+    matrix: array-like (NxN elements)
+        Transition matrix to use for inverse iteration.
+
+    Returns
+    -------
+    The new vector of weights after one iteration of inverse iteration.
+    """
+
+    # Looking for eigenvector corresponding to eigenvalue 1
+    mu = 1
+    identity = sparse.eye(guess.shape[0])
+
+    # Inverse
+    inverse = sparse.linalg.inv(matrix.T - mu * identity)
+    result = inverse @ guess
+    result = result.squeeze()
+
+    # Normalize
+    result /= sum(result)
+
+    return result
 
 
 class modelWE:
@@ -699,7 +732,7 @@ class modelWE:
                 self.reference_coord = np.loadtxt(topology)
                 self.nAtoms = 1
                 return
-            
+
             elif topology[-6:] == "prmtop":
                 struct = md.load_prmtop(topology)
                 self.reference_structure = struct
@@ -2770,6 +2803,60 @@ class modelWE:
                 Mt[iR, iR] = 1.0
         self.Tmatrix = Mt
 
+    def get_steady_state(self, flux_fractional_convergence=1e-4, max_iters=100):
+
+        # Cast the matrix to a sparse matrix, to reduce floating point operations
+        sparse_mat = sparse.csr_matrix(self.Tmatrix)
+
+        # ## First, get the scipy solver result
+        eigenvalues, eigenvectors = sparse.linalg.eigs(
+            sparse_mat.T, sigma=1, k=1, which="LR"
+        )
+        max_eigval_index = np.argmax(np.real(eigenvalues))
+        algebraic_pss = np.real(eigenvectors[:, max_eigval_index]).squeeze()
+
+        # and normalize it
+        algebraic_pss /= sum(algebraic_pss)
+
+        # Get an initial flux estimate using that
+        # Call with _set=False so you don't actually update self.JtargetSS
+        last_flux = self.get_steady_state_target_flux(pSS=algebraic_pss, _set=False)
+
+        # ## Next, use that as an initial guess  for inverse iteration
+
+        # Call it converged when the flux estimate stops changing by this much
+        flux_convergence_criterion = last_flux * flux_fractional_convergence
+
+        last_pSS = algebraic_pss
+
+        log.debug(f"Initial flux: {last_flux}\n")
+
+        for N in range(max_iters):
+
+            iterated = inverse_iteration(matrix=sparse_mat, guess=last_pSS)
+
+            # Compute change in pSS
+            pSS_change = np.sqrt(np.mean(np.power(iterated - last_pSS, 2)))
+            log.debug(f"\t Change in SS: {pSS_change:.2e}")
+            last_pSS = iterated
+
+            # Compute change in target flux with the new pSS
+            new_flux = self.get_steady_state_target_flux(pSS=last_pSS, _set=False)
+
+            flux_change = new_flux - last_flux
+            log.debug(
+                f"\t Change in flux estimate: {flux_change:.2e} \t ({new_flux:.2e} raw)"
+            )
+            last_flux = new_flux
+
+            if flux_change < flux_convergence_criterion:
+                log.info(
+                    f"\nFluxes converged to {last_flux:.4e} after {N + 1} iterations of inverse iteration."
+                )
+                break
+
+        self.pSS = last_pSS
+
     def get_steady_state_algebraic(self):
         """
         Compute the steady-state distribution as the eigenvectors of the transition matrix.
@@ -2782,28 +2869,21 @@ class modelWE:
         None
         """
 
+        log.warning(
+            "get_steady_state_algebraic() will be deprecated soon. Use get_steady_state() instead, which has"
+            " a more robust eigensolver."
+        )
+
         log.debug("Computing steady-state from eigenvectors")
 
         eigenvalues, eigenvectors = np.linalg.eig(np.transpose(self.Tmatrix))
 
         pSS = np.real(eigenvectors[:, np.argmax(np.real(eigenvalues))])
 
-        # Flatten the array out.
-        # For some reason, sometimes it's of the shape (n_eigenvectors, 1) instead of (n_eigenvectors,), meaning each
-        #   element is its own sub-array.
-        # I can't seem to consistently replicate this behavior, but I'm sure it's  just some numpy weirdness I don't
-        #   fully understand. However, ravel/squeeze will flatten that out and fix that.
-        pSS = pSS.ravel().squeeze().squeeze()
+        pSS = pSS.squeeze()
 
         assert not np.isclose(np.sum(pSS), 0), "Steady-state distribution sums to 0!"
         pSS = pSS / np.sum(pSS)
-
-        # # Remove values that are below machine precision
-        # pSS_eps = np.finfo(pSS.dtype).eps
-        # pSS[np.abs(pSS) < pSS_eps] = 0.0
-        #
-        # # Normalize after removing these very small values
-        # pSS = pSS / np.sum(pSS)
 
         # The numpy eigensolver is iterative, and approximate. Given that data from WE often spans many orders of
         #   magnitude, we'll sometimes run into situations where our populations span more than machine precision.
@@ -2878,7 +2958,7 @@ class modelWE:
                 sys.stdout.write("N=" + str(N) + " dconv: " + str(dconv) + "\n")
                 self.pSS = pSS.copy()
 
-    def get_steady_state_target_flux(self):
+    def get_steady_state_target_flux(self, pSS=None, _set=True):
         """
         Get the total flux into the target state(s).
 
@@ -2886,15 +2966,26 @@ class modelWE:
             - `self.lagtime`
             - `self.JtargetSS`
 
+        Parameters
+        ----------
+        pSS: (optional) array-like
+            Steady-state distribution. If nothing provided, then use self.pSS
+
+        _set: (optional) boolean
+            If True, then update self.JtargetSS and self.lagtime. If False, then just return the value of JtargetSS.
+
         Returns
         -------
         None
         """
 
         Mss = self.Tmatrix
-        pSS = np.squeeze(np.array(self.pSS))
 
-        self.lagtime = self.tau * (self.n_lag + 1)
+        # If no pSS was provided, then pull from self
+        if pSS is None:
+            pSS = np.squeeze(np.array(self.pSS))
+
+        lagtime = self.tau * (self.n_lag + 1)
 
         # Get a list of all the states that AREN'T targets, since we want to sum up
         nTargets = self.indTargets.size
@@ -2919,7 +3010,11 @@ class modelWE:
                 )
             )
 
-        self.JtargetSS = Jt / self.lagtime
+        if _set:
+            self.lagtime = lagtime
+            self.JtargetSS = Jt / self.lagtime
+        else:
+            return Jt / lagtime
 
     def evolve_probability(
         self, nEvolve, nStore
