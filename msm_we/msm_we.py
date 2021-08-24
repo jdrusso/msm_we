@@ -2792,12 +2792,46 @@ class modelWE:
         assert not np.isclose(np.sum(pSS), 0), "Steady-state distribution sums to 0!"
         pSS = pSS / np.sum(pSS)
 
-        # Remove values that are below machine precision
-        pSS_eps = np.finfo(pSS.dtype).eps
-        pSS[np.abs(pSS) < pSS_eps] = 0.0
+        # # Remove values that are below machine precision
+        # pSS_eps = np.finfo(pSS.dtype).eps
+        # pSS[np.abs(pSS) < pSS_eps] = 0.0
+        #
+        # # Normalize after removing these very small values
+        # pSS = pSS / np.sum(pSS)
 
-        # Normalize after removing these very small values
-        pSS = pSS / np.sum(pSS)
+        # The numpy eigensolver is iterative, and approximate. Given that data from WE often spans many orders of
+        #   magnitude, we'll sometimes run into situations where our populations span more than machine precision.
+        #   This causes hiccups in the eigensolver. However, we can't just zero these out (as attempted above),
+        #   because these values are often important.
+        # So, if there are any negative elements, try to correct the NP eigensolver result using the matrix method
+        if sum(pSS < 0) > 0:
+            log.info(
+                "Negative elements in pSS after normalization, attempting to correct with matrix power method."
+            )
+            max_iters = 1000
+            pSS_last = pSS
+            _tmatrix = self.Tmatrix.copy()
+
+            for N in range(max_iters):
+
+                pSS_new = _tmatrix.T @ pSS_last
+                num_negative_elements = sum(pSS_new < 0)
+                if num_negative_elements == 0:
+                    log.info(
+                        f"Reached convergence to semidefinite pSS in {N} iterations"
+                    )
+                    break
+
+                pSS_last = pSS_new
+                _tmatrix = np.matmul(self.Tmatrix, _tmatrix)
+
+            if N == max_iters - 1:
+                log.warning(
+                    "Power method did NOT converge. Some negative values remain. This is weird, and you"
+                    " should try to figure out why this is happening."
+                )
+            else:
+                pSS = pSS_new
 
         assert np.all(
             pSS >= 0
