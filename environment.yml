@@ -4,6 +4,7 @@ channels:
   - defaults
 dependencies:
  - numpy
+ - networkx
  - h5py<3.2
  - matplotlib
  - mdtraj
