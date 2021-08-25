@@ -7,23 +7,22 @@ from  msm_we.fpt import MatrixFPT, MarkovFPT
 
 class TestMFPT(unittest.TestCase):
     def setUp(self):
-
         n_states = 5
-
         self.T = utils.random_markov_matrix(n_states, seed=1)
 
     def testMarkovFPTMean(self):
-
         markov_mfpts = MarkovFPT.mean_fpts(self.T, [0], [4])
-        self.assertDictEqual(markov_mfpts, {'mfptAB': 6.420918178038423, 'mfptBA': 4.920174169581114})
+        self.assertTrue(np.isclose(markov_mfpts['mfptAB'], 6.420918178038423))
+        self.assertTrue(np.isclose(markov_mfpts['mfptBA'], 4.920174169581114))
 
-    def tesMatrixFPTDirect(self):
-        directional_mfpts = MatrixFPT.directional_mfpt(self.T, [0], [4], [1])
-        self.assertAlmostEqual(directional_mfpts, 6.420918178038424)
+    def testMatrixFPTDirectional(self):
+        directional_mfpt = MatrixFPT.directional_mfpt(self.T, [0], [4], [1])
+        self.assertTrue(np.isclose(directional_mfpt, 6.420918178038424))
 
     def testMatrixFPT2TargetMicrostate(self):
-        mpfts_to_micro = MatrixFPT.mfpts_to_target_microstate(self.T, 4)
-        self.assertTrue(np.allclose(mpfts_to_micro, np.array([6.42091818, 5.35994556, 7.24671735, 6.81752892, 0.0])))
+        mfpts_to_micro = MatrixFPT.mfpts_to_target_microstate(self.T, 4)
+        result = np.array([6.42091818, 5.35994556, 7.24671735, 6.81752892, 0.0])
+        self.assertTrue(np.allclose(mfpts_to_micro, result))
 
     def testMatrixFPTMatrix(self):
         mfpts_matrix = MatrixFPT.mfpts_matrix(self.T)
@@ -39,9 +38,15 @@ class TestMFPT(unittest.TestCase):
         self.assertTrue(np.allclose(mfpts_matrix, result))
 
     def testMatrixFPTMinCommuteTime(self):
-        min_comm_time = MatrixFPT.min_commute_time(MatrixFPT.mfpts_matrix(self.T))
-        self.assertAlmostEqual(min_comm_time, (7.343999799826479, 1, 3))
+        mfpts_matrix = MatrixFPT.mfpts_matrix(self.T)
+        min_comm_time, a, b = MatrixFPT.min_commute_time(mfpts_matrix)
+        self.assertTrue(np.isclose(min_comm_time, 7.343999799826479))
+        self.assertEqual(a, 1)
+        self.assertEqual(b, 3)
 
     def testMatrixFPTMaxCommuteTime(self):
-        max_comm_time = MatrixFPT.max_commute_time(MatrixFPT.mfpts_matrix(self.T))
-        self.assertAlmostEqual(max_comm_time, (14.446718700939037, 2, 4))
+        mfpts_matrix = MatrixFPT.mfpts_matrix(self.T)
+        max_comm_time, a, b = MatrixFPT.max_commute_time(mfpts_matrix)
+        self.assertTrue(np.isclose(max_comm_time, 14.446718700939037))
+        self.assertEqual(a, 2)
+        self.assertEqual(b, 4)
