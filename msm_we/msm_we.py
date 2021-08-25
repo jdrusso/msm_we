@@ -2881,7 +2881,7 @@ class modelWE:
                 log.debug(f"Flux convergence is at {flux_convergence_criterion}")
                 continue
 
-            if flux_change < flux_convergence_criterion:
+            if abs(flux_change) < flux_convergence_criterion:
                 log.info(
                     f"\nFlux converged to {last_flux:.4e} after {N + 1} iterations of inverse iteration."
                 )
