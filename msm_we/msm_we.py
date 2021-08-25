@@ -7,6 +7,7 @@ import tqdm
 import sys
 import h5py
 from scipy.sparse import coo_matrix
+import scipy.sparse as sparse
 from sklearn.decomposition import IncrementalPCA as iPCA
 from sklearn.cluster import KMeans as kmeans
 from sklearn.cluster import MiniBatchKMeans as mini_kmeans
@@ -28,6 +29,38 @@ import mdtraj as md
 import pyemma.coordinates as coor
 import pyemma.coordinates.clustering as clustering
 import pyemma
+
+
+def inverse_iteration(guess, matrix):
+    """
+    Do one iteration of inverse iteration.
+
+    Parameters
+    ----------
+    guess: array-like  (N elements)
+        Vector of weights to be used as the initial guess.
+
+    matrix: array-like (NxN elements)
+        Transition matrix to use for inverse iteration.
+
+    Returns
+    -------
+    The new vector of weights after one iteration of inverse iteration.
+    """
+
+    # Looking for eigenvector corresponding to eigenvalue 1
+    mu = 1
+    identity = sparse.eye(guess.shape[0])
+
+    # Inverse
+    inverse = sparse.linalg.inv(matrix.T - mu * identity)
+    result = inverse @ guess
+    result = result.squeeze()
+
+    # Normalize
+    result /= sum(result)
+
+    return result
 
 
 class modelWE:
@@ -498,7 +531,7 @@ class modelWE:
 
         n_segs = 0
 
-        # Iterate through each file index, trying to find a file that contains the iteration of interest
+        # Iterate through each file index, trying to find files that contains the iteration of interest
         # TODO: Can replace this with `for if, fileName in enumerate(self.\\)`
         for file_idx in range(self.n_data_files):
             fileName = self.fileList[file_idx]
@@ -509,7 +542,15 @@ class modelWE:
 
                 # Check if the dataset
                 dataset_exists = dsetName in dataIn
-                if dataset_exists:
+
+                # Check to make sure this isn't the last iteration -- last iterations have incomplete data
+                is_not_last_iteration = (
+                    "/iterations/iter_%08d/seg_index" % int(n_iter + 1) in dataIn
+                )
+
+                log.debug(f"From file {fileName}, loading iteration {n_iter}")
+
+                if dataset_exists and is_not_last_iteration:
 
                     dset = dataIn[dsetName]
                     newSet = dset[:]
@@ -591,8 +632,13 @@ class modelWE:
                     dsetName = "/iterations/iter_%08d/seg_index" % int(n_iter)
                     dataset_exists = dsetName in dataIn
 
-                    # If this file does contain the iteration of interest
-                    if dataset_exists:
+                    is_not_last_iteration = (
+                        "/iterations/iter_%08d/seg_index" % int(n_iter + 1) in dataIn
+                    )
+
+                    if dataset_exists and is_not_last_iteration:
+                        # If this file does contain the iteration of interest
+                        # if dataset_exists:
                         dset = dataIn[dsetName]
                         newSet = dset[:]
                         nS = np.shape(newSet)
@@ -685,6 +731,12 @@ class modelWE:
             if topology[-3:] == "dat":
                 self.reference_coord = np.loadtxt(topology)
                 self.nAtoms = 1
+                return
+
+            elif topology[-6:] == "prmtop":
+                struct = md.load_prmtop(topology)
+                self.reference_structure = struct
+                self.nAtoms = struct.n_atoms
                 return
 
             elif not topology[-3:] == "pdb":
@@ -1401,6 +1453,23 @@ class modelWE:
                     coord = dset[:]
                 cur_iter_coords[iS, :, :] = coord[self.segindList[iS], 1, :, :]
 
+            # KeyError is thrown if coordinates don't exist for this segment at this iteration
+            except KeyError as e:
+                log.error(westFile)
+                log.error(
+                    f"No coordinates for segment {iS}, at iteration {self.n_iter}"
+                )
+                log.error(
+                    f"Tried to reference {dsetName} thinking there were {self.nSeg}"
+                )
+                log.error(f"From segindlist: {len(self.segindList)}")
+                log.error(
+                    f"Segment with total index {iS} has index {self.segindList[iS]}"
+                )
+                log.error(f"segindlist: {self.segindList}")
+                cur_iter_coords[iS, :, :] = np.full((self.nAtoms, 3), fill_value=np.nan)
+                raise e
+
             except (RuntimeError, ValueError):
                 log.error(
                     "error getting coordinates from "
@@ -1464,9 +1533,11 @@ class modelWE:
                 coordSet = np.append(coordSet, self.cur_iter_coords, axis=0)
         self.all_coords = coordSet
 
-    def get_coordSet(self, last_iter):
+    def get_coordSet(self, last_iter, streaming=None):
         """
         Loads all coordinates and progress coordinates into memory for later usage.
+
+        If streaming, then this only loads pcoords
 
         Todo
         ----
@@ -1482,12 +1553,13 @@ class modelWE:
 
         """
 
-        if self.dimReduceMethod == "pca":
-            streaming = True
-        else:
+        if streaming is None and self.dimReduceMethod == "vamp":
             streaming = False
+        elif streaming is None:
+            streaming = True
 
-        total_segments = int(sum(self.numSegments[:-1]))
+        log.debug(f"CoordSet loading up to {last_iter}")
+        total_segments = int(sum(self.numSegments[:last_iter]))
 
         coordSet = np.full((total_segments, self.nAtoms, 3), fill_value=np.nan)
         pcoordSet = np.full((total_segments, self.pcoord_ndim), fill_value=np.nan)
@@ -1766,9 +1838,10 @@ class modelWE:
         all_seg_weights = np.full(int(sum(self.numSegments)), fill_value=None)
 
         i = 0
-        total_num_iterations = len(self.numSegments)
+        # total_num_iterations = len(self.numSegments)
+        total_num_iterations = self.maxIter
         # Don't include the last iteration, where dynamics didn't run
-        for _iter in range(1, total_num_iterations):
+        for _iter in range(1, total_num_iterations - 1):
             iter_weights = self.seg_weights[_iter]
 
             # This is an array, not a dict, so index by... well, index, and not iter_number
@@ -1788,16 +1861,25 @@ class modelWE:
         # Assign each segment to a cluster by iterating over coords
         # Track the "absolute" segment index because all_seg_weights is a flat list
         seg_idx = 0
-        for iteration in range(1, total_num_iterations):
+        for iteration in range(1, total_num_iterations - 1):
 
             iter_coords = self.get_iter_coordinates(iteration)
-            segs_in_iter = int(iter_coords.shape[0])
+            segs_in_iter = int(self.numSegments[iteration - 1])
 
             for _seg in range(segs_in_iter):
 
                 # log.debug(f"Iteration {iteration}, segment {_seg}, segs in iter {segs_in_iter}")
                 # iteration-1 because dtrajs has n_iterations-1 elements
-                cluster_idx = self.dtrajs[iteration - 1][_seg]
+
+                try:
+                    cluster_idx = self.dtrajs[iteration - 1][_seg]
+
+                # This *should* trip if there was no data for this segments
+                except IndexError:
+                    log.error(
+                        f"Tried to get dtraj for seg {_seg} at iteration {iteration-1}"
+                    )
+                    continue
 
                 if cluster_idx in self.removed_clusters:
                     # log.debug(f"Skipping cluster {cluster_idx}")
@@ -1899,7 +1981,7 @@ class modelWE:
 
                 _data = [
                     self.get_iter_coordinates(iteration).reshape(-1, 3 * self.nAtoms)
-                    for iteration in range(1, self.last_iter + 1)
+                    for iteration in range(1, self.maxIter)
                 ]
                 stacked_data = np.vstack(_data)
 
@@ -1917,7 +1999,7 @@ class modelWE:
             else:
                 self.dtrajs = []
 
-                for iteration in range(1, self.last_iter + 1):
+                for iteration in range(1, self.maxIter):
                     iter_coords = self.get_iter_coordinates(iteration).reshape(
                         -1, 3 * self.nAtoms
                     )
@@ -1930,7 +2012,7 @@ class modelWE:
                 self.clusters = cluster_model
 
                 # Now compute dtrajs from the final model
-                for iteration in range(1, self.last_iter + 1):
+                for iteration in range(1, self.maxIter):
                     iter_coords = self.get_iter_coordinates(iteration).reshape(
                         -1, 3 * self.nAtoms
                     )
@@ -1942,7 +2024,7 @@ class modelWE:
             # raise NotImplementedError("PCA + streaming clustering is not yet supported")
             self.dtrajs = []
 
-            for iteration in range(1, self.last_iter + 1):
+            for iteration in range(1, self.maxIter):
                 iter_coords = self.get_iter_coordinates(iteration)
                 transformed_coords = self.coordinates.transform(
                     self.processCoordinates(iter_coords)
@@ -1956,7 +2038,7 @@ class modelWE:
             self.clusters = cluster_model
 
             # Now compute dtrajs from the final model
-            for iteration in range(1, self.last_iter + 1):
+            for iteration in range(1, self.maxIter):
                 iter_coords = self.get_iter_coordinates(iteration)
                 transformed_coords = self.coordinates.transform(
                     self.processCoordinates(iter_coords)
@@ -1977,11 +2059,12 @@ class modelWE:
             if self.dimReduceMethod == "pca":
                 transformed_data = []
 
-                for iteration in range(1, self.last_iter + 1):
+                for iteration in range(1, self.maxIter):
                     iter_coords = self.get_iter_coordinates(iteration)
                     transformed_data.append(
                         self.coordinates.transform(self.processCoordinates(iter_coords))
                     )
+                    log.debug(f"Appended trajs for iter {iteration}")
 
                 stacked_data = np.vstack(transformed_data)
                 self.clusters = cluster_model.fit(stacked_data)
@@ -2482,9 +2565,15 @@ class modelWE:
                 elif n_in_cluster > 0:
                     # cluster_pcoord_centers[iC]=np.mean(self.get_reference_rmsd(self.coordSet[idx_traj_in_cluster[0],:,:]))
                     # The coordinate of this cluster center is the average pcoord of all points in it
-                    cluster_pcoord_centers[cluster_index] = np.nanmean(
-                        self.pcoordSet[pcoord_indices, 0]
-                    )
+
+                    try:
+                        cluster_pcoord_centers[cluster_index] = np.nanmean(
+                            self.pcoordSet[pcoord_indices, 0]
+                        )
+                    except IndexError as e:
+                        log.error(f"Offset is {offset}")
+                        log.error(pcoord_indices)
+                        raise e
 
                 # Get the total flux along the row and col of this index
                 net_flux = np.sum(fluxMatrixTraps[:, cluster_index]) + np.sum(
@@ -2714,6 +2803,60 @@ class modelWE:
                 Mt[iR, iR] = 1.0
         self.Tmatrix = Mt
 
+    def get_steady_state(self, flux_fractional_convergence=1e-4, max_iters=100):
+
+        # Cast the matrix to a sparse matrix, to reduce floating point operations
+        sparse_mat = sparse.csr_matrix(self.Tmatrix)
+
+        # ## First, get the scipy solver result
+        eigenvalues, eigenvectors = sparse.linalg.eigs(
+            sparse_mat.T, sigma=1, k=1, which="LR"
+        )
+        max_eigval_index = np.argmax(np.real(eigenvalues))
+        algebraic_pss = np.real(eigenvectors[:, max_eigval_index]).squeeze()
+
+        # and normalize it
+        algebraic_pss /= sum(algebraic_pss)
+
+        # Get an initial flux estimate using that
+        # Call with _set=False so you don't actually update self.JtargetSS
+        last_flux = self.get_steady_state_target_flux(pSS=algebraic_pss, _set=False)
+
+        # ## Next, use that as an initial guess  for inverse iteration
+
+        # Call it converged when the flux estimate stops changing by this much
+        flux_convergence_criterion = last_flux * flux_fractional_convergence
+
+        last_pSS = algebraic_pss
+
+        log.debug(f"Initial flux: {last_flux}\n")
+
+        for N in range(max_iters):
+
+            iterated = inverse_iteration(matrix=sparse_mat, guess=last_pSS)
+
+            # Compute change in pSS
+            pSS_change = np.sqrt(np.mean(np.power(iterated - last_pSS, 2)))
+            log.debug(f"\t Change in SS: {pSS_change:.2e}")
+            last_pSS = iterated
+
+            # Compute change in target flux with the new pSS
+            new_flux = self.get_steady_state_target_flux(pSS=last_pSS, _set=False)
+
+            flux_change = new_flux - last_flux
+            log.debug(
+                f"\t Change in flux estimate: {flux_change:.2e} \t ({new_flux:.2e} raw)"
+            )
+            last_flux = new_flux
+
+            if flux_change < flux_convergence_criterion:
+                log.info(
+                    f"\nFluxes converged to {last_flux:.4e} after {N + 1} iterations of inverse iteration."
+                )
+                break
+
+        self.pSS = last_pSS
+
     def get_steady_state_algebraic(self):
         """
         Compute the steady-state distribution as the eigenvectors of the transition matrix.
@@ -2726,28 +2869,55 @@ class modelWE:
         None
         """
 
+        log.warning(
+            "get_steady_state_algebraic() will be deprecated soon. Use get_steady_state() instead, which has"
+            " a more robust eigensolver."
+        )
+
         log.debug("Computing steady-state from eigenvectors")
 
         eigenvalues, eigenvectors = np.linalg.eig(np.transpose(self.Tmatrix))
 
         pSS = np.real(eigenvectors[:, np.argmax(np.real(eigenvalues))])
 
-        # Flatten the array out.
-        # For some reason, sometimes it's of the shape (n_eigenvectors, 1) instead of (n_eigenvectors,), meaning each
-        #   element is its own sub-array.
-        # I can't seem to consistently replicate this behavior, but I'm sure it's  just some numpy weirdness I don't
-        #   fully understand. However, ravel/squeeze will flatten that out and fix that.
-        pSS = pSS.ravel().squeeze().squeeze()
+        pSS = pSS.squeeze()
 
         assert not np.isclose(np.sum(pSS), 0), "Steady-state distribution sums to 0!"
         pSS = pSS / np.sum(pSS)
 
-        # Remove values that are below machine precision
-        pSS_eps = np.finfo(pSS.dtype).eps
-        pSS[np.abs(pSS) < pSS_eps] = 0.0
+        # The numpy eigensolver is iterative, and approximate. Given that data from WE often spans many orders of
+        #   magnitude, we'll sometimes run into situations where our populations span more than machine precision.
+        #   This causes hiccups in the eigensolver. However, we can't just zero these out (as attempted above),
+        #   because these values are often important.
+        # So, if there are any negative elements, try to correct the NP eigensolver result using the matrix method
+        if sum(pSS < 0) > 0:
+            log.info(
+                "Negative elements in pSS after normalization, attempting to correct with matrix power method."
+            )
+            max_iters = 1000
+            pSS_last = pSS
+            _tmatrix = self.Tmatrix.copy()
 
-        # Normalize after removing these very small values
-        pSS = pSS / np.sum(pSS)
+            for N in range(max_iters):
+
+                pSS_new = _tmatrix.T @ pSS_last
+                num_negative_elements = sum(pSS_new < 0)
+                if num_negative_elements == 0:
+                    log.info(
+                        f"Reached convergence to semidefinite pSS in {N} iterations"
+                    )
+                    break
+
+                pSS_last = pSS_new
+                _tmatrix = np.matmul(self.Tmatrix, _tmatrix)
+
+            if N == max_iters - 1:
+                log.warning(
+                    "Power method did NOT converge. Some negative values remain. This is weird, and you"
+                    " should try to figure out why this is happening."
+                )
+            else:
+                pSS = pSS_new
 
         assert np.all(
             pSS >= 0
@@ -2788,7 +2958,7 @@ class modelWE:
                 sys.stdout.write("N=" + str(N) + " dconv: " + str(dconv) + "\n")
                 self.pSS = pSS.copy()
 
-    def get_steady_state_target_flux(self):
+    def get_steady_state_target_flux(self, pSS=None, _set=True):
         """
         Get the total flux into the target state(s).
 
@@ -2796,15 +2966,26 @@ class modelWE:
             - `self.lagtime`
             - `self.JtargetSS`
 
+        Parameters
+        ----------
+        pSS: (optional) array-like
+            Steady-state distribution. If nothing provided, then use self.pSS
+
+        _set: (optional) boolean
+            If True, then update self.JtargetSS and self.lagtime. If False, then just return the value of JtargetSS.
+
         Returns
         -------
         None
         """
 
         Mss = self.Tmatrix
-        pSS = np.squeeze(np.array(self.pSS))
 
-        self.lagtime = self.tau * (self.n_lag + 1)
+        # If no pSS was provided, then pull from self
+        if pSS is None:
+            pSS = np.squeeze(np.array(self.pSS))
+
+        lagtime = self.tau * (self.n_lag + 1)
 
         # Get a list of all the states that AREN'T targets, since we want to sum up
         nTargets = self.indTargets.size
@@ -2829,7 +3010,11 @@ class modelWE:
                 )
             )
 
-        self.JtargetSS = Jt / self.lagtime
+        if _set:
+            self.lagtime = lagtime
+            self.JtargetSS = Jt / self.lagtime
+        else:
+            return Jt / lagtime
 
     def evolve_probability(
         self, nEvolve, nStore

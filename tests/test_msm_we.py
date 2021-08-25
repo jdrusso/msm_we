@@ -330,7 +330,7 @@ def test_cluster(modelParams, nostream_clustered_model, cleanup_generated):
     assert np.isclose(
         loaded_model.clusters.cluster_centers_,
         nostream_clustered_model.clusters.cluster_centers_,
-        atol=1e-2,
+        atol=1e-4,
     ).all()
 
 
@@ -360,7 +360,7 @@ def test_streaming_cluster(modelParams, stream_clustered_model, cleanup_generate
     assert np.isclose(
         loaded_model.clusters.cluster_centers_,
         stream_clustered_model.clusters.cluster_centers_,
-        atol=1e-2,
+        atol=1e-4,
     ).all()
 
 
@@ -407,7 +407,7 @@ def test_get_steady_state_algebraic(completed_model, pSS):
     """
 
     completed_model.pSS = None
-    completed_model.get_steady_state_algebraic()
+    completed_model.get_steady_state()
 
     assert np.isclose(completed_model.pSS, pSS).all()
 
