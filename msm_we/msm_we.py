@@ -2939,9 +2939,7 @@ class modelWE:
                 pSS_new = _tmatrix.T @ pSS_last
                 num_negative_elements = sum(pSS_new < 0)
                 if num_negative_elements == 0:
-                    log.info(
-                        f"Reached convergence to semidefinite pSS in {N} iterations"
-                    )
+                    log.info(f"Corrected to semidefinite pSS in {N} iterations")
                     break
 
                 pSS_last = pSS_new
@@ -2949,7 +2947,7 @@ class modelWE:
 
             if N == max_iters - 1:
                 log.warning(
-                    "Power method did NOT converge. Some negative values remain. This is weird, and you"
+                    "Power method did NOT obtain semidefinite pSS. Some negative values remain. This is weird, and you"
                     " should try to figure out why this is happening."
                 )
             else:
