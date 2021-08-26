@@ -1750,7 +1750,7 @@ class modelWE:
             self.ndim = int(3 * self.nAtoms)
 
             # TODO: Why is this unused?
-            data = self.all_coords.reshape(-1, self.ndim)
+            # data = self.all_coords.reshape(-1, self.ndim)
             self.coordinates = self.Coordinates()
             # self.coordinates.transform=self.processCoordinates
 
