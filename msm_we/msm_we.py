@@ -234,6 +234,7 @@ class modelWE:
         target_pcoord_bounds: list = None,
         dim_reduce_method: str = "pca",
         tau: float = None,
+        pcoord_ndim: int = 1,
     ):
         """
         Initialize the model-builder.
@@ -260,6 +261,9 @@ class modelWE:
 
         tau: float
             Resampling time (i.e. time of 1 WE iteration). Used to map fluxes to physical times.
+
+        pcoord_ndim: int
+            Defaults to 1. Dimensionality of progress coordinates.
 
         Returns
         -------
@@ -305,7 +309,7 @@ class modelWE:
         self.n_data_files = len(fileList)
         #####
 
-        self.pcoord_ndim = 1
+        self.pcoord_ndim = pcoord_ndim
         self.pcoord_len = 2
         # self.pcoord_len = 50
 
