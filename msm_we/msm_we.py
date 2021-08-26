@@ -2855,9 +2855,6 @@ class modelWE:
 
         # ## Next, use that as an initial guess  for inverse iteration
 
-        # Call it converged when the flux estimate stops changing by this much
-        flux_convergence_criterion = last_flux * flux_fractional_convergence
-
         last_pSS = algebraic_pss
 
         log.debug(f"Initial flux: {last_flux}\n")
@@ -2880,11 +2877,13 @@ class modelWE:
             )
             last_flux = new_flux
 
-            # Set the convergence criterion after one iteration, in case the original result is really junk
-            if N == 1:
-                flux_convergence_criterion = last_flux * flux_fractional_convergence
-                log.debug(f"Flux convergence is at {flux_convergence_criterion}")
-                continue
+            # Set the convergence criterion after the iteration, in case the original result is really junk
+            # Do it after so the first time this is calculated, it's using the result of the first iteration.
+            # If the initial numpy estimate was really bad, it'll never be used.
+            flux_convergence_criterion = last_flux * flux_fractional_convergence
+            log.debug(f"\t Flux convergence criterion is {flux_convergence_criterion}")
+
+            assert last_flux > 0, "Got a negative flux, something is wrong!"
 
             if abs(flux_change) < flux_convergence_criterion:
                 log.info(
