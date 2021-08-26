@@ -1717,6 +1717,7 @@ class modelWE:
                 + 1
             )
             log.debug(f"Keeping {components_for_var} components")
+            components_for_var = min(components_for_var, total_num_iterations - 1)
 
             # Now do the PCA again, with that many components, using all the iterations.
             ipca = iPCA(n_components=components_for_var)
