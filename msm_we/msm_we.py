@@ -147,6 +147,9 @@ class modelWE:
         self.basis_bin_center = None
         self._WEbasisp1_bounds = None
 
+        self._basis_pcoord_bounds = None
+        self._target_pcoord_bounds = None
+
         self.dimReduceMethod = None
         """str: Dimensionality reduction method. Must be one of "pca", "vamp", or "none" (**NOT** NoneType)"""
 
@@ -292,7 +295,6 @@ class modelWE:
         self.pcoord_ndim = pcoord_ndim
         self.pcoord_len = 2
 
-        self._basis_pcoord_bounds = None
         if basis_pcoord_bounds is None:
             log.warning(
                 "No basis coord bounds provided to initialize(). "
@@ -416,9 +418,7 @@ class modelWE:
             [bound[0] < bound[1] for bound in bounds]
         ), "A boundary has a lower bound larger than its upper bound"
 
-        print(f"Setting basis pcoord bounds to {bounds}")
         self._basis_pcoord_bounds = bounds
-        print(f"Set basis pcoord bounds to {self._basis_pcoord_bounds}")
 
         basis_bin_centers = np.full(self.pcoord_ndim, fill_value=np.nan)
         for i, (bound_min, bound_max) in enumerate(bounds):
@@ -432,7 +432,6 @@ class modelWE:
                 # Janky indexing, if p1_max == inf then that's True, and True == 1 so it picks the second element
                 basis_bin_centers[i] = [bound_min, bound_max][abs(bound_min) == np.inf]
         self.basis_bin_centers = basis_bin_centers
-        print(f"Set basis pcoord centers to {basis_bin_centers}")
 
     @property
     def n_lag(self):
