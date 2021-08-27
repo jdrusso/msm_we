@@ -2004,15 +2004,33 @@ class modelWE:
             else:
                 self.dtrajs = []
 
+                continued = False
                 for iteration in range(1, self.maxIter):
-                    iter_coords = self.get_iter_coordinates(iteration).reshape(
+                    _iter_coords = self.get_iter_coordinates(iteration).reshape(
                         -1, 3 * self.nAtoms
                     )
+
+                    if not continued:
+                        iter_coords = _iter_coords
+                    elif continued:
+                        log.debug(
+                            f"Appending {_iter_coords.shape[0]} trajs for clustering"
+                        )
+                        iter_coords = np.append(iter_coords, _iter_coords, axis=0)
 
                     # This better pass, but just be sure.
                     assert type(cluster_model) is mini_kmeans
 
-                    cluster_model.partial_fit(iter_coords)
+                    try:
+                        cluster_model.partial_fit(iter_coords)
+                    except ValueError:
+                        log.debug(
+                            "Not enough samples for the desired number of clusters, pulling"
+                            "more iterations."
+                        )
+                        continued = True
+                    else:
+                        continued = False
 
                 self.clusters = cluster_model
 
@@ -2029,16 +2047,33 @@ class modelWE:
             # raise NotImplementedError("PCA + streaming clustering is not yet supported")
             self.dtrajs = []
 
+            continued = False
             for iteration in range(1, self.maxIter):
                 iter_coords = self.get_iter_coordinates(iteration)
-                transformed_coords = self.coordinates.transform(
+                _transformed_coords = self.coordinates.transform(
                     self.processCoordinates(iter_coords)
                 )
+
+                if not continued:
+                    transformed_coords = _transformed_coords
+                elif continued:
+                    transformed_coords = np.append(
+                        transformed_coords, _transformed_coords, axis=0
+                    )
 
                 # This better pass, but just be sure.
                 assert type(cluster_model) is mini_kmeans
 
-                cluster_model.partial_fit(transformed_coords)
+                try:
+                    cluster_model.partial_fit(transformed_coords)
+                except ValueError:
+                    log.debug(
+                        "Not enough samples for the desired number of clusters, pulling"
+                        "more iterations."
+                    )
+                    continued = True
+                else:
+                    continued = False
 
             self.clusters = cluster_model
 
