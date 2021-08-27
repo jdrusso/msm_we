@@ -289,31 +289,34 @@ class modelWE:
                 "of paths."
             )
 
+        self.pcoord_ndim = pcoord_ndim
+        self.pcoord_len = 2
+
+        self._basis_pcoord_bounds = None
         if basis_pcoord_bounds is None:
             log.warning(
                 "No basis coord bounds provided to initialize(). "
                 "You can manually set this for now, but that will be deprecated eventually."
             )
         else:
-            self.WEbasisp1_bounds = basis_pcoord_bounds
+            self.basis_pcoord_bounds = basis_pcoord_bounds
 
+        self._target_pcoord_bounds = None
         if target_pcoord_bounds is None:
             log.warning(
                 "No target coord bounds provided to initialize(). "
                 "You can manually set this for now, but that will be deprecated eventually."
             )
         else:
-            self.WEtargetp1_bounds = target_pcoord_bounds
+            log.debug("Setting basis pcoord bounds")
+            # self.WEtargetp1_bounds = target_pcoord_bounds
+            self.target_pcoord_bounds = target_pcoord_bounds
 
-        self._basis_pcoord_bounds = None
+        # self._basis_pcoord_bounds = None
 
         self.fileList = fileList
         self.n_data_files = len(fileList)
         #####
-
-        self.pcoord_ndim = pcoord_ndim
-        self.pcoord_len = 2
-        # self.pcoord_len = 50
 
         if tau is None:
             log.warning("No tau provided, defaulting to 1.")
@@ -359,7 +362,7 @@ class modelWE:
     # TODO: Deprecate this for an N-dimensional version
     @property
     def WEbasisp1_bounds(self):
-        return self._WEbasisp1_bounds
+        return self.basis_pcoord_bounds
 
     # TODO: Deprecate this for an N-dimensional version
     @WEbasisp1_bounds.setter
@@ -371,22 +374,13 @@ class modelWE:
         ----------
         bounds
         """
-        if None in bounds:
-            raise Exception("A basis boundary has not been correctly provided")
 
-        self.WEbasisp1_min, self.WEbasisp1_max = bounds
-        self._WEbasisp1_bounds = bounds
+        log.warning(
+            "WEbasisp1_bounds is a deprecated attribute. "
+            "Set pcoord boundaries using basis_pcoord_bounds instead"
+        )
 
-        # Same as in WEtargetp1_bounds
-        if (
-            not abs(self.WEbasisp1_min) == np.inf
-            and not abs(self.WEbasisp1_max) == np.inf
-        ):
-            self.basis_bin_center = np.mean([self.WEbasisp1_min, self.WEbasisp1_max])
-        else:
-            self.basis_bin_center = [self.WEbasisp1_min, self.WEbasisp1_max][
-                abs(self.WEbasisp1_min) == np.inf
-            ]
+        self.basis_pcoord_bounds = bounds
 
     @property
     def basis_pcoord_bounds(self):
@@ -404,6 +398,15 @@ class modelWE:
         """
         bounds = np.array(bounds)
 
+        # In case it's a 1D pcoord provided as a simple list [min, max],
+        #   reshape it to be consistent with N-D pcoord boundaries as  [[min, max]]
+        if self.pcoord_ndim == 1:
+            log.warning(
+                "Please provide 1-D boundaries as a list of lists or 2-D array"
+                " [[lower bound, upper bound]]. Automatically doing conversion for now."
+            )
+            bounds = np.reshape(bounds, (1, 2))
+
         assert bounds.shape == (
             self.pcoord_ndim,
             2,
@@ -413,7 +416,9 @@ class modelWE:
             [bound[0] < bound[1] for bound in bounds]
         ), "A boundary has a lower bound larger than its upper bound"
 
+        print(f"Setting basis pcoord bounds to {bounds}")
         self._basis_pcoord_bounds = bounds
+        print(f"Set basis pcoord bounds to {self._basis_pcoord_bounds}")
 
         basis_bin_centers = np.full(self.pcoord_ndim, fill_value=np.nan)
         for i, (bound_min, bound_max) in enumerate(bounds):
@@ -427,6 +432,7 @@ class modelWE:
                 # Janky indexing, if p1_max == inf then that's True, and True == 1 so it picks the second element
                 basis_bin_centers[i] = [bound_min, bound_max][abs(bound_min) == np.inf]
         self.basis_bin_centers = basis_bin_centers
+        print(f"Set basis pcoord centers to {basis_bin_centers}")
 
     @property
     def n_lag(self):
@@ -446,7 +452,7 @@ class modelWE:
     # TODO: Deprecate this for an N-dimensional version
     @property
     def WEtargetp1_bounds(self):
-        return self._WEtargetp1_bounds
+        return self.target_pcoord_bounds
 
     # TODO: Deprecate this for an N-dimensional version
     @WEtargetp1_bounds.setter
@@ -461,22 +467,12 @@ class modelWE:
         if None in bounds:
             raise Exception("A target boundary has not been correctly provided")
 
-        self.WEtargetp1_min, self.WEtargetp1_max = bounds
-        self._WEtargetp1_bounds = bounds
+        log.warning(
+            "WEbasisp1_bounds is a deprecated attribute. "
+            "Set pcoord boundaries using basis_pcoord_bounds instead"
+        )
 
-        # If neither of the target bin boundaries are infinity, then the bin center is their mean.
-        if (
-            not abs(self.WEtargetp1_min) == np.inf
-            and not abs(self.WEtargetp1_max) == np.inf
-        ):
-            self.target_bin_center = np.mean([self.WEtargetp1_min, self.WEtargetp1_max])
-
-        # If one of them IS infinity, their "bin center" is the non-infinity one.
-        else:
-            # Janky indexing, if p1_max == inf then that's True, and True == 1 so it picks the second element
-            self.target_bin_center = [self.WEtargetp1_min, self.WEtargetp1_max][
-                abs(self.WEtargetp1_min) == np.inf
-            ]
+        self.target_pcoord_bounds = bounds
 
     @property
     def target_pcoord_bounds(self):
@@ -493,6 +489,15 @@ class modelWE:
             Array of [lower, upper] bounds for each progress coordinate.
         """
         bounds = np.array(bounds)
+
+        # In case it's a 1D pcoord provided as a simple list [min, max],
+        #   reshape it to be consistent with N-D pcoord boundaries as  [[min, max]]
+        if self.pcoord_ndim == 1:
+            log.warning(
+                "Please provide 1-D boundaries as a list of lists or 2-D array"
+                " [[lower bound, upper bound]]. Automatically doing conversion for now."
+            )
+            bounds = np.reshape(bounds, (1, 2))
 
         assert bounds.shape == (
             self.pcoord_ndim,
@@ -551,23 +556,17 @@ class modelWE:
         This only checks the 0th progress coordinate
         """
 
-        if self._basis_pcoord_bounds is None:
-            in_basis = np.logical_and(
-                pcoords[:, 0] > self.WEbasisp1_min, pcoords[:, 0] < self.WEbasisp1_max
+        in_basis = np.full_like(pcoords, fill_value=np.nan)
+
+        for pcoord_dimension in range(self.pcoord_ndim):
+            in_basis[:, pcoord_dimension] = np.logical_and(
+                pcoords[:, pcoord_dimension]
+                > self.basis_pcoord_bounds[pcoord_dimension, 0],
+                pcoords[:, pcoord_dimension]
+                < self.basis_pcoord_bounds[pcoord_dimension, 1],
             )
 
-        else:
-            in_basis = np.full_like(pcoords, fill_value=np.nan)
-
-            for pcoord_dimension in range(self.pcoord_ndim):
-                in_basis[:, pcoord_dimension] = np.logical_and(
-                    pcoords[:, pcoord_dimension]
-                    > self.basis_pcoord_bounds[pcoord_dimension, 0],
-                    pcoords[:, pcoord_dimension]
-                    < self.basis_pcoord_bounds[pcoord_dimension, 1],
-                )
-
-            in_basis = np.all(in_basis, axis=1)
+        in_basis = np.all(in_basis, axis=1)
 
         return in_basis
 
@@ -592,23 +591,17 @@ class modelWE:
 
         """
 
-        if self._target_pcoord_bounds is None:
-            in_target = np.logical_and(
-                pcoords[:, 0] > self.WEtargetp1_min, pcoords[:, 0] < self.WEtargetp1_max
+        in_target = np.full_like(pcoords, fill_value=np.nan)
+
+        for pcoord_dimension in range(self.pcoord_ndim):
+            in_target[:, pcoord_dimension] = np.logical_and(
+                pcoords[:, pcoord_dimension]
+                > self.target_pcoord_bounds[pcoord_dimension, 0],
+                pcoords[:, pcoord_dimension]
+                < self.target_pcoord_bounds[pcoord_dimension, 1],
             )
 
-        else:
-            in_target = np.full_like(pcoords, fill_value=np.nan)
-
-            for pcoord_dimension in range(self.pcoord_ndim):
-                in_target[:, pcoord_dimension] = np.logical_and(
-                    pcoords[:, pcoord_dimension]
-                    > self.target_pcoord_bounds[pcoord_dimension, 0],
-                    pcoords[:, pcoord_dimension]
-                    < self.target_pcoord_bounds[pcoord_dimension, 1],
-                )
-
-            in_target = np.all(in_target, axis=1)
+        in_target = np.all(in_target, axis=1)
 
         return in_target
 
