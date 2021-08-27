@@ -407,7 +407,7 @@ def test_get_steady_state_algebraic(completed_model, pSS):
     """
 
     completed_model.pSS = None
-    completed_model.get_steady_state()
+    completed_model.get_steady_state_algebraic()
 
     assert np.isclose(completed_model.pSS, pSS).all()
 
