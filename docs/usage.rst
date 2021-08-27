@@ -130,6 +130,13 @@ Analysis
 
         model.get_steady_state()
 
+    Note: This may fail or encounter difficulties for datasets where no target flux has been obtained.
+    This can happen with either incomplete sampling to your target state, or with equilibrium data.
+    This is because it uses the flux estimate as a convergence criterion.
+    If the flux is 0, then it's not meaningful to  look at convergence of 0, so it'll just run
+    for the maximum number of iterations. You can specify :code:`max_iters=1` to avoid unnecessary
+    iteration, or you can use :code:`model.get_steady_state_algebraic`.
+
 12. Update cluster structures
 
     .. code-block:: python
