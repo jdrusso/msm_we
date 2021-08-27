@@ -305,6 +305,8 @@ class modelWE:
         else:
             self.WEtargetp1_bounds = target_pcoord_bounds
 
+        self._basis_pcoord_bounds = None
+
         self.fileList = fileList
         self.n_data_files = len(fileList)
         #####
@@ -354,10 +356,12 @@ class modelWE:
 
         log.debug("msm_we model successfully initialized")
 
+    # TODO: Deprecate this for an N-dimensional version
     @property
     def WEbasisp1_bounds(self):
         return self._WEbasisp1_bounds
 
+    # TODO: Deprecate this for an N-dimensional version
     @WEbasisp1_bounds.setter
     def WEbasisp1_bounds(self, bounds):
         """
@@ -385,6 +389,46 @@ class modelWE:
             ]
 
     @property
+    def basis_pcoord_bounds(self):
+        return self._basis_pcoord_bounds
+
+    @basis_pcoord_bounds.setter
+    def basis_pcoord_bounds(self, bounds):
+        """
+        Set the boundaries for the basis state in an arbitrary dimension pcoord space.
+
+        Parameters
+        ----------
+        bounds: array-like, (pcoord_ndim x 2)
+            Array of [lower, upper] bounds for each progress coordinate.
+        """
+        bounds = np.array(bounds)
+
+        assert bounds.shape == (
+            self.pcoord_ndim,
+            2,
+        ), "Shape of bounds was {bounds.shape}, should've been ({self.pcoord_ndim}, 2)"
+
+        assert np.all(
+            [bound[0] < bound[1] for bound in bounds]
+        ), "A boundary has a lower bound larger than its upper bound"
+
+        self._basis_pcoord_bounds = bounds
+
+        basis_bin_centers = np.full(self.pcoord_ndim, fill_value=np.nan)
+        for i, (bound_min, bound_max) in enumerate(bounds):
+
+            # If neither of the bin boundaries are infinity, then the bin center is their mean.
+            if not abs(bound_min) == np.inf and not abs(bound_max) == np.inf:
+                basis_bin_centers[i] = np.mean([bound_min, bound_max])
+
+            # If one of them IS infinity, their "bin center" is the non-infinity one.
+            else:
+                # Janky indexing, if p1_max == inf then that's True, and True == 1 so it picks the second element
+                basis_bin_centers[i] = [bound_min, bound_max][abs(bound_min) == np.inf]
+        self.basis_bin_centers = basis_bin_centers
+
+    @property
     def n_lag(self):
         return self._n_lag
 
@@ -399,10 +443,12 @@ class modelWE:
         else:
             self._n_lag = lag
 
+    # TODO: Deprecate this for an N-dimensional version
     @property
     def WEtargetp1_bounds(self):
         return self._WEtargetp1_bounds
 
+    # TODO: Deprecate this for an N-dimensional version
     @WEtargetp1_bounds.setter
     def WEtargetp1_bounds(self, bounds):
         """
@@ -432,6 +478,46 @@ class modelWE:
                 abs(self.WEtargetp1_min) == np.inf
             ]
 
+    @property
+    def target_pcoord_bounds(self):
+        return self._target_pcoord_bounds
+
+    @target_pcoord_bounds.setter
+    def target_pcoord_bounds(self, bounds):
+        """
+        Set the boundaries for the target state in an arbitrary dimension pcoord space.
+
+        Parameters
+        ----------
+        bounds: array-like, (pcoord_ndim x 2)
+            Array of [lower, upper] bounds for each progress coordinate.
+        """
+        bounds = np.array(bounds)
+
+        assert bounds.shape == (
+            self.pcoord_ndim,
+            2,
+        ), "Shape of bounds was {bounds.shape}, should've been ({self.pcoord_ndim}, 2)"
+
+        assert np.all(
+            [bound[0] < bound[1] for bound in bounds]
+        ), "A boundary has a lower bound larger than its upper bound"
+
+        self._target_pcoord_bounds = bounds
+
+        target_bin_centers = np.full(self.pcoord_ndim, fill_value=np.nan)
+        for i, (bound_min, bound_max) in enumerate(bounds):
+
+            # If neither of the bin boundaries are infinity, then the bin center is their mean.
+            if not abs(bound_min) == np.inf and not abs(bound_max) == np.inf:
+                target_bin_centers[i] = np.mean([bound_min, bound_max])
+
+            # If one of them IS infinity, their "bin center" is the non-infinity one.
+            else:
+                # Janky indexing, if p1_max == inf then that's True, and True == 1 so it picks the second element
+                target_bin_centers[i] = [bound_min, bound_max][abs(bound_min) == np.inf]
+        self.target_bin_centers = target_bin_centers
+
     def initialize_from_h5(self, refPDBfile, initPDBfile, modelName):
         """
         Like initialize, but sets state without
@@ -445,6 +531,7 @@ class modelWE:
         -------
 
         """
+        pass
 
     def is_WE_basis(self, pcoords):
         """
@@ -464,10 +551,25 @@ class modelWE:
         This only checks the 0th progress coordinate
         """
 
-        isBasis = np.logical_and(
-            pcoords[:, 0] > self.WEbasisp1_min, pcoords[:, 0] < self.WEbasisp1_max
-        )
-        return isBasis
+        if self._basis_pcoord_bounds is None:
+            in_basis = np.logical_and(
+                pcoords[:, 0] > self.WEbasisp1_min, pcoords[:, 0] < self.WEbasisp1_max
+            )
+
+        else:
+            in_basis = np.full_like(pcoords, fill_value=np.nan)
+
+            for pcoord_dimension in range(self.pcoord_ndim):
+                in_basis[:, pcoord_dimension] = np.logical_and(
+                    pcoords[:, pcoord_dimension]
+                    > self.basis_pcoord_bounds[pcoord_dimension, 0],
+                    pcoords[:, pcoord_dimension]
+                    < self.basis_pcoord_bounds[pcoord_dimension, 1],
+                )
+
+            in_basis = np.all(in_basis, axis=1)
+
+        return in_basis
 
     def is_WE_target(self, pcoords):
         """
@@ -490,10 +592,25 @@ class modelWE:
 
         """
 
-        isTarget = np.logical_and(
-            pcoords[:, 0] > self.WEtargetp1_min, pcoords[:, 0] < self.WEtargetp1_max
-        )
-        return isTarget
+        if self._target_pcoord_bounds is None:
+            in_target = np.logical_and(
+                pcoords[:, 0] > self.WEtargetp1_min, pcoords[:, 0] < self.WEtargetp1_max
+            )
+
+        else:
+            in_target = np.full_like(pcoords, fill_value=np.nan)
+
+            for pcoord_dimension in range(self.pcoord_ndim):
+                in_target[:, pcoord_dimension] = np.logical_and(
+                    pcoords[:, pcoord_dimension]
+                    > self.target_pcoord_bounds[pcoord_dimension, 0],
+                    pcoords[:, pcoord_dimension]
+                    < self.target_pcoord_bounds[pcoord_dimension, 1],
+                )
+
+            in_target = np.all(in_target, axis=1)
+
+        return in_target
 
     def load_iter_data(self, n_iter: int):
         """
