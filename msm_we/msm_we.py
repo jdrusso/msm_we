@@ -3003,6 +3003,7 @@ class modelWE:
         last_pSS = algebraic_pss
 
         log.debug(f"Initial flux: {last_flux}\n")
+        flux_warned = False
 
         for N in range(max_iters):
 
@@ -3028,7 +3029,15 @@ class modelWE:
             flux_convergence_criterion = last_flux * flux_fractional_convergence
             log.debug(f"\t Flux convergence criterion is {flux_convergence_criterion}")
 
-            assert last_flux > 0, "Got a negative flux, something is wrong!"
+            if N > 0:
+                assert last_flux >= 0, "Got a negative flux, something is wrong!"
+                if last_flux == 0 and not flux_warned:
+                    log.warning(
+                        "Flux is 0, so will only converge after max iterations. "
+                        "If you're looking for equilibrium, this is probably OK."
+                        " Otherwise, take a look at why you have 0 flux."
+                    )
+                    flux_warned = True
 
             if abs(flux_change) < flux_convergence_criterion:
                 log.info(
