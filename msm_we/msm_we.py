@@ -1608,6 +1608,56 @@ class modelWE:
 
     def load_iter_coordinates(self):
         """
+
+        Returns
+        -------
+
+        """
+
+        cur_iter_coords = np.full((self.nSeg, self.nAtoms, 3), fill_value=np.nan)
+
+        log.debug(
+            f"Getting coordinates for {self.nSeg} segs in iteration {self.n_iter}, at a lag of 0"
+        )
+
+        # the segments in this iteration may be split across a number of different files
+        # "Traditionally", we store a reference for  each segment  of which WEST file it's in
+        # But flip that, and for each west file, get which segments are in it
+
+        seg_west_files = self.westList[range(self.nSeg)]
+        west_file_idxs = np.unique(seg_west_files)
+        west_files = [self.fileList[idx] for idx in west_file_idxs]
+
+        for idx, west_file in enumerate(west_files):
+
+            segs_contained = np.where(seg_west_files == idx)[0]
+
+            with h5py.File(west_file, "r") as data_file:
+
+                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+
+                try:
+                    dset = data_file[dsetName]
+                except (RuntimeError, ValueError) as e:
+                    log.error(
+                        f"Error getting coordinates from {west_file}, in iteration {self.n_iter}"
+                    )
+
+                    cur_iter_coords[segs_contained, :, :] = np.full(
+                        (self.nAtoms, 3), fill_value=np.nan
+                    )
+                    self.coordsExist = False
+
+                    raise e
+
+                coords = dset
+
+                cur_iter_coords[segs_contained, :, :] = coords[:, 1, :, :]
+
+        self.cur_iter_coords = cur_iter_coords
+
+    def load_iter_coordinates_slow(self):
+        """
         Updates state with the coordinates from the last iteration (or whichever iteration is in `self.n_iter`)
 
         Updates:
