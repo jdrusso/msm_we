@@ -4,8 +4,10 @@ from __future__ import division, print_function
 __metaclass__ = type
 import numpy as np
 import tqdm
+from functools import partialmethod
 import sys
 import h5py
+
 from scipy.sparse import coo_matrix
 import scipy.sparse as sparse
 from sklearn.decomposition import IncrementalPCA as iPCA
@@ -472,6 +474,14 @@ class modelWE:
         )
 
         self.target_pcoord_bounds = bounds
+
+    def progress_disable(self):
+        """Disable all progress bars"""
+        tqdm.tqdm.__init__ = partialmethod(tqdm.tqdm.__init__, disable=True)
+
+    def progress_enable(self):
+        """Enable all progress bars"""
+        tqdm.tqdm.__init__ = partialmethod(tqdm.tqdm.__init__, disable=False)
 
     @property
     def target_pcoord_bounds(self):
@@ -1777,7 +1787,9 @@ class modelWE:
             total_num_iterations = len(self.numSegments)
             first_iter = max(1, int(total_num_iterations * 0.9))
             rough_ipca = iPCA()
-            for iteration in range(first_iter, total_num_iterations):
+            for iteration in tqdm.tqdm(
+                range(first_iter, total_num_iterations), desc="Initial iPCA"
+            ):
                 iter_coords = self.get_iter_coordinates(iteration)
                 processed_iter_coords = self.processCoordinates(iter_coords)
                 rough_ipca.partial_fit(processed_iter_coords)
@@ -1793,7 +1805,7 @@ class modelWE:
 
             # Now do the PCA again, with that many components, using all the iterations.
             ipca = iPCA(n_components=components_for_var)
-            for iteration in range(1, total_num_iterations):
+            for iteration in tqdm.tqdm(range(1, total_num_iterations), desc="iPCA"):
                 iter_coords = self.get_iter_coordinates(iteration)
                 processed_iter_coords = self.processCoordinates(iter_coords)
                 ipca.partial_fit(processed_iter_coords)
@@ -2120,7 +2132,7 @@ class modelWE:
             self.dtrajs = []
 
             continued = False
-            for iteration in range(1, self.maxIter):
+            for iteration in tqdm.tqdm(range(1, self.maxIter), desc="Clustering"):
                 iter_coords = self.get_iter_coordinates(iteration)
                 _transformed_coords = self.coordinates.transform(
                     self.processCoordinates(iter_coords)
@@ -2150,7 +2162,7 @@ class modelWE:
             self.clusters = cluster_model
 
             # Now compute dtrajs from the final model
-            for iteration in range(1, self.maxIter):
+            for iteration in tqdm.tqdm(range(1, self.maxIter), desc="Discretization"):
                 iter_coords = self.get_iter_coordinates(iteration)
                 transformed_coords = self.coordinates.transform(
                     self.processCoordinates(iter_coords)
