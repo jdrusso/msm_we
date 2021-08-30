@@ -1113,7 +1113,78 @@ class modelWE:
         self.transitionWeights = transitionWeights
         self.departureWeights = departureWeights
 
-    def get_transition_data_lag0(self,):
+    def get_transition_data_lag0(self):
+        """
+        Get coordinate pairs at the beginning and end of this iteration.
+
+        Updates:
+            - self.coordPairList, a list of  parent/child coordinate pairs
+            - self.transitionWeights, a copy of self.weightList
+            - self.departureWeights, a copy of self.weightList
+
+        TODO
+        ----
+        Test this when multiple data files contain coords for one iteration. I.e.,
+            you have N files, each of which has an iteration 1  in them. Should be fine,
+            but make sure.
+        """
+
+        weightList = self.weightList
+        coordPairList = np.zeros((self.nSeg, self.nAtoms, 3, 2))
+
+        log.debug(
+            f"Getting transition data for {self.nSeg} segs in iteration {self.n_iter}, at a lag of 0"
+        )
+
+        # the segments in this iteration may be split across a number of different files
+        # "Traditionally", we store a reference for  each segment  of which WEST file it's in
+        # But what if we flip that, and for each west file, get which segments are in it?
+
+        seg_west_files = self.westList[range(self.nSeg)]
+        west_file_idxs = np.unique(seg_west_files)
+        west_files = [self.fileList[idx] for idx in west_file_idxs]
+
+        for idx, west_file in enumerate(west_files):
+
+            segs_contained = np.where(seg_west_files == idx)[0]
+
+            with h5py.File(west_file, "r") as data_file:
+
+                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+
+                try:
+                    dset = data_file[dsetName]
+                except KeyError as e:
+                    raise e
+
+                coords = dset
+
+                coordPairList[segs_contained, :, :, 0] = coords[:, 0, :, :]
+                coordPairList[segs_contained, :, :, 1] = coords[
+                    :, self.pcoord_len - 1, :, :
+                ]
+
+                # Check for NaNs in segments
+                nan_segments = segs_contained[
+                    np.argwhere(
+                        np.isnan(coordPairList[segs_contained]).any(axis=(1, 2, 3))
+                    )
+                ]
+
+                if nan_segments.shape[0] > 0:
+                    log.warning(
+                        f"Bad coordinates for segments {nan_segments}, setting weights to 0"
+                    )
+                    weightList[nan_segments] = 0.0
+
+        transitionWeights = weightList.copy()
+        departureWeights = weightList.copy()
+
+        self.coordPairList = coordPairList
+        self.transitionWeights = transitionWeights
+        self.departureWeights = departureWeights
+
+    def get_transition_data_lag0_slow(self,):
         """
         Get coordinate pairs as the position at the beginning and end of this iteration (i.e. at a lag of 0).
         At a lag of 0, it's not possible to have warps, since warps/recycles are handled between iterations.
@@ -1133,6 +1204,9 @@ class modelWE:
         to do with how I'm reading my HDF5 files. Maybe that's just my HDF5 file, or maybe I'm accessing it in some
         really inefficient way in here that I'm not seeing.  Surprisingly, it doesn't seem to be the constant file
         opening/closing.
+
+        Ah -- it was right in front of me. It's reading each segment out of an iteration one at a
+        time. Better to at the very least, read a whole iteration at once.
         """
 
         # get segment history data at lag time n_lag from current iter
@@ -1186,6 +1260,9 @@ class modelWE:
 
             # Check for NaNs
             if np.isnan(coordPairList[seg_idx]).any():
+                log.warning(
+                    f"Bad coordinates for segment {seg_idx}, setting weights to 0"
+                )
                 weightList[seg_idx] = 0.0
 
         dataIn.close()
