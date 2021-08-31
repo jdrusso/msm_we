@@ -1647,7 +1647,8 @@ class modelWE:
         log.debug(f"CoordSet loading up to {last_iter}")
         total_segments = int(sum(self.numSegments[:last_iter]))
 
-        coordSet = np.full((total_segments, self.nAtoms, 3), fill_value=np.nan)
+        if not streaming:
+            coordSet = np.full((total_segments, self.nAtoms, 3), fill_value=np.nan)
         pcoordSet = np.full((total_segments, self.pcoord_ndim), fill_value=np.nan)
 
         last_seg_idx = total_segments
