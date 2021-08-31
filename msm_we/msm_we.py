@@ -1552,7 +1552,7 @@ class modelWE:
 
                 try:
                     dset = data_file[dsetName]
-                except (RuntimeError, ValueError) as e:
+                except (RuntimeError, ValueError, KeyError):
                     log.error(
                         f"Error getting coordinates from {west_file}, in iteration {self.n_iter}"
                     )
@@ -1562,11 +1562,11 @@ class modelWE:
                     )
                     self.coordsExist = False
 
-                    raise e
+                    # raise e
 
-                coords = dset
-
-                cur_iter_coords[segs_contained, :, :] = coords[:, 1, :, :]
+                else:
+                    coords = dset
+                    cur_iter_coords[segs_contained, :, :] = coords[:, 1, :, :]
 
         self.cur_iter_coords = cur_iter_coords
 
@@ -1770,16 +1770,6 @@ class modelWE:
         # log.debug(self.coordSet)
         if self.dimReduceMethod == "pca":
 
-            # # Set data manually by transforming the full set of coordinates
-            # data = self.processCoordinates(self.all_coords)
-            #
-            # assert not data.shape[-1] == 0, "Processed coordinates are empty!"
-            #
-            # self.coordinates = coor.pca(
-            #     data, dim=-1, var_cutoff=0.95, mean=None, stride=1, skip=0
-            # )
-            # self.ndim = self.coordinates.dimension()
-
             # Do this in a streaming way, iteration by iteration
             # First, do a "rough" PCA on the last 10% of the data to get the number of components that explain the
             #   variance cutoff.
@@ -1792,6 +1782,11 @@ class modelWE:
                 range(first_iter, total_num_iterations), desc="Initial iPCA"
             ):
                 iter_coords = self.get_iter_coordinates(iteration)
+
+                # If  no good coords in this iteration, skip it
+                if iter_coords.shape[0] == 0:
+                    continue
+
                 processed_iter_coords = self.processCoordinates(iter_coords)
                 rough_ipca.partial_fit(processed_iter_coords)
 
@@ -1806,8 +1801,26 @@ class modelWE:
 
             # Now do the PCA again, with that many components, using all the iterations.
             ipca = iPCA(n_components=components_for_var)
+
+            _iter_coords = None
+            continued = False
             for iteration in tqdm.tqdm(range(1, total_num_iterations), desc="iPCA"):
-                iter_coords = self.get_iter_coordinates(iteration)
+                _iter_coords = self.get_iter_coordinates(iteration)
+
+                # If no good coords in this iteration, skip it
+                if _iter_coords.shape[0] == 0:
+                    continue
+
+                if not continued:
+                    iter_coords = _iter_coords
+                elif continued:
+                    iter_coords = np.append(iter_coords, _iter_coords, axis=0)
+
+                if iter_coords.shape[0] <= components_for_var:
+                    continued = True
+                    continue
+
+                continued = False
                 processed_iter_coords = self.processCoordinates(iter_coords)
                 ipca.partial_fit(processed_iter_coords)
 
@@ -2126,15 +2139,18 @@ class modelWE:
                     )
                     self.dtrajs.append(cluster_model.predict(iter_coords))
 
-        # Right now, this doesn't do anything differently, and is just a placeholder.
         elif self.dimReduceMethod == "pca" and streaming:
 
-            # raise NotImplementedError("PCA + streaming clustering is not yet supported")
             self.dtrajs = []
 
             continued = False
             for iteration in tqdm.tqdm(range(1, self.maxIter), desc="Clustering"):
                 iter_coords = self.get_iter_coordinates(iteration)
+
+                # Skip if  this is an empty iteration
+                if iter_coords.shape[0] == 0:
+                    continue
+
                 _transformed_coords = self.coordinates.transform(
                     self.processCoordinates(iter_coords)
                 )
@@ -2165,6 +2181,11 @@ class modelWE:
             # Now compute dtrajs from the final model
             for iteration in tqdm.tqdm(range(1, self.maxIter), desc="Discretization"):
                 iter_coords = self.get_iter_coordinates(iteration)
+
+                # Skip if  this is an empty iteration
+                if iter_coords.shape[0] == 0:
+                    continue
+
                 transformed_coords = self.coordinates.transform(
                     self.processCoordinates(iter_coords)
                 )
@@ -2186,6 +2207,11 @@ class modelWE:
 
                 for iteration in range(1, self.maxIter):
                     iter_coords = self.get_iter_coordinates(iteration)
+
+                    # Skip if  this is an empty iteration
+                    if iter_coords.shape[0] == 0:
+                        continue
+
                     transformed_data.append(
                         self.coordinates.transform(self.processCoordinates(iter_coords))
                     )
@@ -2284,7 +2310,13 @@ class modelWE:
         elif self.n_lag == 0:
             # If you're using a lag of 0, your coordinate pairs are just the beginning/end of the iteration.
             #   In that, it's not possible to have warps/recycles, since those are done handled between iterations.
-            self.get_transition_data_lag0()
+            try:
+                self.get_transition_data_lag0()
+            except KeyError:
+                log.warning(
+                    f"No coordinates for iter {n_iter}, skipping this iter in fluxmatrix calculation"
+                )
+                return np.zeros(shape=(self.n_clusters + 2, self.n_clusters + 2))
 
         log.debug(f"Getting flux matrix for iter {n_iter} with {self.nSeg} segments")
         # If you used a lag of 0, transitions weights are just weightList
