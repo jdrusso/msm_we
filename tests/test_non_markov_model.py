@@ -8,7 +8,8 @@ class TestNonMarkovModel(unittest.TestCase):
     def setUp(self):
         np.random.seed(192348)
         trajectories = [np.random.randint(0, 3, 100000)]
-        self.nmm_model = NonMarkovModel(trajectories, stateA=[0], stateB=[2], clean_traj=False, sliding_window=True, lag_time=100)
+        self.nmm_model = NonMarkovModel(trajectories, stateA=[0], stateB=[2], clean_traj=False, sliding_window=True,
+                                        lag_time=100)
 
     def testTransitionMatrix(self):
         nmm_tmatrix = np.array(
@@ -26,7 +27,11 @@ class TestNonMarkovModel(unittest.TestCase):
 
     def testMFPTS(self):
         mean_fpts = self.nmm_model.mfpts()
-        self.assertDictEqual(mean_fpts, {'mfptAB': 301.1236654158612, 'mfptBA': 301.88142788292384})
+
+        ref_mfpts = {'mfptAB': 301.1236654158612, 'mfptBA': 301.88142788292384}
+
+        self.assertTrue(np.isclose(mean_fpts['mfptAB'], ref_mfpts['mfptAB']))
+        self.assertTrue(np.isclose(mean_fpts['mfptBA'], ref_mfpts['mfptBA']))
 
     def testEmpiricalMFPTs(self):
         empirical_mfpts = {
