@@ -1654,7 +1654,7 @@ class modelWE:
         last_seg_idx = total_segments
 
         # Update iterations N+1 -> 1
-        for i in tqdm.tqdm(range(last_iter, 0, -1)):
+        for i in tqdm.tqdm(range(last_iter, 0, -1), desc="Getting coordSet"):
 
             self.load_iter_data(i)
             self.load_iter_coordinates()
