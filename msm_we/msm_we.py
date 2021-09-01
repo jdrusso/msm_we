@@ -404,7 +404,7 @@ class modelWE:
 
         # In case it's a 1D pcoord provided as a simple list [min, max],
         #   reshape it to be consistent with N-D pcoord boundaries as  [[min, max]]
-        if self.pcoord_ndim == 1:
+        if len(bounds.shape) == 1:
             log.warning(
                 "Please provide 1-D boundaries as a list of lists or 2-D array"
                 " [[lower bound, upper bound]]. Automatically doing conversion for now."
@@ -501,7 +501,7 @@ class modelWE:
 
         # In case it's a 1D pcoord provided as a simple list [min, max],
         #   reshape it to be consistent with N-D pcoord boundaries as  [[min, max]]
-        if self.pcoord_ndim == 1:
+        if len(bounds.shape) == 1:
             log.warning(
                 "Please provide 1-D boundaries as a list of lists or 2-D array"
                 " [[lower bound, upper bound]]. Automatically doing conversion for now."
