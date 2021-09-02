@@ -2872,6 +2872,8 @@ class modelWE:
 
             self.dtrajs.append(self.clusters.predict(transformed_coords))
 
+        self.removed_clusters = []
+
         # Rebuild the fluxmatrix with whatever params were originally provided
         self.get_fluxMatrix(*self._fluxMatrixParams)
 
