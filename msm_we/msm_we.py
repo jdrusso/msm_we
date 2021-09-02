@@ -3000,7 +3000,7 @@ class modelWE:
                 Mt[iR, iR] = 1.0
         self.Tmatrix = Mt
 
-    def get_steady_state(self, flux_fractional_convergence=1e-4, max_iters=100):
+    def get_steady_state(self, flux_fractional_convergence=1e-4, max_iters=1):
         """"
         Get the steady-state distribution for the transition matrix.
         Uses scipy eigensolver to obtain an initial guess, then refines that using inverse iteration.
@@ -3031,17 +3031,21 @@ class modelWE:
         # Cast the matrix to a sparse matrix, to reduce floating point operations
         sparse_mat = sparse.csr_matrix(self.Tmatrix)
 
-        # ## First, get the scipy solver result
-        eigenvalues, eigenvectors = sparse.linalg.eigs(
-            sparse_mat.T, sigma=1, k=1, which="LR"
+        # # ## First, get the scipy solver result
+        # eigenvalues, eigenvectors = sparse.linalg.eigs(
+        #     sparse_mat.T, sigma=1, k=1, which="LR"
+        # )
+        # max_eigval_index = np.argmax(np.real(eigenvalues))
+        # algebraic_pss = np.real(eigenvectors[:, max_eigval_index]).squeeze()
+        #
+        # # and normalize it
+        # algebraic_pss /= sum(algebraic_pss)
+
+        algebraic_pss = self.get_steady_state_algebraic(
+            max_iters=10, check_negative=False, set=False
         )
-        max_eigval_index = np.argmax(np.real(eigenvalues))
-        algebraic_pss = np.real(eigenvectors[:, max_eigval_index]).squeeze()
 
-        # and normalize it
-        algebraic_pss /= sum(algebraic_pss)
-
-        # Get an initial flux estimate using that
+        # Get an initial flux estimate using the numpy algebraic solver
         # Call with _set=False so you don't actually update self.JtargetSS
         last_flux = self.get_steady_state_target_flux(pSS=algebraic_pss, _set=False)
 
@@ -3076,7 +3080,6 @@ class modelWE:
             log.debug(f"\t Flux convergence criterion is {flux_convergence_criterion}")
 
             if N > 0:
-                assert last_flux >= 0, "Got a negative flux, something is wrong!"
                 if last_flux == 0 and not flux_warned:
                     log.warning(
                         "Flux is 0, so will only converge after max iterations. "
