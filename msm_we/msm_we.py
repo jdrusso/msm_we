@@ -3058,12 +3058,20 @@ class modelWE:
         log.info("DONE")
         self.pSS = last_pSS
 
-    def get_steady_state_algebraic(self):
+    def get_steady_state_algebraic(self, max_iters=1000, check_negative=True, set=True):
         """
         Compute the steady-state distribution as the eigenvectors of the transition matrix.
 
         Updates:
             - `self.pSS`
+
+        Parameters
+        ----------
+        max_iters: int, optional
+            Defaults to 1000. Number of power-method iterations to run if the numpy eigensolver returns negative elements.
+
+        check_negative: bool, optional
+            Defaults to True. If True, then raise an Exception if there are negative elements in the normalized pSS.
 
         Returns
         -------
@@ -3091,11 +3099,10 @@ class modelWE:
         #   This causes hiccups in the eigensolver. However, we can't just zero these out (as attempted above),
         #   because these values are often important.
         # So, if there are any negative elements, try to correct the NP eigensolver result using the matrix method
-        if sum(pSS < 0) > 0:
+        if sum(pSS < 0) > 0 and max_iters > 0:
             log.info(
                 "Negative elements in pSS after normalization, attempting to correct with matrix power method."
             )
-            max_iters = 1000
             pSS_last = pSS
             _tmatrix = self.Tmatrix.copy()
 
@@ -3118,11 +3125,27 @@ class modelWE:
             else:
                 pSS = pSS_new
 
-        assert np.all(
-            pSS >= 0
-        ), f"Some negative elements in steady-state distribution: {pSS}"
+        elif max_iters == 0:
+            log.debug(
+                "Negative elements in pSS after normalization, "
+                "but max_iters=0 so not attempting to correct with power method."
+            )
 
-        self.pSS = pSS
+        if not np.all(pSS >= 0):
+
+            if check_negative:
+                assert np.all(
+                    pSS >= 0
+                ), f"Some negative elements in steady-state distribution: {pSS}"
+            else:
+                log.warning(
+                    "Some negative  elements in pSS... Ignoring, and setting model.pSS anyways."
+                )
+
+        if set:
+            self.pSS = pSS
+        else:
+            return pSS
 
     def get_steady_state_matrixpowers(self, conv):
         """
