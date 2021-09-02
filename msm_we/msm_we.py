@@ -2857,7 +2857,9 @@ class modelWE:
         # TODO: You don't actually need to rediscretize every point -- just the removed ones.  Do this  later to make
         #   this more efficient.
         self.dtrajs = []
-        for iteration in tqdm.tqdm(range(1, self.maxIter), desc="Discretization"):
+        for iteration in tqdm.tqdm(
+            range(1, self.maxIter), desc="Post-cleaning rediscretization"
+        ):
             iter_coords = self.get_iter_coordinates(iteration)
 
             # Skip if  this is an empty iteration
@@ -3042,7 +3044,6 @@ class modelWE:
         last_flux = self.get_steady_state_target_flux(pSS=algebraic_pss, _set=False)
 
         # ## Next, use that as an initial guess  for inverse iteration
-
         last_pSS = algebraic_pss
 
         log.debug(f"Initial flux: {last_flux}\n")
