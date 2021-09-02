@@ -3097,6 +3097,9 @@ class modelWE:
             elif N == max_iters - 1 and not last_flux == 0:
                 log.warning("Flux is nonzero and did not converge!")
 
+        assert (last_pSS >= 0).all(), "Negative elements in pSS"
+        assert last_flux >= 0, "Negative flux estimate from this pSS"
+
         log.info("DONE")
         self.pSS = last_pSS
 
