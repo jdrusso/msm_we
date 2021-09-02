@@ -3249,7 +3249,7 @@ class modelWE:
         # Get a list of all the states that AREN'T targets, since we want to sum up
         nTargets = self.indTargets.size
         indNotTargets = np.setdiff1d(range(self.nBins), self.indTargets)
-        log.debug(f"Non-target states are those with index {indNotTargets}")
+        # log.debug(f"Non-target states are those with index {indNotTargets}")
 
         Jt = 0.0
         # Add up the total flux into each of the targets
