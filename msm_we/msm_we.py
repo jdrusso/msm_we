@@ -1985,8 +1985,12 @@ class modelWE:
                     continue
 
                 if cluster_idx in self.removed_clusters:
+
+                    raise Exception(
+                        "This dtraj point was in a removed cluster -- this should never happen!"
+                    )
                     # log.debug(f"Skipping cluster {cluster_idx}")
-                    continue
+                    # continue
 
                 if cluster_idx not in cluster_structures.keys():
                     cluster_structures[cluster_idx] = []
@@ -2558,6 +2562,8 @@ class modelWE:
         self.errorWeight = 0.0
         self.errorCount = 0
 
+        self._fluxMatrixParams = [n_lag, first_iter, last_iter]
+
         # +2 because the basis and target states are the last two indices
         fluxMatrix = np.zeros((self.n_clusters + 2, self.n_clusters + 2))
         nI = 0
@@ -2819,14 +2825,14 @@ class modelWE:
         log.debug(f"Removed clusters were {removed_clusters}")
         self.removed_clusters = removed_clusters
 
+        # TODO: Since I re-discretize below, this is no longer necessary.
+        #  For now, set it to 1:1 for backwards compatibility
         # After cleaning, the cluster indices may no longer be consecutive.
         #  So, when I do the cleaning, I need to build a mapping of old, nonconsecutive cluster indices from the
         #  non-cleaned matrix, to new, consecutive indices.
         # That's like collapsing the nonconsecutive list. In other words, imagine I started with 5 clusters [0,1,2,3,4]
         #   and clean cluster 2. Now, I'll still have clusters labeled as [0,1,3,4], but my steady-state distribution
         #   is only 4 elements. So indexing element 4 won't do anything.
-
-        # TODO: Define this in __init__
         cluster_mapping = {x: x for x in range(self.n_clusters + 2)}
         n_removed = 0
         for key in cluster_mapping.keys():
@@ -2836,6 +2842,36 @@ class modelWE:
 
         log.debug(f"New cluster mapping is  {cluster_mapping}")
         self.cluster_mapping = cluster_mapping
+        self.cluster_mapping = {
+            x: x for x in range(self.clusters.cluster_centers_.shape[0])
+        }
+
+        # Remove the bad clusters from the set of cluster centers. Thus, they won't be used by self.clusters.predict
+        #   in the future.
+        self.clusters.cluster_centers_ = np.delete(
+            self.clusters.cluster_centers_, removed_clusters, 0
+        )
+
+        # Re-discretize dtrajs. This uses the method used in cluster_coordinates for PCA, if it breaks for something
+        #   else that's  why.
+        # TODO: You don't actually need to rediscretize every point -- just the removed ones.  Do this  later to make
+        #   this more efficient.
+        self.dtrajs = []
+        for iteration in tqdm.tqdm(range(1, self.maxIter), desc="Discretization"):
+            iter_coords = self.get_iter_coordinates(iteration)
+
+            # Skip if  this is an empty iteration
+            if iter_coords.shape[0] == 0:
+                continue
+
+            transformed_coords = self.coordinates.transform(
+                self.processCoordinates(iter_coords)
+            )
+
+            self.dtrajs.append(self.clusters.predict(transformed_coords))
+
+        # Rebuild the fluxmatrix with whatever params were originally provided
+        self.get_fluxMatrix(*self._fluxMatrixParams)
 
         # Update self.n_clusters to account for any removed clusters
         self.n_clusters -= n_removed
