@@ -2852,8 +2852,6 @@ class modelWE:
             self.clusters.cluster_centers_, removed_clusters, 0
         )
 
-        # Re-discretize dtrajs. This uses the method used in cluster_coordinates for PCA, if it breaks for something
-        #   else that's  why.
         # TODO: You don't actually need to rediscretize every point -- just the removed ones.  Do this  later to make
         #   this more efficient.
         self.dtrajs = []
@@ -2874,11 +2872,11 @@ class modelWE:
 
         self.removed_clusters = []
 
-        # Rebuild the fluxmatrix with whatever params were originally provided
-        self.get_fluxMatrix(*self._fluxMatrixParams)
-
         # Update self.n_clusters to account for any removed clusters
         self.n_clusters -= n_removed
+
+        # Rebuild the fluxmatrix with whatever params were originally provided
+        self.get_fluxMatrix(*self._fluxMatrixParams)
 
     def get_model_clusters(self):
         """
