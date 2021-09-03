@@ -1775,7 +1775,8 @@ class modelWE:
             #   variance cutoff.
             # This is necessary because with incremental PCA, there's no way to do this ahead of time.
             variance_cutoff = 0.95
-            total_num_iterations = len(self.numSegments)
+            # total_num_iterations = len(self.numSegments)
+            total_num_iterations = self.maxIter
             first_iter = max(1, int(total_num_iterations * 0.9))
             rough_ipca = iPCA()
             for iteration in tqdm.tqdm(
