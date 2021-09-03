@@ -474,11 +474,10 @@ class MatrixFPT:
 
         for istateIndex in range(len(ini_state)):
             prevFmatrix = tmatrix.copy()
-            # prevFmatrix[:] = tmatrix[:]
             Fmatrix = np.zeros((new_n_states, new_n_states))
             list_of_pdfs[istateIndex, 0] = tmatrix[ini_state[istateIndex], f_state]
 
-            cls._calc_fmatrix(
+            cls.calc_fmatrix(
                 Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, max_n_lags, ini_state, istateIndex, f_state,
             )
 
@@ -492,8 +491,9 @@ class MatrixFPT:
         density_vs_t = np.array([[0, 0]] + [[(i + 1) * dt2, dens / dt2] for i, dens in enumerate(density)])
         return density_vs_t
 
-    def _calc_fmatrix(
-        self, Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, max_n_lags, ini_state, istateIndex, f_state,
+    @classmethod
+    def calc_fmatrix(
+        cls, Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, max_n_lags, ini_state, istateIndex, f_state,
     ):
         for time in range(1, max_n_lags):
             Fmatrix = np.dot(tmatrix, prevFmatrix - np.diag(np.diag(prevFmatrix)))
