@@ -421,6 +421,7 @@ class MatrixFPT:
     @classmethod
     def fpt_distribution(
         cls, t_matrix, initial_state, final_state, initial_distrib, max_n_lags=500, lag_time=1, dt=1.0,
+            clean_recycling=False
     ):
         """Calculated distribution of first passage times from transition matrix
 
@@ -442,8 +443,11 @@ class MatrixFPT:
                             Lag time used, the trajectory is "observed" every lag_time
                             time steps
 
-        dt:                 float,
+        dt:                 float
                             Time step
+
+        clean_recycling:    bool
+                            Cleaning the recycling of steady state simulation if True
 
         Returns
         -------
@@ -466,6 +470,11 @@ class MatrixFPT:
             for j in range(len(ini_state)):
                 if f_state[i] < ini_state[j]:
                     ini_state[j] = ini_state[j] - 1
+
+        # clean the recycling
+        if clean_recycling:
+            tmatrix[f_state, :] = 0.0
+            tmatrix[f_state, f_state] = 0.0
 
         f_state = f_state[0]
         new_n_states = len(tmatrix)
@@ -499,6 +508,119 @@ class MatrixFPT:
             Fmatrix = np.dot(tmatrix, prevFmatrix - np.diag(np.diag(prevFmatrix)))
 
             list_of_pdfs[istateIndex, time] = Fmatrix[ini_state[istateIndex], f_state]
+            prevFmatrix = Fmatrix
+
+    @classmethod
+    def fpt_distribution_log(
+        cls, t_matrix, initial_state, final_state, initial_distrib, max_n_lags=100, lag_time=1, dt=1.0,
+            clean_recycling=False
+    ):
+        """Calculated distribution of first passage times from transition matrix
+
+        Parameters:
+        -----------
+        t_matrix:           Numpy 2D array
+
+        initial_state,
+        final_states:       List of integer numbers
+                            Specifies the indexes of initial and final states.
+
+        ini_probs:          List of float, default is None
+                            initial probabilities for initial states
+
+        max_n_lags:          Integer
+                            maximum number of lags
+
+        lag_time:           Integer
+                            Lag time used, the trajectory is "observed" every lag_time
+                            time steps
+
+        dt:                 float
+                            Time step
+
+        clean_recycling:    bool
+                            Cleaning the recycling of steady state simulation if True
+
+        Returns
+        -------
+        Distributions of first passage times
+
+        """
+
+        # copy everything since they are going to be modified
+        tmatrix = np.copy(t_matrix)
+
+        ini_state = list(initial_state)
+        f_state = sorted(list(final_state))
+
+        assert len(ini_state) == len(initial_distrib)
+        # Designate target state 0 as the only target state,
+        # and adding all the fluxes into the other target states into state 0.
+        # Namely reassign any flux into any target state into target state 0.
+        tmatrix[:, f_state[0]] = np.sum(tmatrix[:, f_state], axis=1)
+
+        # Remove all other target states
+        for i in range(len(f_state) - 1, 0, -1):
+            tmatrix = np.delete(tmatrix, f_state[i], axis=1)
+            tmatrix = np.delete(tmatrix, f_state[i], axis=0)
+
+            # For each initial state with a greater index than the target state we're cleaning.
+            # Decrement the index by 1 to account for the removed, cleaned state.
+            for j in range(len(ini_state)):
+                if f_state[i] < ini_state[j]:
+                    ini_state[j] = ini_state[j] - 1
+
+        # Clean the recycling if necessary.
+        # Get rid of recycling boundary conditions, otherwise  we're getting a  CDF
+        if clean_recycling:
+            tmatrix[f_state, :] = 0.0
+            tmatrix[f_state, f_state] = 0.0
+
+        # The new target state is the single state since all other target states have been reassigned to.
+        f_state = f_state[0]
+        new_n_states = len(tmatrix)
+        list_of_pdfs = np.empty((len(ini_state), max_n_lags), dtype=np.float64)
+        prevFmatrix = np.empty_like(tmatrix)
+
+        # Set the list of lag time in logscale since FPT can be a wide distribution in several orders
+        lag_list = np.logspace(1, 12, max_n_lags, dtype=int)
+
+        # for each ini_state calculate the FPT distribution from transition matrix
+        for istateIndex in range(len(ini_state)):
+            prevFmatrix = tmatrix.copy()
+            Fmatrix = np.zeros((new_n_states, new_n_states))
+            list_of_pdfs[istateIndex, 0] = tmatrix[ini_state[istateIndex], f_state]
+
+            cls.calc_fmatrix_log(
+                Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, lag_list, ini_state, istateIndex, f_state,
+            )
+
+        # Nomalize the FPT distribution and output
+        sum_ = np.sum(initial_distrib)
+        initial_distrib = np.array(initial_distrib)
+
+        density = np.sum(initial_distrib[:, None] * list_of_pdfs, axis=0) / sum_
+
+        dt2 = lag_time * dt
+
+        density_vs_t = np.array([[0, 0]] +
+                                [[nlags * dt2, dens / dt2] for nlags, dens in zip(lag_list, density)])
+        return density_vs_t
+
+    @classmethod
+    def calc_fmatrix_log(
+        cls, Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, lag_list, ini_state, istateIndex, f_state,
+    ):
+        # Calculate FPT distribution from a the recursive formula, Eq. 3 in the paper below:
+        # E. Suarez, A. J. Pratt, L. T. Chong, D. M. Zuckerman, Protein Science 26, 67-78 (2016).
+        for time_index, time in enumerate(lag_list):
+            # obtain the new transition matrix from time_index-1 to time_index
+            if time_index == 0:
+                tmatrix_new = np.linalg.matrix_power(tmatrix, time)
+            else:
+                tmatrix_new = np.linalg.matrix_power(tmatrix, time-lag_list[time_index-1])
+            Fmatrix = np.dot(tmatrix_new, prevFmatrix - np.diag(np.diag(prevFmatrix)))
+            list_of_pdfs[istateIndex, time_index] = Fmatrix[ini_state[istateIndex], f_state]
             prevFmatrix = Fmatrix
 
 

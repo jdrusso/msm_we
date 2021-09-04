@@ -65,3 +65,19 @@ class TestMFPT(unittest.TestCase):
                   [9.,          0.04006621],
                   [10.,         0.03375926]]
         self.assertTrue(np.allclose(fpt_distribution, result))
+
+    def testMatrixFPTDistributionLog(self):
+        fpt_distribution = MatrixFPT.fpt_distribution_log(
+            self.T, [0], [4], [0.5], max_n_lags=10, clean_recycling=True)
+        result = [[0.00000000e+000, 0.00000000e+000],
+                  [1.00000000e+001, 2.84435545e-002],
+                  [1.66000000e+002, 7.03243405e-014],
+                  [2.78200000e+003, 1.61682184e-208],
+                  [4.64150000e+004, 0.00000000e+000],
+                  [7.74263000e+005, 0.00000000e+000],
+                  [1.29154960e+007, 0.00000000e+000],
+                  [2.15443469e+008, 0.00000000e+000],
+                  [3.59381366e+009, 0.00000000e+000],
+                  [5.99484250e+010, 0.00000000e+000],
+                  [1.00000000e+012, 0.00000000e+000]]
+        self.assertTrue(np.allclose(fpt_distribution, result))
