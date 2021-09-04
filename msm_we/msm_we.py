@@ -7,6 +7,7 @@ import tqdm
 from functools import partialmethod
 import sys
 import h5py
+import concurrent
 
 from scipy.sparse import coo_matrix
 import scipy.sparse as sparse
@@ -1741,6 +1742,47 @@ class modelWE:
         for iS in range(self.nSeg):
             self.trajSet[iS] = traj_iters[iS, last_index[iS] :, :, :]
 
+    def do_pca(self, arg):
+        rough_pca, iteration, processCoordinates = arg
+        iter_coords = self.get_iter_coordinates(iteration)
+
+        # If  no good coords in this iteration, skip it
+        if iter_coords.shape[0] == 0:
+            return rough_pca
+
+        processed_iter_coords = processCoordinates(iter_coords)
+        rough_pca.partial_fit(processed_iter_coords)
+
+        log.debug(f"{rough_pca.n_samples_seen_} samples seen")
+
+        return rough_pca
+
+    def do_full_pca(self, arg):
+
+        ipca, iteration, processCoordinates, components_for_var = arg
+
+        iter_coords = self.get_iter_coordinates(iteration)
+
+        used_iters = 0
+        # Keep adding coords until you have more than your components
+        while iter_coords.shape[0] <= components_for_var:
+
+            used_iters += 1
+
+            _iter_coords = self.get_iter_coordinates(iteration + used_iters)
+            if _iter_coords.shape[0] == 0:
+                continue
+
+            iter_coords = np.append(iter_coords, _iter_coords, axis=0)
+
+        processed_iter_coords = processCoordinates(iter_coords)
+        log.debug(
+            f"About to run iPCA on  {processed_iter_coords.shape} processed coords"
+        )
+        ipca.partial_fit(processed_iter_coords)
+
+        return ipca, used_iters
+
     def dimReduce(self):
         """
         Dimensionality reduction using the scheme specified in initialization.
@@ -1777,19 +1819,19 @@ class modelWE:
             variance_cutoff = 0.95
             # total_num_iterations = len(self.numSegments)
             total_num_iterations = self.maxIter
+
             first_iter = max(1, int(total_num_iterations * 0.9))
+
             rough_ipca = iPCA()
+
             for iteration in tqdm.tqdm(
                 range(first_iter, total_num_iterations), desc="Initial iPCA"
             ):
-                iter_coords = self.get_iter_coordinates(iteration)
 
-                # If  no good coords in this iteration, skip it
-                if iter_coords.shape[0] == 0:
-                    continue
-
-                processed_iter_coords = self.processCoordinates(iter_coords)
-                rough_ipca.partial_fit(processed_iter_coords)
+                with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+                    rough_ipca = executor.submit(
+                        self.do_pca, [rough_ipca, iteration, self.processCoordinates]
+                    ).result()
 
             components_for_var = (
                 np.argmax(
@@ -1803,27 +1845,26 @@ class modelWE:
             # Now do the PCA again, with that many components, using all the iterations.
             ipca = iPCA(n_components=components_for_var)
 
-            _iter_coords = None
-            continued = False
+            extra_iters_used = 0
             for iteration in tqdm.tqdm(range(1, total_num_iterations), desc="iPCA"):
-                _iter_coords = self.get_iter_coordinates(iteration)
 
-                # If no good coords in this iteration, skip it
-                if _iter_coords.shape[0] == 0:
+                while extra_iters_used > 0:
+                    extra_iters_used -= 1
                     continue
 
-                if not continued:
-                    iter_coords = _iter_coords
-                elif continued:
-                    iter_coords = np.append(iter_coords, _iter_coords, axis=0)
-
-                if iter_coords.shape[0] <= components_for_var:
-                    continued = True
-                    continue
-
-                continued = False
-                processed_iter_coords = self.processCoordinates(iter_coords)
-                ipca.partial_fit(processed_iter_coords)
+                # Try some stuff to help memory management. I think  a lot of memory is not being explicitly released
+                #   here when I'm looping, because I can watch my swap usage steadily grow while it's running this loop.
+                # https://stackoverflow.com/questions/1316767/how-can-i-explicitly-free-memory-in-python has some good
+                #   details  on how memory may be freed by Python, but not necessarily recognized  as free by the OS.
+                # One "guaranteed" way to free  memory back to the OS that's been released by Python is to do  the memory
+                #   intensive operation  in a subprocess. So, maybe I need to do my partial fit in a subprocess.
+                # In fact, I first moved partial_fit alone to a subprocess, but that didn't help. The issue isn't
+                #   partial_fit, it's actually loading the coords.
+                with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+                    ipca, extra_iters_used = executor.submit(
+                        self.do_full_pca,
+                        [ipca, iteration, self.processCoordinates, components_for_var],
+                    ).result()
 
             self.coordinates = ipca
             self.ndim = components_for_var
@@ -1871,16 +1912,16 @@ class modelWE:
             return coords
 
     # def processCoordinates(self, coords):
-    def processCoordinates(self):
-        """
-        User-overrideable function to process coordinates.
-
-        This defines the featurization process.
-        It takes in takes in an array of the full set of coordinates, and spits out an array of the feature coordinates.
-        That array is then passed to functions like coor.pca(), coor.vamp(), or used directly if dimReduceMethod=="none".
-        """
-
-        raise NotImplementedError
+    # def processCoordinates(self):
+    #     """
+    #     User-overrideable function to process coordinates.
+    #
+    #     This defines the featurization process.
+    #     It takes in takes in an array of the full set of coordinates, and spits out an array of the feature coordinates.
+    #     That array is then passed to functions like coor.pca(), coor.vamp(), or used directly if dimReduceMethod=="none".
+    #     """
+    #
+    #     raise NotImplementedError
 
     def reduceCoordinates(self, coords):
         """
