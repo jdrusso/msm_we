@@ -1820,14 +1820,16 @@ class modelWE:
             # total_num_iterations = len(self.numSegments)
             total_num_iterations = self.maxIter
 
-            first_iter = max(1, int(total_num_iterations * 0.9))
+            first_rough_iter = max(1, int(total_num_iterations * 0.9))
+            first_iter = 1
 
             rough_ipca = iPCA()
 
             for iteration in tqdm.tqdm(
-                range(first_iter, total_num_iterations), desc="Initial iPCA"
+                range(first_rough_iter, total_num_iterations), desc="Initial iPCA"
             ):
 
+                # TODO: Allow  chunking here so you don't have  to  go 1  by  1, but N by N
                 with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
                     rough_ipca = executor.submit(
                         self.do_pca, [rough_ipca, iteration, self.processCoordinates]
@@ -1846,10 +1848,13 @@ class modelWE:
             ipca = iPCA(n_components=components_for_var)
 
             extra_iters_used = 0
-            for iteration in tqdm.tqdm(range(1, total_num_iterations), desc="iPCA"):
+            for iteration in tqdm.tqdm(
+                range(first_iter, total_num_iterations), desc="iPCA"
+            ):
 
-                while extra_iters_used > 0:
+                if extra_iters_used > 0:
                     extra_iters_used -= 1
+                    log.debug(f"Already processed  iter  {iteration}")
                     continue
 
                 # Try some stuff to help memory management. I think  a lot of memory is not being explicitly released
