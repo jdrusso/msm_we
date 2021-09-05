@@ -28,7 +28,10 @@ class TestNonMarkovModel(unittest.TestCase):
 
     def testMFPTS(self):
         mean_fpts = self.color_model.mfpts()
-        self.assertDictEqual(mean_fpts, {'mfptAB': 2.991249925379562, 'mfptBA': 3.0027466707370256})
+        ref_mfpts = {'mfptAB': 2.991249925379562, 'mfptBA': 3.0027466707370256}
+
+        self.assertTrue(np.isclose(mean_fpts['mfptAB'], ref_mfpts['mfptAB']))
+        self.assertTrue(np.isclose(mean_fpts['mfptBA'], ref_mfpts['mfptBA']))
 
     def testEmpiricalMFPTs(self):
         empirical_mfpts = {
