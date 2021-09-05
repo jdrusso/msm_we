@@ -53,6 +53,7 @@ class TestMFPT(unittest.TestCase):
 
     def testMatrixFPTDistribution(self):
         fpt_distribution = MatrixFPT.fpt_distribution(self.T, [0], [4], [0.5], max_n_lags=10)
+        print(fpt_distribution)
         result = [[0.,          0.        ],
                   [1.,          0.09250005],
                   [2.,          0.2001746 ],
@@ -67,8 +68,8 @@ class TestMFPT(unittest.TestCase):
         self.assertTrue(np.allclose(fpt_distribution, result))
 
     def testMatrixFPTDistributionLog(self):
-        fpt_distribution = MatrixFPT.fpt_distribution_log(
-            self.T, [0], [4], [0.5], max_n_lags=10, clean_recycling=True)
+        fpt_distribution = MatrixFPT.fpt_distribution(
+            self.T, [0], [4], [0.5], max_n_lags=10, clean_recycling=True, logscale=True)
         result = [[0.00000000e+000, 0.00000000e+000],
                   [1.00000000e+001, 2.84435545e-002],
                   [1.66000000e+002, 7.03243405e-014],

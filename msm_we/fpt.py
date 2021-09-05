@@ -420,100 +420,8 @@ class MatrixFPT:
 
     @classmethod
     def fpt_distribution(
-        cls, t_matrix, initial_state, final_state, initial_distrib, max_n_lags=500, lag_time=1, dt=1.0,
-            clean_recycling=False
-    ):
-        """Calculated distribution of first passage times from transition matrix
-
-        Parameters:
-        -----------
-        t_matrix:           Numpy 2D array
-
-        initial_state,
-        final_states:       List of integer numbers
-                            Specifies the indexes of initial and final states.
-
-        ini_probs:          List of float, default is None
-                            initial probabilities for initial states
-
-        max_n_lag:          Integer
-                            maximum number of lags
-
-        lag_time:           Integer
-                            Lag time used, the trajectory is "observed" every lag_time
-                            time steps
-
-        dt:                 float
-                            Time step
-
-        clean_recycling:    bool
-                            Cleaning the recycling of steady state simulation if True
-
-        Returns
-        -------
-        Distributions of first passage times
-
-        """
-
-        # copy everything since they are going to be modified
-        tmatrix = np.copy(t_matrix)
-        ini_state = list(initial_state)
-        f_state = sorted(list(final_state))
-
-        assert len(ini_state) == len(initial_distrib)
-
-        tmatrix[:, f_state[0]] = np.sum(tmatrix[:, f_state], axis=1)
-
-        for i in range(len(f_state) - 1, 0, -1):
-            tmatrix = np.delete(tmatrix, f_state[i], axis=1)
-            tmatrix = np.delete(tmatrix, f_state[i], axis=0)
-            for j in range(len(ini_state)):
-                if f_state[i] < ini_state[j]:
-                    ini_state[j] = ini_state[j] - 1
-
-        # clean the recycling
-        if clean_recycling:
-            tmatrix[f_state, :] = 0.0
-            tmatrix[f_state, f_state] = 0.0
-
-        f_state = f_state[0]
-        new_n_states = len(tmatrix)
-        list_of_pdfs = np.empty((len(ini_state), max_n_lags), dtype=np.float64)
-        prevFmatrix = np.empty_like(tmatrix)
-
-        for istateIndex in range(len(ini_state)):
-            prevFmatrix = tmatrix.copy()
-            Fmatrix = np.zeros((new_n_states, new_n_states))
-            list_of_pdfs[istateIndex, 0] = tmatrix[ini_state[istateIndex], f_state]
-
-            cls.calc_fmatrix(
-                Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, max_n_lags, ini_state, istateIndex, f_state,
-            )
-
-        sum_ = np.sum(initial_distrib)
-        initial_distrib = np.array(initial_distrib)
-
-        density = np.sum(initial_distrib[:, None] * list_of_pdfs, axis=0) / sum_
-
-        dt2 = lag_time * dt
-
-        density_vs_t = np.array([[0, 0]] + [[(i + 1) * dt2, dens / dt2] for i, dens in enumerate(density)])
-        return density_vs_t
-
-    @classmethod
-    def calc_fmatrix(
-        cls, Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, max_n_lags, ini_state, istateIndex, f_state,
-    ):
-        for time in range(1, max_n_lags):
-            Fmatrix = np.dot(tmatrix, prevFmatrix - np.diag(np.diag(prevFmatrix)))
-
-            list_of_pdfs[istateIndex, time] = Fmatrix[ini_state[istateIndex], f_state]
-            prevFmatrix = Fmatrix
-
-    @classmethod
-    def fpt_distribution_log(
         cls, t_matrix, initial_state, final_state, initial_distrib, max_n_lags=100, lag_time=1, dt=1.0,
-            clean_recycling=False
+            clean_recycling=False, logscale=False
     ):
         """Calculated distribution of first passage times from transition matrix
 
@@ -528,18 +436,22 @@ class MatrixFPT:
         ini_probs:          List of float, default is None
                             initial probabilities for initial states
 
-        max_n_lags:          Integer
+        max_n_lags:         Integer
                             maximum number of lags
 
         lag_time:           Integer
                             Lag time used, the trajectory is "observed" every lag_time
                             time steps
 
-        dt:                 float
+        dt:                 Float
                             Time step
 
-        clean_recycling:    bool
+        clean_recycling:    Bool
                             Cleaning the recycling of steady state simulation if True
+
+        logscale:           Bool
+                            Option to use logscale for FPT time in the distribution
+
 
         Returns
         -------
@@ -582,16 +494,18 @@ class MatrixFPT:
         list_of_pdfs = np.empty((len(ini_state), max_n_lags), dtype=np.float64)
         prevFmatrix = np.empty_like(tmatrix)
 
-        # Set the list of lag time in logscale since FPT can be a wide distribution in several orders
-        lag_list = np.logspace(1, 12, max_n_lags, dtype=int)
-
+        # Option to set the list of lag time in logscale since FPT can be a wide distribution in several orders
+        if logscale:
+            lag_list = np.logspace(1, 12, max_n_lags, dtype=int)
+        else:
+            lag_list = np.arange(0, max_n_lags, dtype=int)
         # for each ini_state calculate the FPT distribution from transition matrix
         for istateIndex in range(len(ini_state)):
             prevFmatrix = tmatrix.copy()
             Fmatrix = np.zeros((new_n_states, new_n_states))
             list_of_pdfs[istateIndex, 0] = tmatrix[ini_state[istateIndex], f_state]
 
-            cls.calc_fmatrix_log(
+            cls.calc_fmatrix(
                 Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, lag_list, ini_state, istateIndex, f_state,
             )
 
@@ -602,13 +516,16 @@ class MatrixFPT:
         density = np.sum(initial_distrib[:, None] * list_of_pdfs, axis=0) / sum_
 
         dt2 = lag_time * dt
-
-        density_vs_t = np.array([[0, 0]] +
+        if logscale:
+            density_vs_t = np.array([[0, 0]] +
                                 [[nlags * dt2, dens / dt2] for nlags, dens in zip(lag_list, density)])
+        else:
+            density_vs_t = np.array([[0, 0]] +
+                                   [[(i+1) * dt2, dens / dt2] for i, dens in zip(lag_list, density)])
         return density_vs_t
 
     @classmethod
-    def calc_fmatrix_log(
+    def calc_fmatrix(
         cls, Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, lag_list, ini_state, istateIndex, f_state,
     ):
         # Calculate FPT distribution from a the recursive formula, Eq. 3 in the paper below:
