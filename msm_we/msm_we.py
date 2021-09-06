@@ -1835,6 +1835,9 @@ class modelWE:
                 # That's because processCoordinates is monkey-patched in. With 'spawn' (i.e. without fork), the module
                 #   is re-imported in the child process. In the reimported  module, processCoordinates is undefined.
                 # With 'fork', it preserves the monkey-patched version.
+                # Additionally, 'fork' is a little faster than  spawn. Ironically, that's usually at the cost  of memory
+                #   usage. But here, the memory being used by the main thread (and therefore being copied here) isn't
+                #   that great -- the memory issue stems from it not being freed up between successive calls.
                 with concurrent.futures.ProcessPoolExecutor(
                     max_workers=1, mp_context=mp.get_context("fork")
                 ) as executor:
@@ -2132,6 +2135,8 @@ class modelWE:
 
         dtrajs = kmeans_model.predict(transformed_coords)
 
+        # log.debug(f"Took {used_iters} extra iterations to process iteration {iteration}")
+
         return dtrajs, used_iters
 
     def cluster_coordinates(self, n_clusters, streaming=False, **_cluster_args):
@@ -2300,7 +2305,7 @@ class modelWE:
                 with concurrent.futures.ProcessPoolExecutor(
                     max_workers=1, mp_context=mp.get_context("fork")
                 ) as executor:
-                    dtrajs, extra_iter_used = executor.submit(
+                    dtrajs, extra_iters_used = executor.submit(
                         self.do_discretization,
                         [cluster_model, iteration, self.processCoordinates],
                     ).result()
@@ -2720,7 +2725,14 @@ class modelWE:
             ):
                 log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
 
-                fluxMatrixI = self.get_iter_fluxMatrix(iS)
+                # fluxMatrixI = self.get_iter_fluxMatrix(iS)
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
+                    fluxMatrixI = executor.submit(
+                        self.get_iter_fluxMatrix, iS,
+                    ).result()
+
                 fluxMatrix = fluxMatrix + fluxMatrixI
                 nI = nI + 1
 
