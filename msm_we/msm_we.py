@@ -2978,20 +2978,25 @@ class modelWE:
         # TODO: You don't actually need to rediscretize every point -- just the removed ones.  Do this  later to make
         #   this more efficient.
         self.dtrajs = []
+        extra_iters_used = 0
         for iteration in tqdm.tqdm(
             range(1, self.maxIter), desc="Post-cleaning rediscretization"
         ):
-            iter_coords = self.get_iter_coordinates(iteration)
 
-            # Skip if  this is an empty iteration
-            if iter_coords.shape[0] == 0:
+            if extra_iters_used > 0:
+                extra_iters_used -= 1
+                log.debug(f"Already processed  iter  {iteration}")
                 continue
 
-            transformed_coords = self.coordinates.transform(
-                self.processCoordinates(iter_coords)
-            )
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=1, mp_context=mp.get_context("fork")
+            ) as executor:
+                dtrajs, extra_iters_used = executor.submit(
+                    self.do_discretization,
+                    [self.clusters, iteration, self.processCoordinates],
+                ).result()
 
-            self.dtrajs.append(self.clusters.predict(transformed_coords))
+            self.dtrajs.append(dtrajs)
 
         self.removed_clusters = []
 
