@@ -7,6 +7,8 @@ import tqdm
 from functools import partialmethod
 import sys
 import h5py
+import concurrent
+import multiprocessing as mp
 
 from scipy.sparse import coo_matrix
 import scipy.sparse as sparse
@@ -1741,6 +1743,47 @@ class modelWE:
         for iS in range(self.nSeg):
             self.trajSet[iS] = traj_iters[iS, last_index[iS] :, :, :]
 
+    def do_pca(self, arg):
+        rough_pca, iteration, processCoordinates = arg
+        iter_coords = self.get_iter_coordinates(iteration)
+
+        # If  no good coords in this iteration, skip it
+        if iter_coords.shape[0] == 0:
+            return rough_pca
+
+        processed_iter_coords = processCoordinates(iter_coords)
+        rough_pca.partial_fit(processed_iter_coords)
+
+        log.debug(f"{rough_pca.n_samples_seen_} samples seen")
+
+        return rough_pca
+
+    def do_full_pca(self, arg):
+
+        ipca, iteration, processCoordinates, components_for_var = arg
+
+        iter_coords = self.get_iter_coordinates(iteration)
+
+        used_iters = 0
+        # Keep adding coords until you have more than your components
+        while iter_coords.shape[0] <= components_for_var:
+
+            used_iters += 1
+
+            _iter_coords = self.get_iter_coordinates(iteration + used_iters)
+            if _iter_coords.shape[0] == 0:
+                continue
+
+            iter_coords = np.append(iter_coords, _iter_coords, axis=0)
+
+        processed_iter_coords = processCoordinates(iter_coords)
+        log.debug(
+            f"About to run iPCA on  {processed_iter_coords.shape} processed coords"
+        )
+        ipca.partial_fit(processed_iter_coords)
+
+        return ipca, used_iters
+
     def dimReduce(self):
         """
         Dimensionality reduction using the scheme specified in initialization.
@@ -1777,19 +1820,30 @@ class modelWE:
             variance_cutoff = 0.95
             # total_num_iterations = len(self.numSegments)
             total_num_iterations = self.maxIter
-            first_iter = max(1, int(total_num_iterations * 0.9))
+
+            first_rough_iter = max(1, int(total_num_iterations * 0.9))
+            first_iter = 1
+
             rough_ipca = iPCA()
+
             for iteration in tqdm.tqdm(
-                range(first_iter, total_num_iterations), desc="Initial iPCA"
+                range(first_rough_iter, total_num_iterations), desc="Initial iPCA"
             ):
-                iter_coords = self.get_iter_coordinates(iteration)
 
-                # If  no good coords in this iteration, skip it
-                if iter_coords.shape[0] == 0:
-                    continue
-
-                processed_iter_coords = self.processCoordinates(iter_coords)
-                rough_ipca.partial_fit(processed_iter_coords)
+                # TODO: Allow  chunking here so you don't have  to  go 1  by  1, but N by N
+                # If you don't use 'fork' context here, this will break in Jupyter.
+                # That's because processCoordinates is monkey-patched in. With 'spawn' (i.e. without fork), the module
+                #   is re-imported in the child process. In the reimported  module, processCoordinates is undefined.
+                # With 'fork', it preserves the monkey-patched version.
+                # Additionally, 'fork' is a little faster than  spawn. Ironically, that's usually at the cost  of memory
+                #   usage. But here, the memory being used by the main thread (and therefore being copied here) isn't
+                #   that great -- the memory issue stems from it not being freed up between successive calls.
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
+                    rough_ipca = executor.submit(
+                        self.do_pca, [rough_ipca, iteration, self.processCoordinates]
+                    ).result()
 
             components_for_var = (
                 np.argmax(
@@ -1803,27 +1857,31 @@ class modelWE:
             # Now do the PCA again, with that many components, using all the iterations.
             ipca = iPCA(n_components=components_for_var)
 
-            _iter_coords = None
-            continued = False
-            for iteration in tqdm.tqdm(range(1, total_num_iterations), desc="iPCA"):
-                _iter_coords = self.get_iter_coordinates(iteration)
+            extra_iters_used = 0
+            for iteration in tqdm.tqdm(
+                range(first_iter, total_num_iterations), desc="iPCA"
+            ):
 
-                # If no good coords in this iteration, skip it
-                if _iter_coords.shape[0] == 0:
+                if extra_iters_used > 0:
+                    extra_iters_used -= 1
+                    log.debug(f"Already processed  iter  {iteration}")
                     continue
 
-                if not continued:
-                    iter_coords = _iter_coords
-                elif continued:
-                    iter_coords = np.append(iter_coords, _iter_coords, axis=0)
-
-                if iter_coords.shape[0] <= components_for_var:
-                    continued = True
-                    continue
-
-                continued = False
-                processed_iter_coords = self.processCoordinates(iter_coords)
-                ipca.partial_fit(processed_iter_coords)
+                # Try some stuff to help memory management. I think  a lot of memory is not being explicitly released
+                #   here when I'm looping, because I can watch my swap usage steadily grow while it's running this loop.
+                # https://stackoverflow.com/questions/1316767/how-can-i-explicitly-free-memory-in-python has some good
+                #   details  on how memory may be freed by Python, but not necessarily recognized  as free by the OS.
+                # One "guaranteed" way to free  memory back to the OS that's been released by Python is to do  the memory
+                #   intensive operation  in a subprocess. So, maybe I need to do my partial fit in a subprocess.
+                # In fact, I first moved partial_fit alone to a subprocess, but that didn't help. The issue isn't
+                #   partial_fit, it's actually loading the coords.
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
+                    ipca, extra_iters_used = executor.submit(
+                        self.do_full_pca,
+                        [ipca, iteration, self.processCoordinates, components_for_var],
+                    ).result()
 
             self.coordinates = ipca
             self.ndim = components_for_var
@@ -1871,16 +1929,16 @@ class modelWE:
             return coords
 
     # def processCoordinates(self, coords):
-    def processCoordinates(self):
-        """
-        User-overrideable function to process coordinates.
-
-        This defines the featurization process.
-        It takes in takes in an array of the full set of coordinates, and spits out an array of the feature coordinates.
-        That array is then passed to functions like coor.pca(), coor.vamp(), or used directly if dimReduceMethod=="none".
-        """
-
-        raise NotImplementedError
+    # def processCoordinates(self):
+    #     """
+    #     User-overrideable function to process coordinates.
+    #
+    #     This defines the featurization process.
+    #     It takes in takes in an array of the full set of coordinates, and spits out an array of the feature coordinates.
+    #     That array is then passed to functions like coor.pca(), coor.vamp(), or used directly if dimReduceMethod=="none".
+    #     """
+    #
+    #     raise NotImplementedError
 
     def reduceCoordinates(self, coords):
         """
@@ -2018,6 +2076,69 @@ class modelWE:
         log.debug("Cluster structure mapping completed.")
         log.debug(f"Cluster keys are {cluster_structures.keys()}")
 
+    def do_clustering(self, arg):
+
+        kmeans_model, iteration, cluster_args, processCoordinates = arg
+
+        min_coords = 1
+
+        # The first time we cluster, we need at least n_clusters datapoints.
+        # Before the first clustering has been done, cluster_centers_ is unset, so use that to know if  we're  on the
+        #   first round.
+        if not hasattr(kmeans_model, "cluster_centers_"):
+            log.debug(
+                f"First batch to k-means, need a minimum of {cluster_args['n_clusters']} segments"
+            )
+            min_coords = cluster_args["n_clusters"]
+
+        iter_coords = self.get_iter_coordinates(iteration)
+
+        used_iters = 0
+        # Keep adding coords until you have more than your components
+        while iter_coords.shape[0] <= min_coords:
+
+            used_iters += 1
+
+            _iter_coords = self.get_iter_coordinates(iteration + used_iters)
+            if _iter_coords.shape[0] == 0:
+                continue
+
+            iter_coords = np.append(iter_coords, _iter_coords, axis=0)
+
+            log.debug(f"Have {iter_coords.shape[0]}, need {min_coords}")
+
+        transformed_coords = self.coordinates.transform(processCoordinates(iter_coords))
+
+        kmeans_model.partial_fit(transformed_coords)
+
+        return kmeans_model, used_iters
+
+    def do_discretization(self, arg):
+
+        kmeans_model, iteration, processCoordinates = arg
+
+        iter_coords = self.get_iter_coordinates(iteration)
+
+        used_iters = 0
+        # Keep adding coords until you have more than your components
+        while iter_coords.shape[0] < 1:
+
+            used_iters += 1
+
+            _iter_coords = self.get_iter_coordinates(iteration + used_iters)
+            if _iter_coords.shape[0] == 0:
+                continue
+
+            iter_coords = np.append(iter_coords, _iter_coords, axis=0)
+
+        transformed_coords = self.coordinates.transform(processCoordinates(iter_coords))
+
+        dtrajs = kmeans_model.predict(transformed_coords)
+
+        # log.debug(f"Took {used_iters} extra iterations to process iteration {iteration}")
+
+        return dtrajs, used_iters
+
     def cluster_coordinates(self, n_clusters, streaming=False, **_cluster_args):
         """
         Use k-means to cluster coordinates into `n_clusters` cluster centers, and saves the resulting cluster object
@@ -2148,54 +2269,48 @@ class modelWE:
 
             self.dtrajs = []
 
-            continued = False
+            # continued = False
+            extra_iters_used = 0
             for iteration in tqdm.tqdm(range(1, self.maxIter), desc="Clustering"):
-                iter_coords = self.get_iter_coordinates(iteration)
 
-                # Skip if  this is an empty iteration
-                if iter_coords.shape[0] == 0:
+                if extra_iters_used > 0:
+                    extra_iters_used -= 1
+                    log.debug(f"Already processed  iter  {iteration}")
                     continue
 
-                _transformed_coords = self.coordinates.transform(
-                    self.processCoordinates(iter_coords)
-                )
-
-                if not continued:
-                    transformed_coords = _transformed_coords
-                elif continued:
-                    transformed_coords = np.append(
-                        transformed_coords, _transformed_coords, axis=0
-                    )
-
-                # This better pass, but just be sure.
-                assert type(cluster_model) is mini_kmeans
-
-                try:
-                    cluster_model.partial_fit(transformed_coords)
-                except ValueError:
-                    log.debug(
-                        "Not enough samples for the desired number of clusters, pulling"
-                        "more iterations."
-                    )
-                    continued = True
-                else:
-                    continued = False
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
+                    cluster_model, extra_iters_used = executor.submit(
+                        self.do_clustering,
+                        [
+                            cluster_model,
+                            iteration,
+                            cluster_args,
+                            self.processCoordinates,
+                        ],
+                    ).result()
 
             self.clusters = cluster_model
 
             # Now compute dtrajs from the final model
+            extra_iters_used = 0
             for iteration in tqdm.tqdm(range(1, self.maxIter), desc="Discretization"):
-                iter_coords = self.get_iter_coordinates(iteration)
 
-                # Skip if  this is an empty iteration
-                if iter_coords.shape[0] == 0:
+                if extra_iters_used > 0:
+                    extra_iters_used -= 1
+                    log.debug(f"Already processed  iter  {iteration}")
                     continue
 
-                transformed_coords = self.coordinates.transform(
-                    self.processCoordinates(iter_coords)
-                )
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
+                    dtrajs, extra_iters_used = executor.submit(
+                        self.do_discretization,
+                        [cluster_model, iteration, self.processCoordinates],
+                    ).result()
 
-                self.dtrajs.append(cluster_model.predict(transformed_coords))
+                self.dtrajs.append(dtrajs)
 
         elif self.dimReduceMethod == "vamp" and streaming:
 
@@ -2610,7 +2725,14 @@ class modelWE:
             ):
                 log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
 
-                fluxMatrixI = self.get_iter_fluxMatrix(iS)
+                # fluxMatrixI = self.get_iter_fluxMatrix(iS)
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
+                    fluxMatrixI = executor.submit(
+                        self.get_iter_fluxMatrix, iS,
+                    ).result()
+
                 fluxMatrix = fluxMatrix + fluxMatrixI
                 nI = nI + 1
 
@@ -2856,20 +2978,25 @@ class modelWE:
         # TODO: You don't actually need to rediscretize every point -- just the removed ones.  Do this  later to make
         #   this more efficient.
         self.dtrajs = []
+        extra_iters_used = 0
         for iteration in tqdm.tqdm(
             range(1, self.maxIter), desc="Post-cleaning rediscretization"
         ):
-            iter_coords = self.get_iter_coordinates(iteration)
 
-            # Skip if  this is an empty iteration
-            if iter_coords.shape[0] == 0:
+            if extra_iters_used > 0:
+                extra_iters_used -= 1
+                log.debug(f"Already processed  iter  {iteration}")
                 continue
 
-            transformed_coords = self.coordinates.transform(
-                self.processCoordinates(iter_coords)
-            )
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=1, mp_context=mp.get_context("fork")
+            ) as executor:
+                dtrajs, extra_iters_used = executor.submit(
+                    self.do_discretization,
+                    [self.clusters, iteration, self.processCoordinates],
+                ).result()
 
-            self.dtrajs.append(self.clusters.predict(transformed_coords))
+            self.dtrajs.append(dtrajs)
 
         self.removed_clusters = []
 
