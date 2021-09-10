@@ -420,7 +420,8 @@ class MatrixFPT:
 
     @classmethod
     def fpt_distribution(
-        cls, t_matrix, initial_state, final_state, initial_distrib, max_n_lags=100, lag_time=1, dt=1.0,
+        cls, t_matrix, initial_state, final_state, initial_distrib,
+            min_power=1, max_power=12, max_n_lags=100, lag_time=1, dt=1.0,
             clean_recycling=False, logscale=False
     ):
         """Calculated distribution of first passage times from transition matrix
@@ -436,8 +437,15 @@ class MatrixFPT:
         ini_probs:          List of float, default is None
                             initial probabilities for initial states
 
+        min_power,
+        max_power:          Integer
+                            The minimum and maximum power when the FPT distribution is
+                            shown in logscale such as (10^min_power, 10^max_power)*lag_time*dt.
+
         max_n_lags:         Integer
-                            maximum number of lags
+                            maximum number of lags when the FPT distribution is shown in linear
+                            scale such as (0, max_n_logs)*lag_time*dt. When in logscale, this is number
+                            of points to shown in the range of (10^min_power, 10^max_power)*lag_time*dt.
 
         lag_time:           Integer
                             Lag time used, the trajectory is "observed" every lag_time
@@ -496,7 +504,7 @@ class MatrixFPT:
 
         # Option to set the list of lag time in logscale since FPT can be a wide distribution in several orders
         if logscale:
-            lag_list = np.logspace(1, 12, max_n_lags, dtype=int)
+            lag_list = np.logspace(min_power, max_power, max_n_lags, dtype=int)
         else:
             lag_list = np.arange(0, max_n_lags, dtype=int)
         # for each ini_state calculate the FPT distribution from transition matrix
