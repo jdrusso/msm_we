@@ -507,6 +507,7 @@ class MatrixFPT:
             lag_list = np.logspace(min_power, max_power, max_n_lags, dtype=int)
         else:
             lag_list = np.arange(0, max_n_lags, dtype=int)
+
         # for each ini_state calculate the FPT distribution from transition matrix
         for istateIndex in range(len(ini_state)):
             prevFmatrix = tmatrix.copy()
@@ -525,11 +526,18 @@ class MatrixFPT:
 
         dt2 = lag_time * dt
         if logscale:
-            density_vs_t = np.array([[0, 0]] +
-                                [[nlags * dt2, dens / dt2] for nlags, dens in zip(lag_list, density)])
+            # For logscale the dts at different t are different, we need to let FPT(t)
+            # absorb them. Otherwise we have to use dt in variable size to calculate mean
+            # value such as integration of t*dt*FPT(t).
+            dens_list = [[0, 0]] + [[lag_list[0]*dt2, density[0]*lag_list[0]/dt2]]
+            for i in range(1, len(lag_list)):
+                dens_list += [[lag_list[i]*dt2, density[i]*(lag_list[i]-lag_list[i-1])/dt2]]
+            density_vs_t = np.array(dens_list)
         else:
             density_vs_t = np.array([[0, 0]] +
                                    [[(i+1) * dt2, dens / dt2] for i, dens in zip(lag_list, density)])
+        # normalized to 1
+        density_vs_t[:, 1] /= sum(density_vs_t[:, 1])
         return density_vs_t
 
     @classmethod
