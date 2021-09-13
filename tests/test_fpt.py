@@ -50,3 +50,35 @@ class TestMFPT(unittest.TestCase):
         self.assertTrue(np.isclose(max_comm_time, 14.446718700939037))
         self.assertEqual(a, 2)
         self.assertEqual(b, 4)
+
+    def testMatrixFPTDistribution(self):
+        fpt_distribution = MatrixFPT.fpt_distribution(self.T, [0], [4], [0.5], max_n_lags=10)
+        result = [[ 0.,          0.        ],
+                  [ 1.,          0.11289507],
+                  [ 2.,          0.24431041],
+                  [ 3.,          0.13232006],
+                  [ 4.,          0.11478687],
+                  [ 5.,          0.0968178 ],
+                  [ 6.,          0.08185738],
+                  [ 7.,          0.06886433],
+                  [ 8.,          0.05804509],
+                  [ 9.,          0.04890027],
+                  [10.,          0.04120272]]
+        self.assertTrue(np.allclose(fpt_distribution, result))
+
+    def testMatrixFPTDistributionLog(self):
+        fpt_distribution = MatrixFPT.fpt_distribution(
+            self.T, [0], [4], [0.5], max_n_lags=10, clean_recycling=True, logscale=True)
+        result = [[0.00000000e+000, 0.00000000e+000],
+                  [1.00000000e+001, 1.00000000e+000],
+                  [1.66000000e+002, 3.85697122e-011],
+                  [2.78200000e+003, 1.48701736e-204],
+                  [4.64150000e+004, 0.00000000e+000],
+                  [7.74263000e+005, 0.00000000e+000],
+                  [1.29154960e+007, 0.00000000e+000],
+                  [2.15443469e+008, 0.00000000e+000],
+                  [3.59381366e+009, 0.00000000e+000],
+                  [5.99484250e+010, 0.00000000e+000],
+                  [1.00000000e+012,  0.00000000e+000]]
+        self.assertTrue(np.allclose(fpt_distribution, result))
+
