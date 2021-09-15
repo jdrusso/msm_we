@@ -34,6 +34,38 @@ import pyemma.coordinates as coor
 import pyemma.coordinates.clustering as clustering
 import pyemma
 
+# used to check connectivity
+import scipy.sparse.csgraph as csgraph
+
+
+def is_connected(matrix, source_states, target_states, directed=True):
+    """
+    Check for connectivity between two states.
+    If directed is True, then checks for directional connectivity from source_states to target_states.
+
+    Parameters
+    ----------
+    matrix: np.array, NxN
+        Transition matrix
+    source_states: array-like, N
+        Source states
+    target_states: array-like, N
+        Target states
+    directed: bool, default=True
+        Compute directional connectivity
+
+    Returns
+    -------
+    bool
+    """
+
+    return (
+        np.inf
+        not in csgraph.shortest_path(matrix, directed=directed, indices=source_states)[
+            :, target_states
+        ]
+    )
+
 
 def inverse_iteration(guess, matrix):
     """
@@ -1508,6 +1540,10 @@ class modelWE:
         ----------
         iteration: int
             The iteration to return coordinates for
+
+        Returns
+        -------
+        Array of coordinates for all atoms at the current iteration
         """
 
         self.load_iter_data(iteration)
