@@ -3408,6 +3408,16 @@ class modelWE:
         None
         """
 
+        # If this matrix isn't connected from source to target, then it's not possible to get an MFPT directly out of it
+        connected = is_connected(
+            self.Tmatrix, self.indBasis, self.indTargets, directed=True
+        )
+        if not connected:
+            log.critical(
+                "There is no path in this matrix from the basis to the target, so no MFPT can be calculted."
+            )
+            return -1
+
         Mss = self.Tmatrix
 
         # If no pSS was provided, then pull from self
