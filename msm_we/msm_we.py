@@ -290,10 +290,12 @@ class modelWE:
             Name to use in output filenames.
 
         basis_pcoord_bounds: list
-            List of [lower bound, upper bound] in pcoord-space for the basis state
+            List of [[pcoord0 lower bound, pcoord1 upper bound], [pcoord1 lower bound, pcoord1 upper bound], ...]
+            in pcoord-space for the basis state
 
         target_pcoord_bounds: list
-            List of [lower bound, upper bound] in pcoord-space for the target state
+            List of [[pcoord0 lower bound, pcoord1 upper bound], [pcoord1 lower bound, pcoord1 upper bound], ...]
+            in pcoord-space for the target state
 
         dim_reduce_method: str
             Dimensionality reduction method. "pca", "vamp", or "none".
