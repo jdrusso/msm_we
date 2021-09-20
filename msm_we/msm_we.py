@@ -3411,8 +3411,9 @@ class modelWE:
         """
 
         # If this matrix isn't connected from source to target, then it's not possible to get an MFPT directly out of it
+        sparse_mat = sparse.csr_matrix(self.Tmatrix)
         connected = is_connected(
-            self.Tmatrix, self.indBasis, self.indTargets, directed=True
+            sparse_mat, self.indBasis, self.indTargets, directed=True
         )
         if not connected:
             log.critical(
