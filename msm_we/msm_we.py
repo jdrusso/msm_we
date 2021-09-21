@@ -3049,10 +3049,21 @@ class modelWE:
 
         # Rebuild the fluxmatrix with whatever params were originally provided
         self.get_fluxMatrix(*self._fluxMatrixParams)
-        new_fluxmatrix = self.fluxMatrixRaw.copy()
+
+        # # The new, organized fluxmatrix is the result of computing the new fluxmatrix, on the new set of bins.
+        new_fluxMatrix = self.fluxMatrixRaw.copy()
+
+        # Do the same sorting and organization we did above on the "raw" fluxmatrix, for consistency.
+        new_fluxMatrix = new_fluxMatrix[pcoord_sort_indices, :]
+        new_fluxMatrix = new_fluxMatrix[:, pcoord_sort_indices]
+
+        # Renormalize the new flux matrix
+        new_fluxMatrix = new_fluxMatrix / np.sum(
+            new_fluxMatrix
+        )  # average weight transitioning or staying put should be 1
 
         self.fluxMatrixRaw = original_fluxmatrix
-        self.fluxMatrix = new_fluxmatrix
+        self.fluxMatrix = new_fluxMatrix
 
     def get_model_clusters(self):
         """
