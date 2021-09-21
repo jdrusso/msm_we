@@ -2858,7 +2858,7 @@ class modelWE:
         # A 0 means it'll be cleaned, a 1 means it'll be kept.
         good_clusters = np.ones(self.n_clusters + 2)
 
-        cluster_pcoord_centers = np.zeros(self.n_clusters + 2)
+        cluster_pcoord_centers = np.zeros((self.n_clusters + 2, self.pcoord_ndim))
         # cluster_pcoord_centers[indTargetCluster]=self.target_rmsd
         cluster_pcoord_centers[target_cluster_index] = self.target_bin_center
         # cluster_pcoord_centers[indBasisCluster]=self.get_reference_rmsd(self.basis_coords)
@@ -2898,7 +2898,7 @@ class modelWE:
 
                     try:
                         cluster_pcoord_centers[cluster_index] = np.nanmean(
-                            self.pcoordSet[pcoord_indices, 0]
+                            self.pcoordSet[pcoord_indices, 0], axis=0
                         )
                     except IndexError as e:
                         log.error(f"Offset is {offset}")
@@ -2954,8 +2954,8 @@ class modelWE:
 
         # Get the RMSD centers for all of the clusters we want to keep
         cluster_pcoord_centers = cluster_pcoord_centers[good_clusters]
-        # Get the indices that sort it
-        pcoord_sort_indices = np.argsort(cluster_pcoord_centers)
+        # Get the indices that sort it, in pcoord 0
+        pcoord_sort_indices = np.argsort(cluster_pcoord_centers[:, 0])
         # And update the model's RMSD cluster centers to just include the sorted clusters to keep
         self.targetRMSD_centers = cluster_pcoord_centers[pcoord_sort_indices]
 
