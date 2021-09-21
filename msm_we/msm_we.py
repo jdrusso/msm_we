@@ -2177,7 +2177,9 @@ class modelWE:
 
         return dtrajs, used_iters
 
-    def cluster_coordinates(self, n_clusters, streaming=False, **_cluster_args):
+    def cluster_coordinates(
+        self, n_clusters, streaming=False, first_cluster_iter=1, **_cluster_args
+    ):
         """
         Use k-means to cluster coordinates into `n_clusters` cluster centers, and saves the resulting cluster object
         to a file.
@@ -2309,7 +2311,9 @@ class modelWE:
 
             # continued = False
             extra_iters_used = 0
-            for iteration in tqdm.tqdm(range(1, self.maxIter), desc="Clustering"):
+            for iteration in tqdm.tqdm(
+                range(first_cluster_iter, self.maxIter), desc="Clustering"
+            ):
 
                 if extra_iters_used > 0:
                     extra_iters_used -= 1
