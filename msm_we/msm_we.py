@@ -2841,6 +2841,8 @@ class modelWE:
         Need to update self.cluster_structures with the new, reduced set of clusters
         """
 
+        original_fluxmatrix = self.fluxMatrixRaw.copy()
+
         log.debug("Cleaning flux matrix")
 
         # Discretize trajectories via clusters
@@ -3043,6 +3045,10 @@ class modelWE:
 
         # Rebuild the fluxmatrix with whatever params were originally provided
         self.get_fluxMatrix(*self._fluxMatrixParams)
+        new_fluxmatrix = self.fluxMatrixRaw.copy()
+
+        self.fluxMatrixRaw = original_fluxmatrix
+        self.fluxMatrix = new_fluxmatrix
 
     def get_model_clusters(self):
         """
