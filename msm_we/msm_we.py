@@ -3689,7 +3689,8 @@ class modelWE:
         indq = np.argsort(np.squeeze(1.0 - self.q))
         fluxMatrix = fluxMatrix[indq, :]
         fluxMatrix = fluxMatrix[:, indq]
-        for i in range(0, nBins - 1):
+
+        for i in tqdm.tqdm(range(0, nBins - 1), desc="Obtaining committor-fluxes"):
             indBack = range(i + 1)
             indForward = range(i + 1, nBins)
             JR = 0.0
@@ -3700,7 +3701,7 @@ class modelWE:
                 JF = JF + np.sum(fluxMatrix[indBack, j * np.ones_like(indBack)])
             J[i] = JR - JF
             self.Jq = J.squeeze() / self.tau
-            sys.stdout.write("%s " % i)
+            # sys.stdout.write("%s " % i)
 
     def plot_flux_committor(self, nwin):
 
@@ -4455,18 +4456,25 @@ class modelWE:
         q[self.indTargets, 0] = 1.0
 
         dconv = 100.0
+        progress = 0
         qp = np.ones_like(q)
 
         # Iteratively update the committor estimate until it converges to stationarity
         # (The committor is the stationary distribution for two-sided absorbing boundary conditions)
-        while dconv > conv:
-            q[self.indTargets, 0] = 1.0
-            q[self.indBasis, 0] = 0.0
-            q = np.matmul(_fluxMatrix, q)
-            dconv = np.sum(np.abs(qp - q))
-            log.debug("convergence: " + str(dconv) + "\n")
-            qp = q.copy()
-            self.q = q
+        with tqdm.tqdm(total=-np.log10(conv)) as pbar:
+            while dconv > conv:
+                q[self.indTargets, 0] = 1.0
+                q[self.indBasis, 0] = 0.0
+                q = np.matmul(_fluxMatrix, q)
+                dconv = np.sum(np.abs(qp - q))
+
+                # Update with progress since last iter
+                log.debug("convergence: " + str(dconv) + "\n")
+                pbar.update(max(0, -np.log10(dconv)) - progress)
+                progress = max(0, -np.log10(dconv))
+
+                qp = q.copy()
+                self.q = q
 
         self.q = q.squeeze()
 
