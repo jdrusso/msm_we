@@ -394,7 +394,7 @@ class modelWE:
 
         # Nothing is raised here because this might be fine, depending on what you're doing.
         except KeyError:
-            log.error("Problem getting coordinates, they don't exist yet.\n")
+            log.info("Model initialized, but coordinates do not exist yet.")
             self.coordsExist = False
 
         log.debug("msm_we model successfully initialized")
