@@ -1859,14 +1859,19 @@ class modelWE:
             # total_num_iterations = len(self.numSegments)
             total_num_iterations = self.maxIter
 
-            first_rough_iter = max(1, int(total_num_iterations * 0.9))
             first_iter = 1
 
             rough_ipca = iPCA()
 
-            for iteration in tqdm.tqdm(
-                range(first_rough_iter, total_num_iterations), desc="Initial iPCA"
-            ):
+            # Stride every 10th frame, so you're only doing the "rough" pca on 10% of the data
+            if total_num_iterations > 100:
+                rough_iters = range(1, total_num_iterations, 10)
+
+            # But if you only have 100 frames or fewer, then just do the last-half.
+            else:
+                rough_iters = range(total_num_iterations // 2, total_num_iterations)
+
+            for iteration in tqdm.tqdm(rough_iters, desc="Initial iPCA"):
 
                 # TODO: Allow  chunking here so you don't have  to  go 1  by  1, but N by N
                 # If you don't use 'fork' context here, this will break in Jupyter.
