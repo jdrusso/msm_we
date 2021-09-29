@@ -453,7 +453,7 @@ class modelWE:
         assert bounds.shape == (
             self.pcoord_ndim,
             2,
-        ), "Shape of bounds was {bounds.shape}, should've been ({self.pcoord_ndim}, 2)"
+        ), f"Shape of bounds was {bounds.shape}, should've been ({self.pcoord_ndim}, 2)"
 
         assert np.all(
             [bound[0] < bound[1] for bound in bounds]
@@ -2965,7 +2965,7 @@ class modelWE:
         # Update state with the new, updated, or loaded from file fluxMatrix.
         self.fluxMatrixRaw = fluxMatrix
 
-    def organize_fluxMatrix(self):
+    def organize_fluxMatrix(self, ray_args=None):
         """
         Do some cleaning on the flux matrix, and update state with the cleaned flux matrix.
 
@@ -3157,28 +3157,62 @@ class modelWE:
             self.clusters.cluster_centers_, removed_clusters, 0
         )
 
+        # TODO: Don't duplicate code from cluster_coordinates!!
         # TODO: You don't actually need to rediscretize every point -- just the removed ones.  Do this  later to make
         #   this more efficient.
         self.dtrajs = []
-        extra_iters_used = 0
-        for iteration in tqdm.tqdm(
-            range(1, self.maxIter), desc="Post-cleaning rediscretization"
-        ):
 
-            if extra_iters_used > 0:
-                extra_iters_used -= 1
-                log.debug(f"Already processed  iter  {iteration}")
-                continue
+        if ray_args is None:
+            extra_iters_used = 0
+            for iteration in tqdm.tqdm(
+                range(1, self.maxIter), desc="Post-cleaning rediscretization"
+            ):
 
-            with concurrent.futures.ProcessPoolExecutor(
-                max_workers=1, mp_context=mp.get_context("fork")
-            ) as executor:
-                dtrajs, extra_iters_used = executor.submit(
-                    self.do_discretization,
-                    [self.clusters, iteration, self.processCoordinates],
-                ).result()
+                if extra_iters_used > 0:
+                    extra_iters_used -= 1
+                    log.debug(f"Already processed  iter  {iteration}")
+                    continue
 
-            self.dtrajs.append(dtrajs)
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
+                    dtrajs, extra_iters_used = executor.submit(
+                        self.do_discretization,
+                        [self.clusters, iteration, self.processCoordinates],
+                    ).result()
+
+                    self.dtrajs.append(dtrajs)
+
+            else:
+                assert (
+                    "address" in ray_args.keys() and "password" in ray_args.keys()
+                ), "ray_args must specify an address and password for the cluster"
+
+                # First, connect to the ray cluster
+                log.info("Connecting to Ray....")
+                ray.init(
+                    address=ray_args["address"],
+                    _redis_password=ray_args["password"],
+                    ignore_reinit_error=True,
+                )
+                log.info("Connected to Ray cluster!")
+
+                # Submit all the discretization tasks to the cluster
+                task_ids = []
+                for iteration in range(1, self.maxIter):
+                    _id = self.do_ray_discretization.remote(
+                        self, [self.clusters, iteration, self.processCoordinates]
+                    )
+                    task_ids.append(_id)
+
+                # As they're completed, add them to dtrajs
+                dtrajs = [None] * (self.maxIter - 1)
+                for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
+                    dtraj, _, iteration = ray.get(task_id)
+                    dtrajs[iteration - 1] = dtraj
+
+                # Remove all empty elements from dtrajs and assign to self.dtrajs
+                self.dtrajs = [dtraj for dtraj in dtrajs if dtraj is not None]
 
         self.removed_clusters = []
 
@@ -3186,7 +3220,7 @@ class modelWE:
         self.n_clusters -= n_removed
 
         # Rebuild the fluxmatrix with whatever params were originally provided
-        self.get_fluxMatrix(*self._fluxMatrixParams)
+        self.get_fluxMatrix(*self._fluxMatrixParams, ray_args=ray_args)
 
         # # The new, organized fluxmatrix is the result of computing the new fluxmatrix, on the new set of bins.
         new_fluxMatrix = self.fluxMatrixRaw.copy()
