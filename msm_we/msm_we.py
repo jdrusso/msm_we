@@ -37,6 +37,8 @@ import pyemma
 # used to check connectivity
 import scipy.sparse.csgraph as csgraph
 
+import ray
+
 
 def is_connected(matrix, source_states, target_states, directed=True):
     """
@@ -647,6 +649,8 @@ class modelWE:
             )
 
         in_target = np.all(in_target, axis=1)
+
+        log.debug(f"{pcoords} in {self.target_pcoord_bounds}: {in_target}")
 
         return in_target
 
@@ -2164,6 +2168,7 @@ class modelWE:
 
         used_iters = 0
         # Keep adding coords until you have more than your components
+        # This actually isn't necessary here like it is for the clustering, I could just return an empty array
         while iter_coords.shape[0] < 1:
 
             used_iters += 1
@@ -2182,8 +2187,30 @@ class modelWE:
 
         return dtrajs, used_iters
 
+    @ray.remote
+    def do_ray_discretization(self, arg):
+
+        kmeans_model, iteration, processCoordinates = arg
+
+        iter_coords = self.get_iter_coordinates(iteration)
+
+        # If there are no coords for this iteration, return None
+        if iter_coords.shape[0] == 0:
+            return None, 0, iteration
+
+        # Otherwise, apply the k-means model and discretize
+        transformed_coords = self.coordinates.transform(processCoordinates(iter_coords))
+        dtrajs = kmeans_model.predict(transformed_coords)
+
+        return dtrajs, 1, iteration
+
     def cluster_coordinates(
-        self, n_clusters, streaming=False, first_cluster_iter=1, **_cluster_args
+        self,
+        n_clusters,
+        streaming=False,
+        first_cluster_iter=1,
+        ray_args=None,
+        **_cluster_args,
     ):
         """
         Use k-means to cluster coordinates into `n_clusters` cluster centers, and saves the resulting cluster object
@@ -2341,23 +2368,60 @@ class modelWE:
             self.clusters = cluster_model
 
             # Now compute dtrajs from the final model
+            # TODO: Ray parallelize the discretization here
             extra_iters_used = 0
-            for iteration in tqdm.tqdm(range(1, self.maxIter), desc="Discretization"):
 
-                if extra_iters_used > 0:
-                    extra_iters_used -= 1
-                    log.debug(f"Already processed  iter  {iteration}")
-                    continue
+            # If we're not using Ray, then calculate serially
+            if ray_args is None:
+                for iteration in tqdm.tqdm(
+                    range(1, self.maxIter), desc="Discretization"
+                ):
 
-                with concurrent.futures.ProcessPoolExecutor(
-                    max_workers=1, mp_context=mp.get_context("fork")
-                ) as executor:
-                    dtrajs, extra_iters_used = executor.submit(
-                        self.do_discretization,
-                        [cluster_model, iteration, self.processCoordinates],
-                    ).result()
+                    if extra_iters_used > 0:
+                        extra_iters_used -= 1
+                        log.debug(f"Already processed  iter  {iteration}")
+                        continue
 
-                self.dtrajs.append(dtrajs)
+                    with concurrent.futures.ProcessPoolExecutor(
+                        max_workers=1, mp_context=mp.get_context("fork")
+                    ) as executor:
+                        dtrajs, extra_iters_used = executor.submit(
+                            self.do_discretization,
+                            [cluster_model, iteration, self.processCoordinates],
+                        ).result()
+
+                    self.dtrajs.append(dtrajs)
+
+            # If we want to use Ray
+            else:
+
+                assert (
+                    "address" in ray_args.keys() and "password" in ray_args.keys()
+                ), "ray_args must specify an address and password for the cluster"
+
+                # First, connect to the ray cluster
+                log.info("Connecting to Ray....")
+                ray.init(
+                    address=ray_args["address"], _redis_password=ray_args["password"]
+                )
+                log.info("Connected to Ray cluster!")
+
+                # Submit all the discretization tasks to the cluster
+                task_ids = []
+                for iteration in range(1, self.maxIter):
+                    id = self.do_ray_discretization.remote(
+                        self, [cluster_model, iteration, self.processCoordinates]
+                    )
+                    task_ids.append(id)
+
+                # As they're completed, add them to dtrajs
+                dtrajs = [None] * (self.maxIter - 1)
+                for task_id in task_ids:
+                    dtraj, _, iteration = ray.get(task_id)
+                    dtrajs[iteration - 1] = dtraj
+
+                # Remove all empty elements from dtrajs and assign to self.dtrajs
+                self.dtrajs = [dtraj for dtraj in dtrajs if dtraj is not None]
 
         elif self.dimReduceMethod == "vamp" and streaming:
 
@@ -2515,10 +2579,14 @@ class modelWE:
         # Record every point where you're in the target
         ind_end_in_target = np.where(self.is_WE_target(self.pcoord1List))
 
-        # if indTarget1[0].size > 0:
-        #     log.debug("Number of post-transition target1 entries: " + str(indTarget1[0].size) + "\n")
-        # else:
-        #     log.warning(f"No target1 entries. {indTarget1}")
+        if ind_end_in_target[0].size > 0:
+            log.debug(
+                "Number of post-transition target1 entries: "
+                + str(ind_end_in_target[0].size)
+                + "\n"
+            )
+        else:
+            log.warning(f"No target1 entries. {ind_end_in_target}")
 
         # Get the index of every point
         ind_start_in_basis = np.where(self.is_WE_basis(self.pcoord0List[good_coords]))
@@ -2767,6 +2835,7 @@ class modelWE:
             # Then, save that matrix to the data file, along with the number of iterations used
             # FIXME: Duplicated code
             # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
+            # TODO: Ray parallelize the fluxmatrix calculation here
             for iS in tqdm.tqdm(
                 range(first_iter + 1, last_iter + 1), desc="Constructing flux matrix"
             ):
