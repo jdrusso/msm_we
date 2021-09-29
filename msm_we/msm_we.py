@@ -9,6 +9,7 @@ import sys
 import h5py
 import concurrent
 import multiprocessing as mp
+from copy import deepcopy
 
 from scipy.sparse import coo_matrix
 import scipy.sparse as sparse
@@ -2192,6 +2193,10 @@ class modelWE:
 
         kmeans_model, iteration, processCoordinates = arg
 
+        # Need to do this so the model's transformation array is writable -- otherwise predict chokes
+        #   with 'buffer source array is read-only'.
+        kmeans_model = deepcopy(kmeans_model)
+
         iter_coords = self.get_iter_coordinates(iteration)
 
         # If there are no coords for this iteration, return None
@@ -2402,7 +2407,9 @@ class modelWE:
                 # First, connect to the ray cluster
                 log.info("Connecting to Ray....")
                 ray.init(
-                    address=ray_args["address"], _redis_password=ray_args["password"]
+                    address=ray_args["address"],
+                    _redis_password=ray_args["password"],
+                    ignore_reinit_error=True,
                 )
                 log.info("Connected to Ray cluster!")
 
