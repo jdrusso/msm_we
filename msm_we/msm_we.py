@@ -2406,10 +2406,13 @@ class modelWE:
 
                 # First, connect to the ray cluster
                 log.info("Connecting to Ray....")
+                # ray.init(
+                #     address=ray_args["address"],
+                #     _redis_password=ray_args["password"],
+                #     ignore_reinit_error=True,
+                # )
                 ray.init(
-                    address=ray_args["address"],
-                    _redis_password=ray_args["password"],
-                    ignore_reinit_error=True,
+                    address=f'ray://{ray_args["address"]}', ignore_reinit_error=True
                 )
                 log.info("Connected to Ray cluster!")
 
@@ -2887,10 +2890,13 @@ class modelWE:
 
                 # First, connect to the ray cluster
                 log.info("Connecting to Ray....")
+                # ray.init(
+                #     address=ray_args["address"],
+                #     _redis_password=ray_args["password"],
+                #     ignore_reinit_error=True,
+                # )
                 ray.init(
-                    address=ray_args["address"],
-                    _redis_password=ray_args["password"],
-                    ignore_reinit_error=True,
+                    address=f'ray://{ray_args["address"]}', ignore_reinit_error=True
                 )
                 log.info("Connected to Ray cluster!")
 
@@ -3183,36 +3189,37 @@ class modelWE:
 
                     self.dtrajs.append(dtrajs)
 
-            else:
-                assert (
-                    "address" in ray_args.keys() and "password" in ray_args.keys()
-                ), "ray_args must specify an address and password for the cluster"
+        else:
+            assert (
+                "address" in ray_args.keys() and "password" in ray_args.keys()
+            ), "ray_args must specify an address and password for the cluster"
 
-                # First, connect to the ray cluster
-                log.info("Connecting to Ray....")
-                ray.init(
-                    address=ray_args["address"],
-                    _redis_password=ray_args["password"],
-                    ignore_reinit_error=True,
+            # First, connect to the ray cluster
+            log.info("Connecting to Ray....")
+            # ray.init(
+            #     address=ray_args["address"],
+            #     _redis_password=ray_args["password"],
+            #     ignore_reinit_error=True,
+            # )
+            ray.init(address=f'ray://{ray_args["address"]}', ignore_reinit_error=True)
+            log.info("Connected to Ray cluster!")
+
+            # Submit all the discretization tasks to the cluster
+            task_ids = []
+            for iteration in range(1, self.maxIter):
+                _id = self.do_ray_discretization.remote(
+                    self, [self.clusters, iteration, self.processCoordinates]
                 )
-                log.info("Connected to Ray cluster!")
+                task_ids.append(_id)
 
-                # Submit all the discretization tasks to the cluster
-                task_ids = []
-                for iteration in range(1, self.maxIter):
-                    _id = self.do_ray_discretization.remote(
-                        self, [self.clusters, iteration, self.processCoordinates]
-                    )
-                    task_ids.append(_id)
+            # As they're completed, add them to dtrajs
+            dtrajs = [None] * (self.maxIter - 1)
+            for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
+                dtraj, _, iteration = ray.get(task_id)
+                dtrajs[iteration - 1] = dtraj
 
-                # As they're completed, add them to dtrajs
-                dtrajs = [None] * (self.maxIter - 1)
-                for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
-                    dtraj, _, iteration = ray.get(task_id)
-                    dtrajs[iteration - 1] = dtraj
-
-                # Remove all empty elements from dtrajs and assign to self.dtrajs
-                self.dtrajs = [dtraj for dtraj in dtrajs if dtraj is not None]
+            # Remove all empty elements from dtrajs and assign to self.dtrajs
+            self.dtrajs = [dtraj for dtraj in dtrajs if dtraj is not None]
 
         self.removed_clusters = []
 
