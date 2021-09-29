@@ -2423,7 +2423,7 @@ class modelWE:
 
                 # As they're completed, add them to dtrajs
                 dtrajs = [None] * (self.maxIter - 1)
-                for task_id in task_ids:
+                for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
                     dtraj, _, iteration = ray.get(task_id)
                     dtrajs[iteration - 1] = dtraj
 
@@ -2512,6 +2512,17 @@ class modelWE:
 
         self.clusters = pyemma.load(clusterFile)
         self.n_clusters = np.shape(self.clusters.clustercenters)[0]
+
+    @ray.remote
+    def get_iter_fluxMatrix_ray(self, n_iter, processCoordinates):
+
+        self.processCoordinates = processCoordinates
+
+        self.clusters = deepcopy(self.clusters)
+
+        iter_fluxmatrix = self.get_iter_fluxMatrix(n_iter)
+
+        return iter_fluxmatrix, n_iter
 
     def get_iter_fluxMatrix(self, n_iter):
         """
@@ -2764,7 +2775,7 @@ class modelWE:
 
         return fluxMatrix
 
-    def get_fluxMatrix(self, n_lag, first_iter, last_iter):
+    def get_fluxMatrix(self, n_lag, first_iter, last_iter, ray_args=None):
         """
         Compute the matrix of fluxes at a given lag time, for a range of iterations.
 
@@ -2843,27 +2854,73 @@ class modelWE:
             # FIXME: Duplicated code
             # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
             # TODO: Ray parallelize the fluxmatrix calculation here
-            for iS in tqdm.tqdm(
-                range(first_iter + 1, last_iter + 1), desc="Constructing flux matrix"
-            ):
-                log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
+            if ray_args is None:
+                for iS in tqdm.tqdm(
+                    range(first_iter + 1, last_iter + 1),
+                    desc="Constructing flux matrix",
+                ):
+                    log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
 
-                # fluxMatrixI = self.get_iter_fluxMatrix(iS)
-                with concurrent.futures.ProcessPoolExecutor(
-                    max_workers=1, mp_context=mp.get_context("fork")
-                ) as executor:
-                    fluxMatrixI = executor.submit(
-                        self.get_iter_fluxMatrix, iS,
-                    ).result()
+                    # fluxMatrixI = self.get_iter_fluxMatrix(iS)
+                    with concurrent.futures.ProcessPoolExecutor(
+                        max_workers=1, mp_context=mp.get_context("fork")
+                    ) as executor:
+                        fluxMatrixI = executor.submit(
+                            self.get_iter_fluxMatrix, iS,
+                        ).result()
 
-                fluxMatrix = fluxMatrix + fluxMatrixI
-                nI = nI + 1
+                    fluxMatrix = fluxMatrix + fluxMatrixI
+                    nI = nI + 1
 
-                # f = h5py.File(fileName + ".h5", "a")
+                    # f = h5py.File(fileName + ".h5", "a")
+                    dsetP = f[dsetName]
+                    dsetP[:] = fluxMatrix / nI
+                    dsetP.attrs["iter"] = iS
+                    log.debug(f"Completed flux matrix for iter {iS}")
+
+            # If we're running through Ray..
+            else:
+
+                assert (
+                    "address" in ray_args.keys() and "password" in ray_args.keys()
+                ), "ray_args must specify an address and password for the cluster"
+
+                # First, connect to the ray cluster
+                log.info("Connecting to Ray....")
+                ray.init(
+                    address=ray_args["address"],
+                    _redis_password=ray_args["password"],
+                    ignore_reinit_error=True,
+                )
+                log.info("Connected to Ray cluster!")
+
+                # Submit all the tasks for iteration fluxmatrix calculations
+                task_ids = []
+                for iteration in range(first_iter + 1, last_iter + 1):
+
+                    _id = self.get_iter_fluxMatrix_ray.remote(
+                        self, iteration, self.processCoordinates
+                    )
+
+                    task_ids.append(_id)
+
+                # Wait for them to complete
+                for task_id in tqdm.tqdm(
+                    task_ids, desc="Ray-parallel fluxmatrix calculation"
+                ):
+
+                    # add the results to the running total
+                    iteration_fluxMatrix, _iteration = ray.get(task_id)
+                    fluxMatrix = fluxMatrix + iteration_fluxMatrix
+                    log.debug(f"Completed flux matrix for iter {_iteration}")
+
+                # Write the H5. Can't do this per-iteration, because we're not guaranteed to be going sequentially now
+
+                nI = last_iter - first_iter
                 dsetP = f[dsetName]
                 dsetP[:] = fluxMatrix / nI
-                dsetP.attrs["iter"] = iS
-                log.debug(f"Completed flux matrix for iter {iS}")
+                dsetP.attrs["iter"] = nI
+
             f.close()
 
             # Normalize the flux matrix by the number of iterations that it was calculated with
