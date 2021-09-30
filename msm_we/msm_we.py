@@ -2189,13 +2189,14 @@ class modelWE:
         return dtrajs, used_iters
 
     @ray.remote
-    def do_ray_discretization(arg):
+    def do_ray_discretization(model, kmeans_model, iteration, processCoordinates):
 
-        model_id, kmeans_model_id, iteration, processCoordinates_id = arg
+        # model_id, kmeans_model_id, iteration, processCoordinates_id = arg
 
-        self = ray.get(model_id)
-        kmeans_model = ray.get(kmeans_model_id)
-        processCoordinates = ray.get(processCoordinates_id)
+        # self = ray.get(model_id)
+        # kmeans_model = ray.get(kmeans_model_id)
+        # processCoordinates = ray.get(processCoordinates_id)
+        self = model
 
         # Need to do this so the model's transformation array is writable -- otherwise predict chokes
         #   with 'buffer source array is read-only'.
@@ -2431,7 +2432,7 @@ class modelWE:
                     # log.info(f"Submitted discretization task iteration {iteration}")
 
                     id = self.do_ray_discretization.remote(
-                        [model_id, cluster_model_id, iteration, process_coordinates_id]
+                        model_id, cluster_model_id, iteration, process_coordinates_id
                     )
                     task_ids.append(id)
 
@@ -2529,12 +2530,13 @@ class modelWE:
         self.n_clusters = np.shape(self.clusters.clustercenters)[0]
 
     @ray.remote
-    def get_iter_fluxMatrix_ray(args):
+    def get_iter_fluxMatrix_ray(model, processCoordinates, n_iter):
 
-        model_id, n_iter, processCoordinates_id = args
+        # model_id, n_iter, processCoordinates_id = args
 
-        self = ray.get(model_id)
-        processCoordinates = ray.get(processCoordinates_id)
+        # self = ray.get(model_id)
+        # processCoordinates = ray.get(processCoordinates_id)
+        self = model
 
         self.processCoordinates = processCoordinates
 
@@ -2926,7 +2928,7 @@ class modelWE:
 
                     # log.debug(f"Submitted fluxmatrix task iteration {iteration}")
                     _id = self.get_iter_fluxMatrix_ray.remote(
-                        [model_id, iteration, processCoordinates_id]
+                        model_id, processCoordinates_id, iteration
                     )
 
                     task_ids.append(_id)
@@ -3235,7 +3237,7 @@ class modelWE:
 
             for iteration in range(1, self.maxIter):
                 _id = self.do_ray_discretization.remote(
-                    [model_id, cluster_model_id, iteration, process_coordinates_id]
+                    model_id, cluster_model_id, iteration, process_coordinates_id
                 )
                 task_ids.append(_id)
 
