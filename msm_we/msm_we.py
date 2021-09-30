@@ -2378,7 +2378,6 @@ class modelWE:
             self.clusters = cluster_model
 
             # Now compute dtrajs from the final model
-            # TODO: Ray parallelize the discretization here
             extra_iters_used = 0
 
             # If we're not using Ray, then calculate serially
@@ -2427,9 +2426,16 @@ class modelWE:
                 cluster_model_id = ray.put(cluster_model)
                 process_coordinates_id = ray.put(self.processCoordinates)
 
-                for iteration in range(1, self.maxIter):
+                max_inflight = 1000
+                for iteration in tqdm.tqdm(
+                    range(1, self.maxIter), desc="Submitting discretization tasks"
+                ):
 
-                    # log.info(f"Submitted discretization task iteration {iteration}")
+                    if len(task_ids) > max_inflight:
+
+                        # The number that need to be ready before we can submit more
+                        num_ready = iteration - max_inflight
+                        ray.wait(task_ids, num_returns=num_ready)
 
                     id = self.do_ray_discretization.remote(
                         model_id, cluster_model_id, iteration, process_coordinates_id
@@ -2438,10 +2444,29 @@ class modelWE:
 
                 # As they're completed, add them to dtrajs
                 dtrajs = [None] * (self.maxIter - 1)
-                for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
-                    dtraj, _, iteration = ray.get(task_id)
-                    # log.info(f"Got result for iteration {iteration}")
-                    dtrajs[iteration - 1] = dtraj
+                # for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
+                #     dtraj, _, iteration = ray.get(task_id)
+                #     # log.info(f"Got result for iteration {iteration}")
+                #     dtrajs[iteration - 1] = dtraj
+
+                # Do these in bigger batches, dtrajs aren't very big
+                result_batch_size = min(500, self.maxIter - 1)
+                unfinished = task_ids
+
+                with tqdm.tqdm(
+                    total=len(unfinished), desc="Retrieving discretized trajectories"
+                ) as pbar:
+                    while unfinished:
+                        result_batch_size = min(result_batch_size, len(unfinished))
+                        # Returns the first ObjectRef that is ready.
+                        finished, unfinished = ray.wait(
+                            unfinished, num_returns=result_batch_size
+                        )
+                        results = ray.get(finished)
+
+                        for dtraj, _, iteration in results:
+                            dtrajs[iteration - 1] = dtraj
+                            pbar.update(1)
 
                 # Remove all empty elements from dtrajs and assign to self.dtrajs
                 self.dtrajs = [dtraj for dtraj in dtrajs if dtraj is not None]
@@ -2986,7 +3011,7 @@ class modelWE:
                         # Add each matrix to the total fluxmatrix
                         for _fmatrix, _iter in results:
                             fluxMatrix = fluxMatrix + _fmatrix
-                        pbar.update(len(finished))
+                            pbar.update(1)
 
                 # Write the H5. Can't do this per-iteration, because we're not guaranteed to be going sequentially now
 
@@ -3280,17 +3305,45 @@ class modelWE:
             cluster_model_id = ray.put(self.clusters)
             process_coordinates_id = ray.put(self.processCoordinates)
 
-            for iteration in range(1, self.maxIter):
-                _id = self.do_ray_discretization.remote(
+            max_inflight = 1000
+            for iteration in tqdm.tqdm(
+                range(1, self.maxIter), desc="Submitting discretization tasks"
+            ):
+
+                if len(task_ids) > max_inflight:
+
+                    # The number that need to be ready before we can submit more
+                    num_ready = iteration - max_inflight
+                    ray.wait(task_ids, num_returns=num_ready)
+
+                id = self.do_ray_discretization.remote(
                     model_id, cluster_model_id, iteration, process_coordinates_id
                 )
-                task_ids.append(_id)
+                task_ids.append(id)
 
             # As they're completed, add them to dtrajs
             dtrajs = [None] * (self.maxIter - 1)
-            for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
-                dtraj, _, iteration = ray.get(task_id)
-                dtrajs[iteration - 1] = dtraj
+            # for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
+            #     dtraj, _, iteration = ray.get(task_id)
+            #     dtrajs[iteration - 1] = dtraj
+
+            result_batch_size = min(500, self.maxIter - 1)
+            unfinished = task_ids
+
+            with tqdm.tqdm(
+                total=len(unfinished), desc="Retrieving discretized trajectories"
+            ) as pbar:
+                while unfinished:
+                    result_batch_size = min(result_batch_size, len(unfinished))
+                    # Returns the first ObjectRef that is ready.
+                    finished, unfinished = ray.wait(
+                        unfinished, num_returns=result_batch_size
+                    )
+                    results = ray.get(finished)
+
+                    for dtraj, _, iteration in results:
+                        dtrajs[iteration - 1] = dtraj
+                        pbar.update(1)
 
             # Remove all empty elements from dtrajs and assign to self.dtrajs
             self.dtrajs = [dtraj for dtraj in dtrajs if dtraj is not None]
