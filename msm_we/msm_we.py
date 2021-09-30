@@ -2189,9 +2189,13 @@ class modelWE:
         return dtrajs, used_iters
 
     @ray.remote
-    def do_ray_discretization(self, arg):
+    def do_ray_discretization(arg):
 
-        kmeans_model, iteration, processCoordinates = arg
+        model_id, kmeans_model_id, iteration, processCoordinates_id = arg
+
+        self = ray.get(model_id)
+        kmeans_model = ray.get(kmeans_model_id)
+        processCoordinates = ray.get(processCoordinates_id)
 
         # Need to do this so the model's transformation array is writable -- otherwise predict chokes
         #   with 'buffer source array is read-only'.
@@ -2411,14 +2415,23 @@ class modelWE:
                 #     _redis_password=ray_args["password"],
                 #     ignore_reinit_error=True,
                 # )
-                ray.init(address=f'ray://{ray_args["address"]}')
+                if not ray.is_initialized():
+                    ray.init(address=f'ray://{ray_args["address"]}')
                 log.info("Connected to Ray cluster!")
 
                 # Submit all the discretization tasks to the cluster
                 task_ids = []
+
+                model_id = ray.put(self)
+                cluster_model_id = ray.put(cluster_model)
+                process_coordinates_id = ray.put(self.processCoordinates)
+
                 for iteration in range(1, self.maxIter):
+
+                    # log.info(f"Submitted discretization task iteration {iteration}")
+
                     id = self.do_ray_discretization.remote(
-                        self, [cluster_model, iteration, self.processCoordinates]
+                        [model_id, cluster_model_id, iteration, process_coordinates_id]
                     )
                     task_ids.append(id)
 
@@ -2426,6 +2439,7 @@ class modelWE:
                 dtrajs = [None] * (self.maxIter - 1)
                 for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
                     dtraj, _, iteration = ray.get(task_id)
+                    # log.info(f"Got result for iteration {iteration}")
                     dtrajs[iteration - 1] = dtraj
 
                 # Remove all empty elements from dtrajs and assign to self.dtrajs
@@ -2515,7 +2529,12 @@ class modelWE:
         self.n_clusters = np.shape(self.clusters.clustercenters)[0]
 
     @ray.remote
-    def get_iter_fluxMatrix_ray(self, n_iter, processCoordinates):
+    def get_iter_fluxMatrix_ray(args):
+
+        model_id, n_iter, processCoordinates_id = args
+
+        self = ray.get(model_id)
+        processCoordinates = ray.get(processCoordinates_id)
 
         self.processCoordinates = processCoordinates
 
@@ -2893,15 +2912,21 @@ class modelWE:
                 #     _redis_password=ray_args["password"],
                 #     ignore_reinit_error=True,
                 # )
-                ray.init(address=f'ray://{ray_args["address"]}')
+                if not ray.is_initialized():
+                    ray.init(address=f'ray://{ray_args["address"]}')
                 log.info("Connected to Ray cluster!")
 
                 # Submit all the tasks for iteration fluxmatrix calculations
                 task_ids = []
+
+                model_id = ray.put(self)
+                processCoordinates_id = ray.put(self.processCoordinates)
+
                 for iteration in range(first_iter + 1, last_iter + 1):
 
+                    # log.debug(f"Submitted fluxmatrix task iteration {iteration}")
                     _id = self.get_iter_fluxMatrix_ray.remote(
-                        self, iteration, self.processCoordinates
+                        [model_id, iteration, processCoordinates_id]
                     )
 
                     task_ids.append(_id)
@@ -2914,7 +2939,7 @@ class modelWE:
                     # add the results to the running total
                     iteration_fluxMatrix, _iteration = ray.get(task_id)
                     fluxMatrix = fluxMatrix + iteration_fluxMatrix
-                    log.debug(f"Completed flux matrix for iter {_iteration}")
+                    # log.debug(f"Completed flux matrix for iter {_iteration}")
 
                 # Write the H5. Can't do this per-iteration, because we're not guaranteed to be going sequentially now
 
@@ -3197,14 +3222,20 @@ class modelWE:
             #     _redis_password=ray_args["password"],
             #     ignore_reinit_error=True,
             # )
-            ray.init(address=f'ray://{ray_args["address"]}')
+            if not ray.is_initialized():
+                ray.init(address=f'ray://{ray_args["address"]}')
             log.info("Connected to Ray cluster!")
 
             # Submit all the discretization tasks to the cluster
             task_ids = []
+
+            model_id = ray.put(self)
+            cluster_model_id = ray.put(self.clusters)
+            process_coordinates_id = ray.put(self.processCoordinates)
+
             for iteration in range(1, self.maxIter):
                 _id = self.do_ray_discretization.remote(
-                    self, [self.clusters, iteration, self.processCoordinates]
+                    [model_id, cluster_model_id, iteration, process_coordinates_id]
                 )
                 task_ids.append(_id)
 
