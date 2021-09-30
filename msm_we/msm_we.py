@@ -2924,7 +2924,22 @@ class modelWE:
                 model_id = ray.put(self)
                 processCoordinates_id = ray.put(self.processCoordinates)
 
-                for iteration in range(first_iter + 1, last_iter + 1):
+                max_inflight = 1000
+                for iteration in tqdm.tqdm(
+                    range(first_iter + 1, last_iter + 1),
+                    desc="Submitting fluxmatrix tasks",
+                ):
+
+                    # Allow 1000 in flight calls
+                    # For example, if i = 5000, this call blocks until that
+                    # 4000 of the object_refs in result_refs are ready
+                    # and available.
+                    # See: https://docs.ray.io/en/latest/ray-design-patterns/limit-tasks.html
+                    if len(task_ids) > max_inflight:
+
+                        # The number that need to be ready before we can submit more
+                        num_ready = iteration - max_inflight
+                        ray.wait(task_ids, num_returns=num_ready)
 
                     # log.debug(f"Submitted fluxmatrix task iteration {iteration}")
                     _id = self.get_iter_fluxMatrix_ray.remote(
@@ -2934,14 +2949,44 @@ class modelWE:
                     task_ids.append(_id)
 
                 # Wait for them to complete
-                for task_id in tqdm.tqdm(
-                    task_ids, desc="Ray-parallel fluxmatrix calculation"
-                ):
 
-                    # add the results to the running total
-                    iteration_fluxMatrix, _iteration = ray.get(task_id)
-                    fluxMatrix = fluxMatrix + iteration_fluxMatrix
-                    # log.debug(f"Completed flux matrix for iter {_iteration}")
+                ### This follows two antipatterns: ray.get() in a loop, and retrieving results sequentially
+                # for task_id in tqdm.tqdm(
+                #     task_ids, desc="Ray-parallel fluxmatrix calculation"
+                # ):
+                #
+                #     # add the results to the running total
+                #     iteration_fluxMatrix, _iteration = ray.get(task_id)
+                #     fluxMatrix = fluxMatrix + iteration_fluxMatrix
+                #     # log.debug(f"Completed flux matrix for iter {_iteration}")
+
+                ### Instead, get results as follows
+                # Don't retrieve more than 500 results at once (so we don't swamp memory with matrices)
+                # A 10k x 10k matrix of 64-bit floats is 800MB, so if we try to pull 50, that's 40GB of memory
+                # Of course matrix sizes will change, but let's use 50 as a reasonable ballpark for max number to pull
+                #   at once.
+                result_batch_size = min(50, last_iter - first_iter)
+                unfinished = task_ids
+
+                # Process results as they're ready, instead of in submission order
+                #  See: https://docs.ray.io/en/latest/ray-design-patterns/submission-order.html
+                # Additionally, this batches rather than getting them all at once, or one by one.
+
+                with tqdm.tqdm(
+                    total=len(unfinished), desc="Retrieving flux matrices"
+                ) as pbar:
+                    while unfinished:
+                        result_batch_size = min(result_batch_size, len(unfinished))
+                        # Returns the first ObjectRef that is ready.
+                        finished, unfinished = ray.wait(
+                            unfinished, num_returns=result_batch_size
+                        )
+                        results = ray.get(finished)
+
+                        # Add each matrix to the total fluxmatrix
+                        for _fmatrix, _iter in results:
+                            fluxMatrix = fluxMatrix + _fmatrix
+                        pbar.update(len(finished))
 
                 # Write the H5. Can't do this per-iteration, because we're not guaranteed to be going sequentially now
 
