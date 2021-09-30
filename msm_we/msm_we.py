@@ -2411,9 +2411,7 @@ class modelWE:
                 #     _redis_password=ray_args["password"],
                 #     ignore_reinit_error=True,
                 # )
-                ray.init(
-                    address=f'ray://{ray_args["address"]}', ignore_reinit_error=True
-                )
+                ray.init(address=f'ray://{ray_args["address"]}')
                 log.info("Connected to Ray cluster!")
 
                 # Submit all the discretization tasks to the cluster
@@ -2895,9 +2893,7 @@ class modelWE:
                 #     _redis_password=ray_args["password"],
                 #     ignore_reinit_error=True,
                 # )
-                ray.init(
-                    address=f'ray://{ray_args["address"]}', ignore_reinit_error=True
-                )
+                ray.init(address=f'ray://{ray_args["address"]}')
                 log.info("Connected to Ray cluster!")
 
                 # Submit all the tasks for iteration fluxmatrix calculations
@@ -3201,7 +3197,7 @@ class modelWE:
             #     _redis_password=ray_args["password"],
             #     ignore_reinit_error=True,
             # )
-            ray.init(address=f'ray://{ray_args["address"]}', ignore_reinit_error=True)
+            ray.init(address=f'ray://{ray_args["address"]}')
             log.info("Connected to Ray cluster!")
 
             # Submit all the discretization tasks to the cluster
