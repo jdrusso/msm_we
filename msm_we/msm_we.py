@@ -2426,7 +2426,7 @@ class modelWE:
                 cluster_model_id = ray.put(cluster_model)
                 process_coordinates_id = ray.put(self.processCoordinates)
 
-                max_inflight = 1000
+                max_inflight = 50
                 for iteration in tqdm.tqdm(
                     range(1, self.maxIter), desc="Submitting discretization tasks"
                 ):
@@ -2467,6 +2467,7 @@ class modelWE:
                         for dtraj, _, iteration in results:
                             dtrajs[iteration - 1] = dtraj
                             pbar.update(1)
+                            pbar.refresh()
 
                 # Remove all empty elements from dtrajs and assign to self.dtrajs
                 self.dtrajs = [dtraj for dtraj in dtrajs if dtraj is not None]
@@ -2651,7 +2652,7 @@ class modelWE:
                 + "\n"
             )
         else:
-            log.warning(f"No target1 entries. {ind_end_in_target}")
+            log.debug(f"No target1 entries. {ind_end_in_target}")
 
         # Get the index of every point
         ind_start_in_basis = np.where(self.is_WE_basis(self.pcoord0List[good_coords]))
@@ -2939,9 +2940,10 @@ class modelWE:
                 #     _redis_password=ray_args["password"],
                 #     ignore_reinit_error=True,
                 # )
-                if not ray.is_initialized():
-                    ray.init(address=f'ray://{ray_args["address"]}')
-                log.info("Connected to Ray cluster!")
+                
+                #if not ray.is_initialized():
+                #    ray.init(address=f'ray://{ray_args["address"]}')
+                log.info(f"Connected to Ray cluster! Available resource are {ray.available_resources()}")
 
                 # Submit all the tasks for iteration fluxmatrix calculations
                 task_ids = []
@@ -2949,7 +2951,7 @@ class modelWE:
                 model_id = ray.put(self)
                 processCoordinates_id = ray.put(self.processCoordinates)
 
-                max_inflight = 1000
+                max_inflight = 70
                 for iteration in tqdm.tqdm(
                     range(first_iter + 1, last_iter + 1),
                     desc="Submitting fluxmatrix tasks",
@@ -2960,11 +2962,13 @@ class modelWE:
                     # 4000 of the object_refs in result_refs are ready
                     # and available.
                     # See: https://docs.ray.io/en/latest/ray-design-patterns/limit-tasks.html
-                    if len(task_ids) > max_inflight:
+                    if False and len(task_ids) > max_inflight:
 
                         # The number that need to be ready before we can submit more
                         num_ready = iteration - max_inflight
-                        ray.wait(task_ids, num_returns=num_ready)
+                        log.info(f"At iteration {iteration}, waiting to submit more jobs until {num_ready} are ready")
+                        ready, notready = ray.wait(task_ids, num_returns=num_ready)
+                        log.info(f"At iteration {iteration}, {len(ready)} jobs are ready {len(notready)} not, submitting more.")
 
                     # log.debug(f"Submitted fluxmatrix task iteration {iteration}")
                     _id = self.get_iter_fluxMatrix_ray.remote(
@@ -2991,20 +2995,20 @@ class modelWE:
                 # Of course matrix sizes will change, but let's use 50 as a reasonable ballpark for max number to pull
                 #   at once.
                 result_batch_size = min(50, last_iter - first_iter)
-                unfinished = task_ids
+                #unfinished = task_ids
 
                 # Process results as they're ready, instead of in submission order
                 #  See: https://docs.ray.io/en/latest/ray-design-patterns/submission-order.html
                 # Additionally, this batches rather than getting them all at once, or one by one.
 
                 with tqdm.tqdm(
-                    total=len(unfinished), desc="Retrieving flux matrices"
+                    total=(last_iter - first_iter), desc="Retrieving flux matrices"
                 ) as pbar:
-                    while unfinished:
-                        result_batch_size = min(result_batch_size, len(unfinished))
+                    while task_ids:
+                        result_batch_size = min(result_batch_size, len(task_ids))
                         # Returns the first ObjectRef that is ready.
-                        finished, unfinished = ray.wait(
-                            unfinished, num_returns=result_batch_size
+                        finished, task_ids = ray.wait(
+                            task_ids, num_returns=result_batch_size
                         )
                         results = ray.get(finished)
 
@@ -3012,6 +3016,7 @@ class modelWE:
                         for _fmatrix, _iter in results:
                             fluxMatrix = fluxMatrix + _fmatrix
                             pbar.update(1)
+                            pbar.refresh()
 
                 # Write the H5. Can't do this per-iteration, because we're not guaranteed to be going sequentially now
 
@@ -3305,7 +3310,7 @@ class modelWE:
             cluster_model_id = ray.put(self.clusters)
             process_coordinates_id = ray.put(self.processCoordinates)
 
-            max_inflight = 1000
+            max_inflight = 50
             for iteration in tqdm.tqdm(
                 range(1, self.maxIter), desc="Submitting discretization tasks"
             ):
@@ -3344,6 +3349,7 @@ class modelWE:
                     for dtraj, _, iteration in results:
                         dtrajs[iteration - 1] = dtraj
                         pbar.update(1)
+                        pbar.refresh()
 
             # Remove all empty elements from dtrajs and assign to self.dtrajs
             self.dtrajs = [dtraj for dtraj in dtrajs if dtraj is not None]
