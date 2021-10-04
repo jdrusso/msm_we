@@ -3005,18 +3005,25 @@ class modelWE:
                     total=(last_iter - first_iter), desc="Retrieving flux matrices"
                 ) as pbar:
                     while task_ids:
+                        #result_batch_size = min(result_batch_size, len(task_ids))
+                        result_batch_size = 50
                         result_batch_size = min(result_batch_size, len(task_ids))
-                        # Returns the first ObjectRef that is ready.
+                        log.info(f"Waiting for {result_batch_size} results ({len(task_ids)} total remain)")
+
+                        # Returns the first ObjectRefs that are ready, with a 60s timeout.
                         finished, task_ids = ray.wait(
-                            task_ids, num_returns=result_batch_size
+                            task_ids, num_returns=result_batch_size, timeout=20
                         )
                         results = ray.get(finished)
+                        log.info(f"Obtained {len(results)} results")
 
                         # Add each matrix to the total fluxmatrix
                         for _fmatrix, _iter in results:
                             fluxMatrix = fluxMatrix + _fmatrix
                             pbar.update(1)
                             pbar.refresh()
+
+                log.info("Fluxmatrices all obtained")
 
                 # Write the H5. Can't do this per-iteration, because we're not guaranteed to be going sequentially now
 
