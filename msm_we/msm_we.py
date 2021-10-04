@@ -2427,30 +2427,26 @@ class modelWE:
                     #     num_ready = iteration - max_inflight
                     #     ray.wait(task_ids, num_returns=num_ready)
 
-                    id = self.do_ray_discretization.remote(
+                    _id = self.do_ray_discretization.remote(
                         model_id, cluster_model_id, iteration, process_coordinates_id
                     )
-                    task_ids.append(id)
+                    task_ids.append(_id)
 
                 # As they're completed, add them to dtrajs
                 dtrajs = [None] * (self.maxIter - 1)
-                # for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
-                #     dtraj, _, iteration = ray.get(task_id)
-                #     # log.info(f"Got result for iteration {iteration}")
-                #     dtrajs[iteration - 1] = dtraj
 
                 # Do these in bigger batches, dtrajs aren't very big
-                result_batch_size = min(500, self.maxIter - 1)
-                unfinished = task_ids
 
                 with tqdm.tqdm(
-                    total=len(unfinished), desc="Retrieving discretized trajectories"
+                    total=len(task_ids), desc="Retrieving discretized trajectories"
                 ) as pbar:
-                    while unfinished:
-                        result_batch_size = min(result_batch_size, len(unfinished))
-                        # Returns the first ObjectRef that is ready.
-                        finished, unfinished = ray.wait(
-                            unfinished, num_returns=result_batch_size
+                    while task_ids:
+                        result_batch_size = 50
+                        result_batch_size = min(result_batch_size, len(task_ids))
+
+                        # Returns the first ObjectRef that is ready, with a 20s timeout
+                        finished, task_ids = ray.wait(
+                            task_ids, num_returns=result_batch_size, timeout=20
                         )
                         results = ray.get(finished)
 
@@ -2916,10 +2912,6 @@ class modelWE:
             # If we're running through Ray..
             else:
 
-                # assert (
-                #     "address" in ray_args.keys() and "password" in ray_args.keys()
-                # ), "ray_args must specify an address and password for the cluster"
-
                 # First, connect to the ray cluster
                 log.info(
                     f"Connected to Ray cluster! Available resource are {ray.available_resources()}"
@@ -3039,7 +3031,7 @@ class modelWE:
         # Update state with the new, updated, or loaded from file fluxMatrix.
         self.fluxMatrixRaw = fluxMatrix
 
-    def organize_fluxMatrix(self, ray_args=None, do_cleaning=True, states_to_keep=None):
+    def organize_fluxMatrix(self, use_ray=False, do_cleaning=True, states_to_keep=None):
         """
         Do some cleaning on the flux matrix, and update state with the cleaned flux matrix.
 
@@ -3256,7 +3248,7 @@ class modelWE:
         #   this more efficient.
         self.dtrajs = []
 
-        if ray_args is None:
+        if not use_ray:
             extra_iters_used = 0
             for iteration in tqdm.tqdm(
                 range(1, self.maxIter), desc="Post-cleaning rediscretization"
@@ -3277,21 +3269,11 @@ class modelWE:
 
                     self.dtrajs.append(dtrajs)
 
+        # If we're using Ray...
         else:
-            assert (
-                "address" in ray_args.keys() and "password" in ray_args.keys()
-            ), "ray_args must specify an address and password for the cluster"
 
             # First, connect to the ray cluster
-            log.info("Connecting to Ray....")
-            # ray.init(
-            #     address=ray_args["address"],
-            #     _redis_password=ray_args["password"],
-            #     ignore_reinit_error=True,
-            # )
-            if not ray.is_initialized():
-                ray.init(address=f'ray://{ray_args["address"]}')
-            log.info("Connected to Ray cluster!")
+            log.info(f"Using Ray cluster with {ray.available_resources['CPU']} CPUs!")
 
             # Submit all the discretization tasks to the cluster
             task_ids = []
@@ -3300,39 +3282,36 @@ class modelWE:
             cluster_model_id = ray.put(self.clusters)
             process_coordinates_id = ray.put(self.processCoordinates)
 
-            max_inflight = 50
+            # max_inflight = 50
             for iteration in tqdm.tqdm(
                 range(1, self.maxIter), desc="Submitting discretization tasks"
             ):
+                # if len(task_ids) > max_inflight:
+                #
+                #     # The number that need to be ready before we can submit more
+                #     num_ready = iteration - max_inflight
+                #     ray.wait(task_ids, num_returns=num_ready)
 
-                if len(task_ids) > max_inflight:
-
-                    # The number that need to be ready before we can submit more
-                    num_ready = iteration - max_inflight
-                    ray.wait(task_ids, num_returns=num_ready)
-
-                id = self.do_ray_discretization.remote(
+                _id = self.do_ray_discretization.remote(
                     model_id, cluster_model_id, iteration, process_coordinates_id
                 )
-                task_ids.append(id)
+                task_ids.append(_id)
 
             # As they're completed, add them to dtrajs
             dtrajs = [None] * (self.maxIter - 1)
-            # for task_id in tqdm.tqdm(task_ids, desc="Ray-parallel discretization"):
-            #     dtraj, _, iteration = ray.get(task_id)
-            #     dtrajs[iteration - 1] = dtraj
 
-            result_batch_size = min(500, self.maxIter - 1)
-            unfinished = task_ids
+            # Do these in bigger batches, dtrajs aren't very big
 
             with tqdm.tqdm(
-                total=len(unfinished), desc="Retrieving discretized trajectories"
+                total=len(task_ids), desc="Retrieving discretized trajectories"
             ) as pbar:
-                while unfinished:
-                    result_batch_size = min(result_batch_size, len(unfinished))
-                    # Returns the first ObjectRef that is ready.
-                    finished, unfinished = ray.wait(
-                        unfinished, num_returns=result_batch_size
+                while task_ids:
+                    result_batch_size = 50
+                    result_batch_size = min(result_batch_size, len(task_ids))
+
+                    # Returns the first ObjectRef that is ready, with a 20s timeout
+                    finished, task_ids = ray.wait(
+                        task_ids, num_returns=result_batch_size, timeout=20
                     )
                     results = ray.get(finished)
 
@@ -3350,7 +3329,7 @@ class modelWE:
         self.n_clusters -= n_removed
 
         # Rebuild the fluxmatrix with whatever params were originally provided
-        self.get_fluxMatrix(*self._fluxMatrixParams, ray_args=ray_args)
+        self.get_fluxMatrix(*self._fluxMatrixParams, use_ray=use_ray)
 
         # # The new, organized fluxmatrix is the result of computing the new fluxmatrix, on the new set of bins.
         new_fluxMatrix = self.fluxMatrixRaw.copy()
