@@ -2894,14 +2894,11 @@ class modelWE:
             # Create the fluxMatrix dataset
             dsetP = f.create_dataset(dsetName, np.shape(fluxMatrix))
             dsetP[:] = fluxMatrix
-            # FIXME: Maybe just close this file after, I don't think it needs to be opened and closed this much
-            # f.close()
 
             # Add up the flux matrices for each iteration to get the flux matrix.
             # Then, save that matrix to the data file, along with the number of iterations used
             # FIXME: Duplicated code
             # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
-            # TODO: Ray parallelize the fluxmatrix calculation here
             if ray_args is None:
                 for iS in tqdm.tqdm(
                     range(first_iter + 1, last_iter + 1),
@@ -2940,10 +2937,12 @@ class modelWE:
                 #     _redis_password=ray_args["password"],
                 #     ignore_reinit_error=True,
                 # )
-                
-                #if not ray.is_initialized():
+
+                # if not ray.is_initialized():
                 #    ray.init(address=f'ray://{ray_args["address"]}')
-                log.info(f"Connected to Ray cluster! Available resource are {ray.available_resources()}")
+                log.info(
+                    f"Connected to Ray cluster! Available resource are {ray.available_resources()}"
+                )
 
                 # Submit all the tasks for iteration fluxmatrix calculations
                 task_ids = []
@@ -2951,24 +2950,25 @@ class modelWE:
                 model_id = ray.put(self)
                 processCoordinates_id = ray.put(self.processCoordinates)
 
-                max_inflight = 70
+                # max_inflight = 70
                 for iteration in tqdm.tqdm(
                     range(first_iter + 1, last_iter + 1),
                     desc="Submitting fluxmatrix tasks",
                 ):
 
                     # Allow 1000 in flight calls
+                    # This is buggy, so disable for now.
                     # For example, if i = 5000, this call blocks until that
                     # 4000 of the object_refs in result_refs are ready
                     # and available.
                     # See: https://docs.ray.io/en/latest/ray-design-patterns/limit-tasks.html
-                    if False and len(task_ids) > max_inflight:
-
-                        # The number that need to be ready before we can submit more
-                        num_ready = iteration - max_inflight
-                        log.info(f"At iteration {iteration}, waiting to submit more jobs until {num_ready} are ready")
-                        ready, notready = ray.wait(task_ids, num_returns=num_ready)
-                        log.info(f"At iteration {iteration}, {len(ready)} jobs are ready {len(notready)} not, submitting more.")
+                    # if len(task_ids) > max_inflight:
+                    #
+                    #     # The number that need to be ready before we can submit more
+                    #     num_ready = iteration - max_inflight
+                    #     log.info(f"At iteration {iteration}, waiting to submit more jobs until {num_ready} are ready")
+                    #     ready, notready = ray.wait(task_ids, num_returns=num_ready)
+                    #     log.info(f"At iteration {iteration}, {len(ready)} jobs are ready {len(notready)} not, submitting more.")
 
                     # log.debug(f"Submitted fluxmatrix task iteration {iteration}")
                     _id = self.get_iter_fluxMatrix_ray.remote(
@@ -2978,25 +2978,6 @@ class modelWE:
                     task_ids.append(_id)
 
                 # Wait for them to complete
-
-                ### This follows two antipatterns: ray.get() in a loop, and retrieving results sequentially
-                # for task_id in tqdm.tqdm(
-                #     task_ids, desc="Ray-parallel fluxmatrix calculation"
-                # ):
-                #
-                #     # add the results to the running total
-                #     iteration_fluxMatrix, _iteration = ray.get(task_id)
-                #     fluxMatrix = fluxMatrix + iteration_fluxMatrix
-                #     # log.debug(f"Completed flux matrix for iter {_iteration}")
-
-                ### Instead, get results as follows
-                # Don't retrieve more than 500 results at once (so we don't swamp memory with matrices)
-                # A 10k x 10k matrix of 64-bit floats is 800MB, so if we try to pull 50, that's 40GB of memory
-                # Of course matrix sizes will change, but let's use 50 as a reasonable ballpark for max number to pull
-                #   at once.
-                result_batch_size = min(50, last_iter - first_iter)
-                #unfinished = task_ids
-
                 # Process results as they're ready, instead of in submission order
                 #  See: https://docs.ray.io/en/latest/ray-design-patterns/submission-order.html
                 # Additionally, this batches rather than getting them all at once, or one by one.
@@ -3005,10 +2986,11 @@ class modelWE:
                     total=(last_iter - first_iter), desc="Retrieving flux matrices"
                 ) as pbar:
                     while task_ids:
-                        #result_batch_size = min(result_batch_size, len(task_ids))
                         result_batch_size = 50
                         result_batch_size = min(result_batch_size, len(task_ids))
-                        log.info(f"Waiting for {result_batch_size} results ({len(task_ids)} total remain)")
+                        log.info(
+                            f"Waiting for {result_batch_size} results ({len(task_ids)} total remain)"
+                        )
 
                         # Returns the first ObjectRefs that are ready, with a 60s timeout.
                         finished, task_ids = ray.wait(
@@ -3076,7 +3058,7 @@ class modelWE:
         # Update state with the new, updated, or loaded from file fluxMatrix.
         self.fluxMatrixRaw = fluxMatrix
 
-    def organize_fluxMatrix(self, ray_args=None):
+    def organize_fluxMatrix(self, ray_args=None, do_cleaning=True, states_to_keep=None):
         """
         Do some cleaning on the flux matrix, and update state with the cleaned flux matrix.
 
@@ -3085,13 +3067,23 @@ class modelWE:
             - Remove bins with no connectivity
             - Sort along the bins' projection in pcoord 1
 
+        Parameters
+        ----------
+        ray_args : dict
+            Dictionary whose values are currently unused, but containing an 'address' and 'password' key will enable
+            Ray.
+
+        do_cleaning : bool
+            If true, clean self.fluxMatrixRaw and re-discretize to produce self.fluxMatrix. If false, just return
+            the list of good states to keep.
+
         Returns
         -------
         None
 
         TODO
         ----
-        Need to update self.cluster_structures with the new, reduced set of clusters
+        Break this up into find_traps() and clean_traps(list_of_traps).
         """
 
         original_fluxmatrix = self.fluxMatrixRaw.copy()
@@ -3192,6 +3184,16 @@ class modelWE:
             # Make sure we don't clean the target or basis clusters
             good_clusters[basis_cluster_index] = 1
             good_clusters[target_cluster_index] = 1
+
+        # If a list of states to keep has been provided, forget everything we just did, and only clean those.
+        # Still run the above, rather than putting the else for this if clause around it,
+        #   so that we still get the cluster pcoords from it.
+        if states_to_keep is not None:
+            good_clusters[:] = 0
+            good_clusters[states_to_keep] = 1
+
+        if not do_cleaning:
+            return good_clusters
 
         # Store this array. 1 if a cluster is good, 0 otherwise.
         clusters_good = np.copy(good_clusters)
