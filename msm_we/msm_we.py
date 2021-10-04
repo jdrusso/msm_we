@@ -1827,13 +1827,21 @@ class modelWE:
 
         return ipca, used_iters
 
-    def dimReduce(self):
+    def dimReduce(
+        self,
+        first_iter=1,
+        first_rough_iter=None,
+        last_iter=None,
+        rough_stride=10,
+        fine_stride=1,
+    ):
         """
         Dimensionality reduction using the scheme specified in initialization.
 
-        This just defines the dimensionality reduction scheme -- it does NOT actually run it!
+        This just defines the dimensionality reduction scheme and builds the model -- it does NOT actually transform
+        the data!
 
-        Dimensionality reduction is actually performed via reduceCoordinates(), which uses self.coordinates as set
+        Transforming the data is performed via reduceCoordinates(), which uses self.coordinates as set
             by this.
 
         Updates:
@@ -1843,12 +1851,6 @@ class modelWE:
         Returns
         -------
         None
-
-        Todo
-        ----
-        Allow passing custom parameters to the dimensionality reduction schemes.
-
-        Add `else` clause that raises a `NotImplemented` exception
         """
 
         log.debug(f"Running dimensionality reduction -- method: {self.dimReduceMethod}")
@@ -1861,20 +1863,23 @@ class modelWE:
             #   variance cutoff.
             # This is necessary because with incremental PCA, there's no way to do this ahead of time.
             variance_cutoff = 0.95
-            # total_num_iterations = len(self.numSegments)
-            total_num_iterations = self.maxIter
 
-            first_iter = 1
+            if last_iter is None:
+                last_iter = self.maxIter
 
             rough_ipca = iPCA()
 
-            # Stride every 10th frame, so you're only doing the "rough" pca on 10% of the data
-            if total_num_iterations > 100:
-                rough_iters = range(1, total_num_iterations, 10)
+            if first_rough_iter is None:
+                total_num_iterations = last_iter
+                # Stride every 10th frame, so you're only doing the "rough" pca on 10% of the data
+                if total_num_iterations > 100:
+                    rough_iters = range(1, total_num_iterations, rough_stride)
 
-            # But if you only have 100 frames or fewer, then just do the last-half.
+                # But if you only have 100 frames or fewer, then just do the last-half.
+                else:
+                    rough_iters = range(total_num_iterations // 2, total_num_iterations)
             else:
-                rough_iters = range(total_num_iterations // 2, total_num_iterations)
+                rough_iters = range(first_rough_iter, last_iter, rough_stride)
 
             for iteration in tqdm.tqdm(rough_iters, desc="Initial iPCA"):
 
@@ -1907,7 +1912,7 @@ class modelWE:
 
             extra_iters_used = 0
             for iteration in tqdm.tqdm(
-                range(first_iter, total_num_iterations), desc="iPCA"
+                range(first_iter, last_iter, fine_stride), desc="iPCA"
             ):
 
                 if extra_iters_used > 0:
