@@ -2219,7 +2219,7 @@ class modelWE:
         n_clusters,
         streaming=False,
         first_cluster_iter=1,
-        ray_args=None,
+        use_ray=False,
         **_cluster_args,
     ):
         """
@@ -2381,7 +2381,7 @@ class modelWE:
             extra_iters_used = 0
 
             # If we're not using Ray, then calculate serially
-            if ray_args is None:
+            if not use_ray:
                 for iteration in tqdm.tqdm(
                     range(1, self.maxIter), desc="Discretization"
                 ):
@@ -2404,20 +2404,10 @@ class modelWE:
             # If we want to use Ray
             else:
 
-                assert (
-                    "address" in ray_args.keys() and "password" in ray_args.keys()
-                ), "ray_args must specify an address and password for the cluster"
-
                 # First, connect to the ray cluster
-                log.info("Connecting to Ray....")
-                # ray.init(
-                #     address=ray_args["address"],
-                #     _redis_password=ray_args["password"],
-                #     ignore_reinit_error=True,
-                # )
-                if not ray.is_initialized():
-                    ray.init(address=f'ray://{ray_args["address"]}')
-                log.info("Connected to Ray cluster!")
+                log.info(
+                    f"Using Ray cluster with {ray.available_resources['CPU']} CPUs!"
+                )
 
                 # Submit all the discretization tasks to the cluster
                 task_ids = []
@@ -2426,16 +2416,16 @@ class modelWE:
                 cluster_model_id = ray.put(cluster_model)
                 process_coordinates_id = ray.put(self.processCoordinates)
 
-                max_inflight = 50
+                # max_inflight = 50
                 for iteration in tqdm.tqdm(
                     range(1, self.maxIter), desc="Submitting discretization tasks"
                 ):
 
-                    if len(task_ids) > max_inflight:
-
-                        # The number that need to be ready before we can submit more
-                        num_ready = iteration - max_inflight
-                        ray.wait(task_ids, num_returns=num_ready)
+                    # if len(task_ids) > max_inflight:
+                    #
+                    #     # The number that need to be ready before we can submit more
+                    #     num_ready = iteration - max_inflight
+                    #     ray.wait(task_ids, num_returns=num_ready)
 
                     id = self.do_ray_discretization.remote(
                         model_id, cluster_model_id, iteration, process_coordinates_id
@@ -2823,7 +2813,7 @@ class modelWE:
 
         return fluxMatrix
 
-    def get_fluxMatrix(self, n_lag, first_iter, last_iter, ray_args=None):
+    def get_fluxMatrix(self, n_lag, first_iter, last_iter, use_ray=False):
         """
         Compute the matrix of fluxes at a given lag time, for a range of iterations.
 
@@ -2899,7 +2889,7 @@ class modelWE:
             # Then, save that matrix to the data file, along with the number of iterations used
             # FIXME: Duplicated code
             # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
-            if ray_args is None:
+            if not use_ray:
                 for iS in tqdm.tqdm(
                     range(first_iter + 1, last_iter + 1),
                     desc="Constructing flux matrix",
@@ -2926,20 +2916,11 @@ class modelWE:
             # If we're running through Ray..
             else:
 
-                assert (
-                    "address" in ray_args.keys() and "password" in ray_args.keys()
-                ), "ray_args must specify an address and password for the cluster"
+                # assert (
+                #     "address" in ray_args.keys() and "password" in ray_args.keys()
+                # ), "ray_args must specify an address and password for the cluster"
 
                 # First, connect to the ray cluster
-                log.info("Connecting to Ray....")
-                # ray.init(
-                #     address=ray_args["address"],
-                #     _redis_password=ray_args["password"],
-                #     ignore_reinit_error=True,
-                # )
-
-                # if not ray.is_initialized():
-                #    ray.init(address=f'ray://{ray_args["address"]}')
                 log.info(
                     f"Connected to Ray cluster! Available resource are {ray.available_resources()}"
                 )
