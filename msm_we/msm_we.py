@@ -2413,7 +2413,7 @@ class modelWE:
 
                 # First, connect to the ray cluster
                 log.info(
-                    f"Using Ray cluster with {ray.available_resources['CPU']} CPUs!"
+                    f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!"
                 )
 
                 # Submit all the discretization tasks to the cluster
@@ -2921,7 +2921,7 @@ class modelWE:
 
                 # First, connect to the ray cluster
                 log.info(
-                    f"Connected to Ray cluster! Available resource are {ray.available_resources()}"
+                    f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!"
                 )
 
                 # Submit all the tasks for iteration fluxmatrix calculations
@@ -3280,7 +3280,7 @@ class modelWE:
         else:
 
             # First, connect to the ray cluster
-            log.info(f"Using Ray cluster with {ray.available_resources['CPU']} CPUs!")
+            log.info(f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!")
 
             # Submit all the discretization tasks to the cluster
             task_ids = []
