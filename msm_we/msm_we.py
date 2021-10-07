@@ -2261,6 +2261,7 @@ class modelWE:
         log.debug(f"Doing clustering on {n_clusters} clusters")
 
         self.n_clusters = n_clusters
+        self.first_cluster_iter = first_cluster_iter
         # streaming = False
 
         if "metric" in _cluster_args.keys() or "k" in _cluster_args.keys():
@@ -2974,7 +2975,7 @@ class modelWE:
                     while task_ids:
                         result_batch_size = 50
                         result_batch_size = min(result_batch_size, len(task_ids))
-                        log.info(
+                        log.debug(
                             f"Waiting for {result_batch_size} results ({len(task_ids)} total remain)"
                         )
 
@@ -2983,7 +2984,7 @@ class modelWE:
                             task_ids, num_returns=result_batch_size, timeout=20
                         )
                         results = ray.get(finished)
-                        log.info(f"Obtained {len(results)} results")
+                        log.debug(f"Obtained {len(results)} results")
 
                         # Add each matrix to the total fluxmatrix
                         for _fmatrix, _iter in results:
@@ -3044,7 +3045,9 @@ class modelWE:
         # Update state with the new, updated, or loaded from file fluxMatrix.
         self.fluxMatrixRaw = fluxMatrix
 
-    def organize_fluxMatrix(self, use_ray=False, do_cleaning=True, states_to_keep=None):
+    def organize_fluxMatrix(
+        self, use_ray=False, do_cleaning=True, states_to_keep=None, rediscretize=True
+    ):
         """
         Do some cleaning on the flux matrix, and update state with the cleaned flux matrix.
 
@@ -3261,10 +3264,12 @@ class modelWE:
         #   this more efficient.
         self.dtrajs = []
 
-        if not use_ray:
+        first_iter, last_iter = 1, self.maxIter
+
+        if rediscretize and not use_ray:
             extra_iters_used = 0
             for iteration in tqdm.tqdm(
-                range(1, self.maxIter), desc="Post-cleaning rediscretization"
+                range(first_iter, last_iter), desc="Post-cleaning rediscretization"
             ):
 
                 if extra_iters_used > 0:
@@ -3283,7 +3288,7 @@ class modelWE:
                     self.dtrajs.append(dtrajs)
 
         # If we're using Ray...
-        else:
+        elif rediscretize and use_ray:
 
             # First, connect to the ray cluster
             log.info(f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!")
@@ -3297,7 +3302,7 @@ class modelWE:
 
             # max_inflight = 50
             for iteration in tqdm.tqdm(
-                range(1, self.maxIter), desc="Submitting discretization tasks"
+                range(first_iter, last_iter), desc="Submitting discretization tasks"
             ):
                 # if len(task_ids) > max_inflight:
                 #
@@ -3311,7 +3316,7 @@ class modelWE:
                 task_ids.append(_id)
 
             # As they're completed, add them to dtrajs
-            dtrajs = [None] * (self.maxIter - 1)
+            dtrajs = [None] * (last_iter - first_iter)
 
             # Do these in bigger batches, dtrajs aren't very big
 
