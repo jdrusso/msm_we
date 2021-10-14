@@ -3229,6 +3229,8 @@ class modelWE:
                 n_removed += 1
             cluster_mapping[key] = cluster_mapping[key] - n_removed
 
+        # TODO: This is unused, which is why it's just set to a 1:1. This is legacy, but left in for compatibility
+        #   with the restart plugin which expects it.
         log.debug(f"New cluster mapping is  {cluster_mapping}")
         self.cluster_mapping = cluster_mapping
         self.cluster_mapping = {
