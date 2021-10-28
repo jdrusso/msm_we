@@ -1969,7 +1969,7 @@ class modelWE:
             # TODO: Why is this unused?
             # data = self.all_coords.reshape(-1, self.ndim)
             self.coordinates = self.Coordinates()
-            # self.coordinates.transform=self.processCoordinates
+            self.coordinates.transform = self.processCoordinates
 
     class Coordinates(object):
         """
@@ -1982,18 +1982,6 @@ class modelWE:
 
         def transform(self, coords):
             return coords
-
-    # def processCoordinates(self, coords):
-    # def processCoordinates(self):
-    #     """
-    #     User-overrideable function to process coordinates.
-    #
-    #     This defines the featurization process.
-    #     It takes in takes in an array of the full set of coordinates, and spits out an array of the feature coordinates.
-    #     That array is then passed to functions like coor.pca(), coor.vamp(), or used directly if dimReduceMethod=="none".
-    #     """
-    #
-    #     raise NotImplementedError
 
     def reduceCoordinates(self, coords):
         """
@@ -2022,7 +2010,8 @@ class modelWE:
         if self.dimReduceMethod == "none":
             nC = np.shape(coords)
             nC = nC[0]
-            data = coords.reshape(nC, 3 * self.nAtoms)
+            # data = coords.reshape(nC, 3 * self.nAtoms)
+            data = coords.reshape(nC, -1)
             return data
 
         elif self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
@@ -2318,35 +2307,60 @@ class modelWE:
             else:
                 self.dtrajs = []
 
-                continued = False
-                for iteration in range(1, self.maxIter):
-                    _iter_coords = self.get_iter_coordinates(iteration).reshape(
-                        -1, 3 * self.nAtoms
-                    )
+                extra_iters_used = 0
+                for iteration in tqdm.tqdm(
+                    range(first_cluster_iter, self.maxIter), desc="Clustering"
+                ):
 
-                    if not continued:
-                        iter_coords = _iter_coords
-                    elif continued:
-                        log.debug(
-                            f"Appending {_iter_coords.shape[0]} trajs for clustering"
-                        )
-                        iter_coords = np.append(iter_coords, _iter_coords, axis=0)
+                    if extra_iters_used > 0:
+                        extra_iters_used -= 1
+                        log.debug(f"Already processed  iter  {iteration}")
+                        continue
 
-                    # This better pass, but just be sure.
-                    assert type(cluster_model) is mini_kmeans
-
-                    try:
-                        cluster_model.partial_fit(iter_coords)
-                    except ValueError:
-                        log.debug(
-                            "Not enough samples for the desired number of clusters, pulling"
-                            "more iterations."
-                        )
-                        continued = True
-                    else:
-                        continued = False
+                    with concurrent.futures.ProcessPoolExecutor(
+                        max_workers=1, mp_context=mp.get_context("fork")
+                    ) as executor:
+                        cluster_model, extra_iters_used = executor.submit(
+                            self.do_clustering,
+                            [
+                                cluster_model,
+                                iteration,
+                                cluster_args,
+                                self.processCoordinates,
+                            ],
+                        ).result()
 
                 self.clusters = cluster_model
+
+                # continued = False
+                # for iteration in range(1, self.maxIter):
+                #     _iter_coords = self.get_iter_coordinates(iteration).reshape(
+                #         -1, 3 * self.nAtoms
+                #     )
+                #
+                #     if not continued:
+                #         iter_coords = _iter_coords
+                #     elif continued:
+                #         log.debug(
+                #             f"Appending {_iter_coords.shape[0]} trajs for clustering"
+                #         )
+                #         iter_coords = np.append(iter_coords, _iter_coords, axis=0)
+                #
+                #     # This better pass, but just be sure.
+                #     assert type(cluster_model) is mini_kmeans
+                #
+                #     try:
+                #         cluster_model.partial_fit(iter_coords)
+                #     except ValueError:
+                #         log.debug(
+                #             "Not enough samples for the desired number of clusters, pulling"
+                #             "more iterations."
+                #         )
+                #         continued = True
+                #     else:
+                #         continued = False
+                #
+                # self.clusters = cluster_model
 
                 # Now compute dtrajs from the final model
                 for iteration in range(1, self.maxIter):
