@@ -2742,7 +2742,7 @@ class modelWE:
         self,
         n_clusters,
         # bin_mapper,
-        ignored_bins,  # Having this parameter sucks and is not necessary
+        # ignored_bins,  # Having this parameter sucks and is not necessary
         streaming=True,
         first_cluster_iter=1,
         use_ray=True,
@@ -2786,18 +2786,17 @@ class modelWE:
         Refactor the name
         """
 
+        # TODO: Eventually this should be moved up top, but I need to bring WESTPA in as a dependency
         try:
-            import westpa.tools.binning
+            from westpa import analysis
         except ImportError as e:
             log.error("WESTPA must be installed for stratified clustering!")
             raise e
 
-        # Get the bin mapper from one of the west files
-        with h5py.File(self.fileList[0], "r") as h5file:
-            bin_mapper, _, _ = westpa.tools.binning.mapper_from_hdf5(
-                h5file["bin_topologies"],
-                h5file["iterations/iter_00000002"].attrs["binhash"],
-            )
+        iteration = analysis.Run(self.fileList[0]).iteration(2)
+        bin_mapper = iteration.bin_mapper
+        target_bin = bin_mapper.assign(iteration.target_state_pcoords)
+        ignored_bins = target_bin
 
         if not streaming or not use_ray:
             log.error("This function currently MUST run in streaming mode, with ray.")
@@ -2932,7 +2931,7 @@ class modelWE:
 
         return kmeans_models, used_iters
 
-    def clean_stratified(self, basis, target, use_ray=True):
+    def clean_stratified(self, use_ray=True):
         """
         Alternative to organize_fluxMatrix, for stratified clustering.
 
@@ -2950,6 +2949,13 @@ class modelWE:
         fmatrix_original = self.fluxMatrixRaw.copy()
         fmatrix = self.fluxMatrixRaw.copy()
         fmatrix[-1, -2] = 1.0
+
+        from westpa import analysis
+
+        iteration = analysis.Run(self.fileList[0]).iteration(2)
+        bin_mapper = iteration.bin_mapper
+        basis = bin_mapper.assign(iteration.basis_state_pcoords)
+        target = bin_mapper.assign(iteration.target_state_pcoords)
 
         connected_sets = find_connected_sets(fmatrix, directed=True)
 
