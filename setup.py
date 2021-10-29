@@ -16,9 +16,12 @@ setup_requirements = [
     "pytest-runner",
 ]
 
-test_requirements = [
-    "pytest>=3",
-]
+# TODO: Can maybe remove this?
+test_requirements = ["pytest>=3"]
+
+EXTRAS_REQUIRE = {
+    "tests": ["pytest>=3", "mdtraj"],
+}
 
 setup(
     author="John Russo",
@@ -47,6 +50,7 @@ setup(
     setup_requires=setup_requirements,
     test_suite="tests",
     tests_require=test_requirements,
+    extras_require=EXTRAS_REQUIRE,
     url="https://github.com/jdrusso/msm_we",
     version="0.1.0",
     zip_safe=False,
