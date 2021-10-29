@@ -1969,7 +1969,7 @@ class modelWE:
             # TODO: Why is this unused?
             # data = self.all_coords.reshape(-1, self.ndim)
             self.coordinates = self.Coordinates()
-            self.coordinates.transform = self.processCoordinates
+            # self.coordinates.transform = self.processCoordinates
 
     class Coordinates(object):
         """
@@ -2007,14 +2007,11 @@ class modelWE:
 
         log.debug("Reducing coordinates")
 
-        if self.dimReduceMethod == "none":
-            nC = np.shape(coords)
-            nC = nC[0]
-            # data = coords.reshape(nC, 3 * self.nAtoms)
-            data = coords.reshape(nC, -1)
-            return data
-
-        elif self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
+        if (
+            self.dimReduceMethod == "none"
+            or self.dimReduceMethod == "pca"
+            or self.dimReduceMethod == "vamp"
+        ):
             coords = self.processCoordinates(coords)
             coords = self.coordinates.transform(coords)
             return coords
@@ -2339,9 +2336,7 @@ class modelWE:
 
                 # Now compute dtrajs from the final model
                 for iteration in range(1, self.maxIter):
-                    iter_coords = self.get_iter_coordinates(iteration).reshape(
-                        -1, 3 * self.nAtoms
-                    )
+                    iter_coords = self.get_iter_coordinates(iteration)
                     transformed_coords = self.coordinates.transform(
                         self.processCoordinates(iter_coords)
                     )
