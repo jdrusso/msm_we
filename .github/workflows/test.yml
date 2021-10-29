@@ -38,6 +38,7 @@ jobs:
       name: Test with pytest
       run: |
         source /home/runner/.bashrc
+        conda info
         conda install pytest
         cd tests
         pytest

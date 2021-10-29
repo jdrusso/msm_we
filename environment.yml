@@ -17,4 +17,3 @@ dependencies:
  - sphinx_rtd_theme
  - tqdm
  - scipy
- - ray
