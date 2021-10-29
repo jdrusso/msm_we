@@ -2741,8 +2741,6 @@ class modelWE:
     def cluster_very_stratified(
         self,
         n_clusters,
-        # bin_mapper,
-        # ignored_bins,  # Having this parameter sucks and is not necessary
         streaming=True,
         first_cluster_iter=1,
         use_ray=True,
@@ -2755,14 +2753,6 @@ class modelWE:
         ----------
         n_clusters: int
             Number of cluster centers per WE bin.
-
-        bin_mapper: westpa.core.binning.BinMapper
-            Bin mapper for the current simulation being analyzed.
-
-        ignored_bins: array-like
-            Indices of WE bins in the target.
-            Anything in the target gets mapped to its own state anyway,
-            so we don't want to try to cluster within it.
 
         streaming: bool (default True)
             Must be True for now.
