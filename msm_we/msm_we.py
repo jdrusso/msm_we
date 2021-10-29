@@ -3041,6 +3041,9 @@ class modelWE:
         self.indTargets = np.array([self.n_clusters + 1])
         self.nBins = self.n_clusters + 2
 
+        self.cluster_mapping = {x: x for x in range(self.n_clusters + 1)}
+        self.cluster_mapping[1000000000] = self.n_clusters + 1
+
     def launch_ray_discretization(self):
         """
         Apply discretization in parallel, through Ray
