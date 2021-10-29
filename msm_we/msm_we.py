@@ -236,9 +236,6 @@ class StratifiedClusters:
         self.processing_from = False
         self.toggle = False
 
-        #         The bin containing the WE target (no clustering is done in this bin)
-        #         self.target_we_bin = target_we_bin
-
         # These are bases/targets
         # It's only really important to ignore targets, because you may not have structures in the target b/c of recycling
         self.ignored_bins = ignored_bins
@@ -286,8 +283,6 @@ class StratifiedClusters:
 
         we_bins = self.bin_mapper.assign(iter_pcoords)
 
-        #         print(f"Going to try prediction at iteration {self.model.n_iter} ({we_bins})")
-
         # Discretize coords according to which WE bin they're in
         discrete = []
 
@@ -299,14 +294,12 @@ class StratifiedClusters:
 
             else:
                 consecutive_index = self.legitimate_bins.index(we_bins[i])
-                #                 offset = consecutive_index * self.n_clusters_per_bin
                 offset = sum(
                     [
                         len(self.cluster_models[idx].cluster_centers_)
                         for idx in self.legitimate_bins[:consecutive_index]
                     ]
                 )
-                #                 log.info(f"Offset for WE bin {we_bins[i]} is {offset}")
 
                 assert hasattr(
                     self.cluster_models[we_bins[i]], "cluster_centers_"
@@ -315,13 +308,11 @@ class StratifiedClusters:
                     _discrete = [
                         self.cluster_models[we_bins[i]].predict([coord])[0] + offset
                     ]
-                #                     print(_discrete)
                 except Exception as e:
                     log.error(f"At seg {i}, bin {we_bins[i]}: {e}")
                     raise e
                 else:
                     pass
-            #                     print(f"Successfully discretized something from bin {i}")
 
             discrete.extend(_discrete)
 
@@ -2750,7 +2741,7 @@ class modelWE:
     def cluster_very_stratified(
         self,
         n_clusters,
-        bin_mapper,
+        # bin_mapper,
         ignored_bins,  # Having this parameter sucks and is not necessary
         streaming=True,
         first_cluster_iter=1,
@@ -2795,9 +2786,21 @@ class modelWE:
         Refactor the name
         """
 
+        try:
+            import westpa.tools.binning
+        except ImportError as e:
+            log.error("WESTPA must be installed for stratified clustering!")
+            raise e
+
+        # Get the bin mapper from one of the west files
+        with h5py.File(self.fileList[0], "r") as h5file:
+            bin_mapper, _, _ = westpa.tools.binning.mapper_from_hdf5(
+                h5file["bin_topologies"],
+                h5file["iterations/iter_00000002"].attrs["binhash"],
+            )
+
         if not streaming or not use_ray:
             log.error("This function currently MUST run in streaming mode, with ray.")
-            raise Exception
 
         # Do the streaming clustering, but cluster each bin individually.
         stratified_clusters = StratifiedClusters(
@@ -2822,6 +2825,7 @@ class modelWE:
                 stratified_clusters, extra_iters_used = executor.submit(
                     self.do_very_stratified_clustering,
                     [
+                        self,
                         stratified_clusters,
                         iteration,
                         self.processCoordinates,
@@ -2842,27 +2846,23 @@ class modelWE:
         Perform the full-stratified clustering.
         """
 
-        # This assumes more or less every iteration has every bin populated, otherwise it'll keep gathering iterations
-        #   until that's true.
-        # This may be a bad assumption on slow-converging data.
-        # In this case, either start clustering from an iteration where all states are populated (prob not a bad idea)
-        # OR TODO: rework this so it only pulls a certain max iterations, then clusters based on that.
-
-        kmeans_models, iteration, processCoordinates, ignored_bins = arg
+        self, kmeans_models, iteration, processCoordinates, ignored_bins = arg
 
         bin_mapper = kmeans_models.bin_mapper
 
         # The first time we cluster, we need at least n_clusters datapoints.
-        min_coords = 1
+        # min_coords = 1
         # Before the first clustering has been done, cluster_centers_ is unset, so use that to know if  we're  on the
         #   first round.
-        if not hasattr(kmeans_models.cluster_models[2], "cluster_centers_"):
-            log.debug(
-                f"First batch to k-means, need a minimum of {kmeans_models.cluster_args['n_clusters']} segments"
-            )
-            min_coords = kmeans_models.cluster_args["n_clusters"]
-
+        # if not hasattr(kmeans_models.cluster_models[2], "cluster_centers_"):
+        #     log.debug(
+        #         f"First batch to k-means, need a minimum of {kmeans_models.cluster_args['n_clusters']} segments"
+        #     )
+        #     min_coords = kmeans_models.cluster_args["n_clusters"]
+        #
         #     print(f"Min coords this iter is {min_coords}")
+
+        min_coords = kmeans_models.cluster_args["n_clusters"]
 
         # The number of populated bins is the number of total bins - 1
         we_bin_segs = [[] for _ in range(bin_mapper.nbins)]
@@ -2872,9 +2872,15 @@ class modelWE:
         used_iters = -1
         iter_coords = []
 
+        # TODO: Need to make this robust iter_coords growing
         # Maybe not even necessary to track iter_coords, just _iter_coords.
         # The problem with it as it stands is that assert -- imagine if I have to grab a second iteration
         while not all_bins_have_segments:
+
+            if iteration + used_iters > self.maxIter:
+                # TODO: Is this always a deal-breaker?
+                log.warning("Couldn't get segments in all bins, and no iterations left")
+                break
 
             used_iters += 1
             _iter_coords = self.get_iter_coordinates(iteration + used_iters)
@@ -2909,7 +2915,9 @@ class modelWE:
         # By now, I have some segments in each WE bin.
         # Now, do clustering within each WE bin
 
-        for _bin in range(bin_mapper.nbins):
+        # for _bin in range(bin_mapper.nbins):
+        # Only cluster in WE bins that things were actually assigned to
+        for _bin in np.unique(we_bin_assignments):
 
             if _bin in ignored_bins:
                 continue
@@ -2917,11 +2925,14 @@ class modelWE:
             transformed_coords = self.coordinates.transform(
                 processCoordinates(np.squeeze(np.array(we_bin_segs[_bin])))
             )
-            kmeans_models.cluster_models[_bin].partial_fit(transformed_coords)
+            try:
+                kmeans_models.cluster_models[_bin].partial_fit(transformed_coords)
+            except ValueError as e:
+                raise e
 
         return kmeans_models, used_iters
 
-    def clean_stratified(self, use_ray=True):
+    def clean_stratified(self, basis, target, use_ray=True):
         """
         Alternative to organize_fluxMatrix, for stratified clustering.
 
@@ -2936,8 +2947,6 @@ class modelWE:
         """
 
         # Find disconnected states
-
-        # First, add recycling so the target isn't detected as disconnected
         fmatrix_original = self.fluxMatrixRaw.copy()
         fmatrix = self.fluxMatrixRaw.copy()
         fmatrix[-1, -2] = 1.0
@@ -2973,6 +2982,11 @@ class modelWE:
 
             if len(bin_clusters_to_clean) == 0:
                 continue
+            elif (
+                not (we_bin in basis or we_bin in target)
+                and len(bin_clusters_to_clean) == self.clusters.n_clusters_per_bin
+            ):
+                raise Exception(f"All clusters from WE bin {we_bin} would be cleaned!")
 
             log.debug(
                 f"Cleaning {len(bin_clusters_to_clean)} clusters {bin_clusters_to_clean} from WE bin {we_bin}"
@@ -2988,16 +3002,31 @@ class modelWE:
             f"Started with {self.n_clusters} clusters, and removed {len(states_to_remove)}"
         )
         self.n_clusters = self.n_clusters - len(states_to_remove)
+        log.info(f"n_clusters is now {self.n_clusters}")
+
+        _running_total = 0
+        for we_bin in range(self.clusters.bin_mapper.nbins):
+
+            if we_bin in self.clusters.ignored_bins:
+                #             log.info(f"Skipping ignored bin {we_bin}")
+                continue
+
+            clusters_in_bin = len(self.clusters.cluster_models[we_bin].cluster_centers_)
+            _running_total += clusters_in_bin
+            print(f"{clusters_in_bin} in bin {we_bin}. Running total: {_running_total}")
 
         # Now re-discretize
         self.clusters.toggle = False
+        self.clusters.processing_from = False
         self.launch_ray_discretization()
 
         pcoord_sort_indices = self.get_cluster_centers()
 
         # And recalculate the flux matrix
         self.clusters.toggle = True
+        self.clusters.processing_from = True
         self.get_fluxMatrix(*self._fluxMatrixParams, use_ray=use_ray)
+        self.clusters.processing_from = False
         self.clusters.toggle = False
 
         # Set the cleaned matrix as fluxMatrix
@@ -3025,7 +3054,6 @@ class modelWE:
         Add flag to toggle between stratified and regular do_ray_discretization
         """
 
-        # First, connect to the ray cluster
         log.info(f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!")
 
         self.dtrajs = []
@@ -3041,6 +3069,7 @@ class modelWE:
         for iteration in tqdm.tqdm(
             range(1, self.maxIter), desc="Submitting discretization tasks"
         ):
+
             _id = self.do_stratified_ray_discretization.remote(
                 model_id, cluster_model_id, iteration, process_coordinates_id
             )
@@ -3089,8 +3118,21 @@ class modelWE:
         cluster_pcoord_centers = np.zeros((self.n_clusters + 2, self.pcoord_ndim))
         target_cluster_index = self.n_clusters + 1  # Target at -1
         basis_cluster_index = self.n_clusters  # basis at -2
+        print(f"Basis, target are {basis_cluster_index}, {target_cluster_index}")
         cluster_pcoord_centers[target_cluster_index] = self.target_bin_center
         cluster_pcoord_centers[basis_cluster_index] = self.basis_bin_center
+
+        cluster_pcoord_range = np.zeros((self.n_clusters + 2, self.pcoord_ndim, 2))
+        cluster_pcoord_range[target_cluster_index] = [
+            self.target_bin_center,
+            self.target_bin_center,
+        ]
+        cluster_pcoord_range[basis_cluster_index] = [
+            self.basis_bin_center,
+            self.basis_bin_center,
+        ]
+
+        cluster_pcoord_all = [[] for _ in range(self.n_clusters + 2)]
 
         for cluster in range(self.n_clusters):
             idx_traj_in_cluster = [np.where(dtraj == cluster) for dtraj in self.dtrajs]
@@ -3103,13 +3145,27 @@ class modelWE:
                 pcoord_indices.extend(pcoord_idxs)
                 offset += len(self.dtrajs[i])
 
+            if len(self.pcoordSet[pcoord_indices, 0]) == 0:
+                print(f"No trajectories in cluster {cluster}!")
+                cluster_pcoord_centers[cluster] = np.nan
+                cluster_pcoord_range[cluster] = [np.nan, np.nan]
+                cluster_pcoord_all.append([None])
+                continue
+
             cluster_pcoord_centers[cluster] = np.nanmean(
                 self.pcoordSet[pcoord_indices, 0], axis=0
             )
+            cluster_pcoord_range[cluster] = [
+                np.nanmin(self.pcoordSet[pcoord_indices, 0], axis=0),
+                np.nanmax(self.pcoordSet[pcoord_indices, 0], axis=0),
+            ]
+            cluster_pcoord_all[cluster] = self.pcoordSet[pcoord_indices, 0]
 
         pcoord_sort_indices = np.argsort(cluster_pcoord_centers[:, 0])
 
         self.targetRMSD_centers = cluster_pcoord_centers[pcoord_sort_indices]
+        self.targetRMSD_minmax = cluster_pcoord_range[pcoord_sort_indices]
+        self.targetRMSD_all = np.array(cluster_pcoord_all)[pcoord_sort_indices]
 
         return pcoord_sort_indices
 
@@ -3252,13 +3308,16 @@ class modelWE:
         # Wrap this in a try to make sure we unset the toggle
         # Note: This toggle is only used for stratified clusteirng, but it's set either way.
         self.clusters.toggle = True
+        self.clusters.processing_from = True
         try:
             start_cluster = self.clusters.predict(reduced_initial)
             end_cluster = self.clusters.predict(reduced_final)
         except Exception as e:
+            self.clusters.processing_from = False
             self.clusters.toggle = False
             raise e
         else:
+            self.clusters.processing_from = False
             self.clusters.toggle = False
 
         log.debug(f"Cluster 0 shape: {start_cluster.shape}")
