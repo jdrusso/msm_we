@@ -2287,6 +2287,11 @@ class modelWE:
 
             if not streaming:
 
+                # TODO: Fix this to correctly use processCoordinates, like in the streaming case
+                raise NotImplementedError(
+                    "Non-streaming dimreduce None is currently broken"
+                )
+
                 _data = [
                     self.get_iter_coordinates(iteration).reshape(-1, 3 * self.nAtoms)
                     for iteration in range(1, self.maxIter)
@@ -2332,42 +2337,16 @@ class modelWE:
 
                 self.clusters = cluster_model
 
-                # continued = False
-                # for iteration in range(1, self.maxIter):
-                #     _iter_coords = self.get_iter_coordinates(iteration).reshape(
-                #         -1, 3 * self.nAtoms
-                #     )
-                #
-                #     if not continued:
-                #         iter_coords = _iter_coords
-                #     elif continued:
-                #         log.debug(
-                #             f"Appending {_iter_coords.shape[0]} trajs for clustering"
-                #         )
-                #         iter_coords = np.append(iter_coords, _iter_coords, axis=0)
-                #
-                #     # This better pass, but just be sure.
-                #     assert type(cluster_model) is mini_kmeans
-                #
-                #     try:
-                #         cluster_model.partial_fit(iter_coords)
-                #     except ValueError:
-                #         log.debug(
-                #             "Not enough samples for the desired number of clusters, pulling"
-                #             "more iterations."
-                #         )
-                #         continued = True
-                #     else:
-                #         continued = False
-                #
-                # self.clusters = cluster_model
-
                 # Now compute dtrajs from the final model
                 for iteration in range(1, self.maxIter):
                     iter_coords = self.get_iter_coordinates(iteration).reshape(
                         -1, 3 * self.nAtoms
                     )
-                    self.dtrajs.append(cluster_model.predict(iter_coords))
+                    transformed_coords = self.coordinates.transform(
+                        self.processCoordinates(iter_coords)
+                    )
+
+                    self.dtrajs.append(cluster_model.predict(transformed_coords))
 
         elif self.dimReduceMethod == "pca" and streaming:
 
