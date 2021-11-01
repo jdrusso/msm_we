@@ -308,7 +308,7 @@ def test_dim_reduce(nostream_clustered_model):
 @pytest.mark.parametrize(
     "generated_filename", ["initialized_model_s1_e100_lag0_clust100.h5"]
 )
-def test_cluster(modelParams, nostream_clustered_model, cleanup_generated):
+def test_aggregate_cluster(modelParams, nostream_clustered_model, cleanup_generated):
     """
     Test k-means clustering. This is an xfail for now, because there's occasional variation in the cluster centers
     that I haven't quite ironed out yet.
@@ -323,6 +323,7 @@ def test_cluster(modelParams, nostream_clustered_model, cleanup_generated):
         modelParams["n_cluster_centers"],
         streaming=False,
         random_state=modelParams["cluster_seed"],
+        stratified=False,
     )
 
     # Make sure the clusters are what they should be
@@ -341,12 +342,15 @@ def test_cluster(modelParams, nostream_clustered_model, cleanup_generated):
 @pytest.mark.parametrize(
     "generated_filename", ["initialized_model_s1_e100_lag0_clust100.h5"]
 )
-def test_streaming_cluster(modelParams, stream_clustered_model, cleanup_generated):
+def test_streaming_aggregate_cluster(
+    modelParams, stream_clustered_model, cleanup_generated
+):
     """
     Test k-means clustering.
 
     This is an xfail for now, with an explicit timeout, because the subprocess calls
-    may not execute on the Github Actions CI runner
+    may not execute on the Github Actions CI runner.
+    getuser() == "runner" is designed to skip this test if running in github CI.
     """
     loaded_model = deepcopy(stream_clustered_model)
     loaded_model.clusters = None
@@ -358,6 +362,7 @@ def test_streaming_cluster(modelParams, stream_clustered_model, cleanup_generate
         modelParams["n_cluster_centers"],
         streaming=True,
         random_state=modelParams["cluster_seed"],
+        stratified=False,
     )
 
     # Make sure the clusters are what they should be
@@ -368,6 +373,12 @@ def test_streaming_cluster(modelParams, stream_clustered_model, cleanup_generate
         stream_clustered_model.clusters.cluster_centers_,
         atol=1e-4,
     ).all()
+
+
+@pytest.mark.xfail(reason="Not yet implemented")
+def test_streaming_stratified_cluster():
+
+    assert False
 
 
 @pytest.mark.xfail(
