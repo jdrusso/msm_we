@@ -11,7 +11,8 @@ with open("HISTORY.rst") as history_file:
     history = history_file.read()
 
 # Ray must be installed through pip, not conda
-requirements = ["ray"]
+# WESTPA-2.0 with westpa.analysis is not yet in Conda
+requirements = ["ray", "westpa>=v2.0b5"]
 
 setup_requirements = [
     "pytest-runner",
