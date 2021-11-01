@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - "gh_actions_dev"
+      - "main"
   pull_request:
     branches:
       - "gh_actions_dev"
+      - "main"
 
 jobs:
   lint:
