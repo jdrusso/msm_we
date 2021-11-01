@@ -2446,6 +2446,7 @@ class modelWE:
         self.clustering_method = None
 
         if stratified:
+            log.info("Beginning stratified clustering.")
             self.clustering_method = "stratified"
             self.cluster_stratified(
                 n_clusters, streaming, first_cluster_iter, use_ray, **_cluster_args
@@ -2453,6 +2454,9 @@ class modelWE:
 
         # Make sure you know what you're doing if using this!
         else:
+            log.info(
+                "Beginning aggregate clustering. (Beware! This can produce poor clustering)"
+            )
             self.clustering_method = "aggregated"
             self.cluster_aggregated(
                 n_clusters, streaming, first_cluster_iter, use_ray, **_cluster_args
