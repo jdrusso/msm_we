@@ -490,6 +490,8 @@ class modelWE:
         self.cluster_structure_weights = None
         """dict: Mapping of cluster indices to structures in that cluster"""
 
+        self.clustering_method = None
+
     def initialize(
         # self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
         self,
@@ -2437,6 +2439,31 @@ class modelWE:
         streaming=False,
         first_cluster_iter=1,
         use_ray=False,
+        stratified=True,
+        **_cluster_args,
+    ):
+
+        self.clustering_method = None
+
+        if stratified:
+            self.clustering_method = "stratified"
+            self.cluster_stratified(
+                n_clusters, streaming, first_cluster_iter, use_ray, **_cluster_args
+            )
+
+        # Make sure you know what you're doing if using this!
+        else:
+            self.clustering_method = "aggregated"
+            self.cluster_aggregated(
+                n_clusters, streaming, first_cluster_iter, use_ray, **_cluster_args
+            )
+
+    def cluster_aggregated(
+        self,
+        n_clusters,
+        streaming=False,
+        first_cluster_iter=1,
+        use_ray=False,
         **_cluster_args,
     ):
         """
@@ -2738,7 +2765,7 @@ class modelWE:
         # log.debug(f"Dtrajs: {self.clusters.dtrajs}")
         # self.clusters.save(self.clusterFile, save_streaming_chain=True, overwrite=True)
 
-    def cluster_very_stratified(
+    def cluster_stratified(
         self,
         n_clusters,
         streaming=True,
@@ -2812,7 +2839,7 @@ class modelWE:
                 max_workers=1, mp_context=mp.get_context("fork")
             ) as executor:
                 stratified_clusters, extra_iters_used = executor.submit(
-                    self.do_very_stratified_clustering,
+                    self.do_stratified_clustering,
                     [
                         self,
                         stratified_clusters,
@@ -2830,7 +2857,7 @@ class modelWE:
         self.clusters.toggle = False
         self.launch_ray_discretization()
 
-    def do_very_stratified_clustering(self, arg):
+    def do_stratified_clustering(self, arg):
         """
         Perform the full-stratified clustering.
         """
@@ -2921,7 +2948,7 @@ class modelWE:
 
         return kmeans_models, used_iters
 
-    def clean_stratified(self, use_ray=True):
+    def organize_stratified(self, use_ray=True):
         """
         Alternative to organize_fluxMatrix, for stratified clustering.
 
@@ -3724,7 +3751,18 @@ class modelWE:
         # Update state with the new, updated, or loaded from file fluxMatrix.
         self.fluxMatrixRaw = fluxMatrix
 
-    def organize_fluxMatrix(
+    def organize_fluxMatrix(self, use_ray=False, **args):
+
+        if self.clustering_method == "stratified":
+            self.organize_stratified(use_ray)
+        elif self.clustering_method == "aggregated":
+            self.organize_aggregated(use_ray, **args)
+        else:
+            raise Exception(
+                f"Unrecognized clustering_method (Had: {self.clustering_method})"
+            )
+
+    def organize_aggregated(
         self, use_ray=False, do_cleaning=True, states_to_keep=None, rediscretize=True
     ):
         """
