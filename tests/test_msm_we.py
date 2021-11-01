@@ -334,13 +334,17 @@ def test_cluster(modelParams, nostream_clustered_model, cleanup_generated):
     ).all()
 
 
+@pytest.mark.timeout(120, method="signal")
+@pytest.mark.xfail
 @pytest.mark.parametrize(
     "generated_filename", ["initialized_model_s1_e100_lag0_clust100.h5"]
 )
 def test_streaming_cluster(modelParams, stream_clustered_model, cleanup_generated):
     """
-    Test k-means clustering. This is an xfail for now, because there's occasional variation in the cluster centers
-    that I haven't quite ironed out yet.
+    Test k-means clustering.
+
+    This is an xfail for now, with an explicit timeout, because the subprocess calls
+    may not execute on the Github Actions CI runner
     """
     loaded_model = deepcopy(stream_clustered_model)
     loaded_model.clusters = None
@@ -364,6 +368,8 @@ def test_streaming_cluster(modelParams, stream_clustered_model, cleanup_generate
     ).all()
 
 
+@pytest.mark.timeout(120, method="signal")
+@pytest.mark.xfail
 @pytest.mark.parametrize(
     "generated_filename", ["initialized_model-fluxmatrix-_s1_e100_lag0_clust100.h5"]
 )
@@ -375,6 +381,9 @@ def test_get_flux_matrix(
 
     Again, these are distinct operations, but pretty closely related, and for now I want to minimize the amount of
     pickled haMSM objects I have until I can pare them down and store them more efficiently.
+
+    This is an xfail for now, with an explicit timeout, because the subprocess calls
+    may not execute on the Github Actions CI runner
     """
 
     first_iter, last_iter = (
