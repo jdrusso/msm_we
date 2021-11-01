@@ -1,0 +1,63 @@
+name: test2
+
+on:
+  push:
+    branches:
+      - "gh_actions_dev"
+  pull_request:
+    branches:
+      - "gh_actions_dev"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Linting
+        run: |
+          pip install pre-commit
+          pre-commit run --all-files
+  test:
+    name: Test on Linux, Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9"]
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 2
+
+    - name: Additional info about the build
+      shell: bash
+      run: |
+        uname -a
+        df -h
+        ulimit -a
+    # More info on options: https://github.com/goanpeca/setup-miniconda
+    - uses: conda-incubator/setup-miniconda@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+        environment-file: environment.yaml
+        activate-environment: hamsm_env
+        auto-update-conda: true
+        auto-activate-base: false
+        show-channel-urls: true
+
+    - name: Install package
+      # conda setup requires this special shell
+      shell: bash -l {0}
+      run: |
+        conda info --all
+        python -m pip install .[tests]
+        conda list
+    - name: Run tests
+      # conda setup requires this special shell
+      shell: bash -l {0}
+      run: |
+        pytest -v --color=yes
