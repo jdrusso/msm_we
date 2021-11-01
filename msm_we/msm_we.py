@@ -3751,6 +3751,15 @@ class modelWE:
 
     def organize_fluxMatrix(self, use_ray=False, **args):
 
+        if not hasattr(self, "clustering_method"):
+            log.warning(
+                "self.clustering_method is not set. This may be a model saved before stratified was "
+                "implemented, or you may not have run cluster_coordinates! "
+                "Assuming the former and setting to aggregated."
+            )
+
+            self.clustering_method = "aggregated"
+
         if self.clustering_method == "stratified":
             self.organize_stratified(use_ray)
 
@@ -3765,7 +3774,9 @@ class modelWE:
                 [i for s in find_connected_sets(fmatrix, directed=True)[1:] for i in s]
             )
 
-            states_to_keep = self.organize_aggregated(do_cleaning=False).astype(bool)
+            states_to_keep = self.organize_aggregated(
+                do_cleaning=False, use_ray=use_ray
+            ).astype(bool)
 
             regular_clean = np.argwhere(~states_to_keep)
 
@@ -3779,7 +3790,7 @@ class modelWE:
             )
 
             self.organize_aggregated(
-                use_ray=True, states_to_keep=np.argwhere(states_to_keep)
+                use_ray=use_ray, states_to_keep=np.argwhere(states_to_keep)
             )
 
         else:
