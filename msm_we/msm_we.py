@@ -2871,18 +2871,6 @@ class modelWE:
 
         bin_mapper = kmeans_models.bin_mapper
 
-        # The first time we cluster, we need at least n_clusters datapoints.
-        # min_coords = 1
-        # Before the first clustering has been done, cluster_centers_ is unset, so use that to know if  we're  on the
-        #   first round.
-        # if not hasattr(kmeans_models.cluster_models[2], "cluster_centers_"):
-        #     log.debug(
-        #         f"First batch to k-means, need a minimum of {kmeans_models.cluster_args['n_clusters']} segments"
-        #     )
-        #     min_coords = kmeans_models.cluster_args["n_clusters"]
-        #
-        #     print(f"Min coords this iter is {min_coords}")
-
         min_coords = kmeans_models.cluster_args["n_clusters"]
 
         # The number of populated bins is the number of total bins - 1
@@ -2893,7 +2881,6 @@ class modelWE:
         used_iters = -1
         iter_coords = []
 
-        # TODO: Need to make this robust iter_coords growing
         # Maybe not even necessary to track iter_coords, just _iter_coords.
         # The problem with it as it stands is that assert -- imagine if I have to grab a second iteration
         while not all_bins_have_segments:
