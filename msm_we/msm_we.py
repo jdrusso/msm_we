@@ -2816,7 +2816,12 @@ class modelWE:
         ignored_bins = target_bin
 
         if not streaming or not use_ray:
-            log.error("This function currently MUST run in streaming mode, with ray.")
+            log.error(
+                "Stratified clustering currently MUST run in streaming mode (and with ray enabled for "
+                "discretization). Enabling both and continuing..."
+            )
+            streaming = True
+            use_ray = True
 
         # Do the streaming clustering, but cluster each bin individually.
         stratified_clusters = StratifiedClusters(
@@ -3036,7 +3041,9 @@ class modelWE:
 
             clusters_in_bin = len(self.clusters.cluster_models[we_bin].cluster_centers_)
             _running_total += clusters_in_bin
-            print(f"{clusters_in_bin} in bin {we_bin}. Running total: {_running_total}")
+            log.debug(
+                f"{clusters_in_bin} in bin {we_bin}. Running total: {_running_total}"
+            )
 
         # Now re-discretize
         self.clusters.toggle = False
@@ -3144,7 +3151,7 @@ class modelWE:
         cluster_pcoord_centers = np.zeros((self.n_clusters + 2, self.pcoord_ndim))
         target_cluster_index = self.n_clusters + 1  # Target at -1
         basis_cluster_index = self.n_clusters  # basis at -2
-        print(f"Basis, target are {basis_cluster_index}, {target_cluster_index}")
+        log.debug(f"Basis, target are {basis_cluster_index}, {target_cluster_index}")
         cluster_pcoord_centers[target_cluster_index] = self.target_bin_center
         cluster_pcoord_centers[basis_cluster_index] = self.basis_bin_center
 
@@ -3172,7 +3179,7 @@ class modelWE:
                 offset += len(self.dtrajs[i])
 
             if len(self.pcoordSet[pcoord_indices, 0]) == 0:
-                print(f"No trajectories in cluster {cluster}!")
+                log.warning(f"No trajectories in cluster {cluster}!")
                 cluster_pcoord_centers[cluster] = np.nan
                 cluster_pcoord_range[cluster] = [np.nan, np.nan]
                 cluster_pcoord_all.append([None])
