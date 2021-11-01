@@ -40,6 +40,14 @@ jobs:
         uname -a
         df -h
         ulimit -a
+    - name: Cache conda
+      uses: actions/cache@v1
+      env:
+        # Increase this value to reset cache if etc/example-environment.yml has not changed
+        CACHE_NUMBER: 0
+      with:
+        path: ~/conda_pkgs_dir
+        key: ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ hashFiles('environment.yml') }}
     # More info on options: https://github.com/goanpeca/setup-miniconda
     - uses: conda-incubator/setup-miniconda@v2
       with:
@@ -49,6 +57,7 @@ jobs:
         auto-update-conda: true
         auto-activate-base: false
         show-channel-urls: true
+        use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
 
     - name: Install package
       # conda setup requires this special shell
