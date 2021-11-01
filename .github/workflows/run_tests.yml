@@ -10,19 +10,19 @@ on:
       - "main"
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
-      - name: Linting
-        run: |
-          pip install pre-commit
-          pre-commit run --all-files
+#  lint:
+#    runs-on: ubuntu-latest
+#    continue-on-error: true
+#    steps:
+#      - uses: actions/checkout@v2
+#      - name: Set up Python 3.9
+#        uses: actions/setup-python@v2
+#        with:
+#          python-version: 3.9
+#      - name: Linting
+#        run: |
+#          pip install pre-commit
+#          pre-commit run --all-files
   test:
     name: Test on Linux, Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
