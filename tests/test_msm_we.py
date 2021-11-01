@@ -334,7 +334,7 @@ def test_cluster(modelParams, nostream_clustered_model, cleanup_generated):
     ).all()
 
 
-@pytest.mark.timeout(60, method="thread")
+@pytest.mark.timeout(240, method="thread")
 @pytest.mark.xfail
 @pytest.mark.parametrize(
     "generated_filename", ["initialized_model_s1_e100_lag0_clust100.h5"]
