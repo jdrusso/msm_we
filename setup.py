@@ -21,7 +21,7 @@ setup_requirements = [
 test_requirements = ["pytest>=3"]
 
 EXTRAS_REQUIRE = {
-    "tests": ["pytest>=3", "mdtraj"],
+    "tests": ["pytest>=3", "pytest-timeout", "mdtraj"],
 }
 
 setup(
