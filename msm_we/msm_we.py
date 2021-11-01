@@ -3749,8 +3749,35 @@ class modelWE:
 
         if self.clustering_method == "stratified":
             self.organize_stratified(use_ray)
+
         elif self.clustering_method == "aggregated":
-            self.organize_aggregated(use_ray, **args)
+            # self.organize_aggregated(use_ray, **args)
+
+            fmatrix = self.fluxMatrixRaw.copy()
+            # Add recycling to avoid detecting the target as a sink
+            fmatrix[-1, -2] = 1.0
+
+            flat_raw_islands = np.sort(
+                [i for s in find_connected_sets(fmatrix, directed=True)[1:] for i in s]
+            )
+
+            states_to_keep = self.organize_aggregated(do_cleaning=False).astype(bool)
+
+            regular_clean = np.argwhere(~states_to_keep)
+
+            if len(flat_raw_islands) > 0:
+                states_to_keep[flat_raw_islands] = False
+
+            modified_clean = np.argwhere(~states_to_keep)
+
+            log.debug(
+                f"Modified cleaning added states {np.setdiff1d(modified_clean, regular_clean)}"
+            )
+
+            self.organize_aggregated(
+                use_ray=True, states_to_keep=np.argwhere(states_to_keep)
+            )
+
         else:
             raise Exception(
                 f"Unrecognized clustering_method (Had: {self.clustering_method})"
