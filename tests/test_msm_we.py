@@ -370,7 +370,9 @@ def test_streaming_cluster(modelParams, stream_clustered_model, cleanup_generate
     ).all()
 
 
-# @pytest.mark.xfail(getpass.getuser() == "runner", reason="Hangs on github actions", run=False)
+@pytest.mark.xfail(
+    getpass.getuser() == "runner", reason="Hangs on github actions", run=False
+)
 @pytest.mark.parametrize(
     "generated_filename", ["initialized_model-fluxmatrix-_s1_e100_lag0_clust100.h5"]
 )
