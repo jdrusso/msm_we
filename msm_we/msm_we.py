@@ -181,7 +181,7 @@ class StratifiedClusters:
     to the appropriate WE bin, and then using that WE bin's cluster model.
     """
 
-    def __init__(self, bin_mapper, model, n_clusters, ignored_bins, **_cluster_args):
+    def __init__(self, bin_mapper, model, n_clusters, target_bins, **_cluster_args):
         """
         bin_mapper: westpa.core.binning.BinMapper
             Bin mapper for the current simulation being analyzed.
@@ -192,7 +192,7 @@ class StratifiedClusters:
         n_clusters: int
             Number of cluster per bin
 
-        ignored_bins: array-like
+        target_bins: array-like
             Indices of WE bins in the target.
             Anything in the target gets mapped to its own state anyway,
             so we don't want to try to cluster within it.
@@ -223,7 +223,10 @@ class StratifiedClusters:
 
         self.n_clusters_per_bin = n_clusters
         self.bin_mapper = bin_mapper
-        self.n_total_clusters = self.n_clusters_per_bin * (self.bin_mapper.nbins - 1)
+        self.n_total_clusters = self.n_clusters_per_bin * (
+            self.bin_mapper.nbins - len(target_bins)
+        )
+        log.info(f"Doing strat clustering with {self.n_total_clusters} total")
 
         self.cluster_args = cluster_args
         self.model = model
@@ -238,12 +241,12 @@ class StratifiedClusters:
 
         # These are bases/targets
         # It's only really important to ignore targets, because you may not have structures in the target b/c of recycling
-        self.ignored_bins = ignored_bins
+        self.target_bins = target_bins
 
         # I need consecutive indices for each non-basis/non-target bin
         legitimate_bins = []
         for bin_index in range(self.bin_mapper.nbins):
-            if bin_index not in ignored_bins:
+            if bin_index not in target_bins:
                 legitimate_bins.append(bin_index)
 
         self.legitimate_bins = legitimate_bins
@@ -288,18 +291,25 @@ class StratifiedClusters:
 
         for i, coord in enumerate(coords):
 
-            # Just set this to something absurd, it'll never be used
-            if we_bins[i] in self.ignored_bins:
-                _discrete = [1000000000]
+            # Map this into the target
+            if we_bins[i] in self.target_bins:
+                _discrete = [self.n_total_clusters + 1]
 
+            # Meanwhile, if you're NOT in the target (ignored) bin...
             else:
                 consecutive_index = self.legitimate_bins.index(we_bins[i])
-                offset = sum(
-                    [
-                        len(self.cluster_models[idx].cluster_centers_)
-                        for idx in self.legitimate_bins[:consecutive_index]
-                    ]
-                )
+                try:
+                    offset = sum(
+                        [
+                            len(self.cluster_models[idx].cluster_centers_)
+                            for idx in self.legitimate_bins[:consecutive_index]
+                        ]
+                    )
+                except Exception as e:
+                    log.error(
+                        f"WE bin {we_bins[i]} (/{we_bins}) cluster model is not built"
+                    )
+                    raise e
 
                 assert hasattr(
                     self.cluster_models[we_bins[i]], "cluster_centers_"
@@ -2891,7 +2901,10 @@ class modelWE:
 
             if iteration + used_iters > self.maxIter:
                 # TODO: Is this always a deal-breaker?
-                log.warning("Couldn't get segments in all bins, and no iterations left")
+                log.warning(
+                    f"At iteration {iteration}+{used_iters}, couldn't get segments in all bins, and no "
+                    f"iterations left"
+                )
                 break
 
             used_iters += 1
@@ -2986,7 +2999,7 @@ class modelWE:
         #    and removing them.
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
-            if we_bin in self.clusters.ignored_bins:
+            if we_bin in self.clusters.target_bins:
                 log.info(f"Skipping ignored bin {we_bin}")
                 continue
 
@@ -3005,7 +3018,15 @@ class modelWE:
                 not (we_bin in basis or we_bin in target)
                 and len(bin_clusters_to_clean) == self.clusters.n_clusters_per_bin
             ):
-                raise Exception(f"All clusters from WE bin {we_bin} would be cleaned!")
+                # TODO: What's the right way to handle this? A few options I can think of:
+                #   - Throw an error. Your WE bins are bad. Fixing this requires re-running something though, since bin
+                #       definitions are pulled from the 2nd iter (could pull from last)
+                #   - Always leave 1 cluster per bin. But... If it's a bad cluster, then it's a bad cluster!
+                #       In the particular case I'm seeing this, I have a bad "uphill" bin. I suspect a bunch of trajs
+                #       go up there and get terminated. So if I keep it around, I'll have a big absorbing state.
+                raise Exception(
+                    f"All clusters from WE bin {we_bin} would be cleaned! (Target: {target} Basis: {basis})"
+                )
 
             log.debug(
                 f"Cleaning {len(bin_clusters_to_clean)} clusters {bin_clusters_to_clean} from WE bin {we_bin}"
@@ -3026,7 +3047,7 @@ class modelWE:
         _running_total = 0
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
-            if we_bin in self.clusters.ignored_bins:
+            if we_bin in self.clusters.target_bins:
                 #             log.info(f"Skipping ignored bin {we_bin}")
                 continue
 
@@ -3387,10 +3408,18 @@ class modelWE:
         # coo_matrix takes in (Data, (x, y)) and then gives you a matrix, with the point at Data[i]
         #   placed at (x,y)[i]
         # Data here is just the number of segments since each segment is associated with 1 transition
-        fluxMatrix = coo_matrix(
-            (self.transitionWeights[good_coords], (start_cluster, end_cluster)),
-            shape=(self.n_clusters + 2, self.n_clusters + 2),
-        ).todense()
+        try:
+            fluxMatrix = coo_matrix(
+                (self.transitionWeights[good_coords], (start_cluster, end_cluster)),
+                shape=(self.n_clusters + 2, self.n_clusters + 2),
+            ).todense()
+        except ValueError as e:
+            log.error(
+                f"Iter_fluxmatrix failed. Transition was from {start_cluster} -> {end_cluster} "
+                f"\n\t(Total {self.n_clusters + 2} clusters)"
+                f"\n\t(End in target: {ind_end_in_target})"
+            )
+            raise e
 
         # While the sparse matrix implementation is nice and efficient, using the np.matrix type is a little weird
         #   and fragile, and it's possible it'll be deprecated in the future.
