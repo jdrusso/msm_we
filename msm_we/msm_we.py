@@ -302,19 +302,16 @@ class StratifiedClusters:
                 consecutive_index = self.legitimate_bins.index(we_bins[i])
 
                 # Since we cluster within each WE bin, the clusters within each bin are indexed from 0.
-                # So, if we're in WE Bin N, the
-                try:
-                    offset = sum(
-                        [
-                            len(self.cluster_models[idx].cluster_centers_)
-                            for idx in self.legitimate_bins[:consecutive_index]
-                        ]
-                    )
-                except Exception as e:
-                    log.error(
-                        f"Model index {we_bins[i]} (/{we_bins}) cluster model is not built"
-                    )
-                    raise e
+                # So, if we're in WE Bin N, the index of the 0th cluster in bin N is really (N-1) * (clusters per bin),
+                #   not 0.
+                offset = sum(
+                    [
+                        len(self.cluster_models[idx].cluster_centers_)
+                        if hasattr(self.cluster_models[idx], "cluster_centers_")
+                        else 0
+                        for idx in self.legitimate_bins[:consecutive_index]
+                    ]
+                )
 
                 assert hasattr(
                     self.cluster_models[we_bins[i]], "cluster_centers_"
@@ -3239,6 +3236,13 @@ class modelWE:
         kmeans_model = deepcopy(kmeans_model)
         kmeans_model.model = self
 
+        # for i, cluster_model in enumerate(kmeans_model.cluster_models):
+        #     print(f"Model {i}: \t ", end=" ")
+        #     try:
+        #         print(cluster_model.cluster_centers_)
+        #     except AttributeError:
+        #         print("No cluster centers!")
+
         iter_coords = self.get_iter_coordinates(iteration)
 
         # If there are no coords for this iteration, return None
@@ -3811,10 +3815,11 @@ class modelWE:
                 [i for s in find_connected_sets(fmatrix, directed=True)[1:] for i in s]
             )
 
-            args["do_cleaning"] = False
-            states_to_keep = self.organize_aggregated(use_ray=use_ray, **args).astype(
-                bool
-            )
+            new_args = {k: v for k, v in args.items()}
+            new_args["do_cleaning"] = False
+            states_to_keep = self.organize_aggregated(
+                use_ray=use_ray, **new_args
+            ).astype(bool)
 
             regular_clean = np.argwhere(~states_to_keep)
 
@@ -3829,9 +3834,16 @@ class modelWE:
                 f"Modified cleaning added states {np.setdiff1d(modified_clean, regular_clean)}"
             )
 
-            args["do_cleaning"] = True
-            args["states_to_keep"] = np.argwhere(states_to_keep)
-            self.organize_aggregated(use_ray=use_ray, **args)
+            # If you didn't want to do cleaning, you've gone far enough, return the list of good state indices
+            if not args["do_cleaning"]:
+                return np.argwhere(states_to_keep)
+
+            # Otherwise, carry on and actually clean
+            new_args = {k: v for k, v in args.items()}
+            new_args["states_to_keep"] = np.argwhere(states_to_keep)
+            self.organize_aggregated(use_ray=use_ray, **new_args)
+
+            return np.argwhere(states_to_keep)
 
         else:
             raise Exception(
