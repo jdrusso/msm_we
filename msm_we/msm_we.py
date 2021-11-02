@@ -2870,6 +2870,13 @@ class modelWE:
 
         self.n_clusters = n_clusters * (bin_mapper.nbins - 1)
 
+        for i, model in enumerate(self.clusters.cluster_models):
+            print(f"Model {i}: \t ", end=" ")
+            try:
+                print(model.cluster_centers_)
+            except AttributeError:
+                print("No cluster centers!")
+
         self.clusters.toggle = False
         self.launch_ray_discretization()
 
@@ -3806,11 +3813,16 @@ class modelWE:
             )
 
             regular_clean = np.argwhere(~states_to_keep)
+            # Exclude basis/target states from being cleaned
+            regular_clean = np.setdiff1d(
+                regular_clean, [self.n_clusters, self.n_clusters + 1]
+            )
 
             if len(flat_raw_islands) > 0:
                 states_to_keep[flat_raw_islands] = False
 
             modified_clean = np.argwhere(~states_to_keep)
+            # Exclude basis/target states from being cleaned
             modified_clean = np.setdiff1d(
                 modified_clean, [self.n_clusters, self.n_clusters + 1]
             )
