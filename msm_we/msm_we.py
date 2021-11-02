@@ -245,6 +245,7 @@ class StratifiedClusters:
         self.target_bins = target_bins
 
         # I need consecutive indices for each non-basis/non-target bin
+        # In other words, remove the target, and then consecutively index all the remaining bins
         legitimate_bins = []
         for bin_index in range(self.bin_mapper.nbins):
             if bin_index not in target_bins:
@@ -299,6 +300,9 @@ class StratifiedClusters:
             # Meanwhile, if you're NOT in the target (ignored) bin...
             else:
                 consecutive_index = self.legitimate_bins.index(we_bins[i])
+
+                # Since we cluster within each WE bin, the clusters within each bin are indexed from 0.
+                # So, if we're in WE Bin N, the
                 try:
                     offset = sum(
                         [
@@ -308,7 +312,7 @@ class StratifiedClusters:
                     )
                 except Exception as e:
                     log.error(
-                        f"WE bin {we_bins[i]} (/{we_bins}) cluster model is not built"
+                        f"Model index {we_bins[i]} (/{we_bins}) cluster model is not built"
                     )
                     raise e
 
@@ -3813,19 +3817,13 @@ class modelWE:
             )
 
             regular_clean = np.argwhere(~states_to_keep)
-            # Exclude basis/target states from being cleaned
-            regular_clean = np.setdiff1d(
-                regular_clean, [self.n_clusters, self.n_clusters + 1]
-            )
 
             if len(flat_raw_islands) > 0:
                 states_to_keep[flat_raw_islands] = False
 
+            states_to_keep[[self.n_clusters, self.n_clusters + 1]] = True
+
             modified_clean = np.argwhere(~states_to_keep)
-            # Exclude basis/target states from being cleaned
-            modified_clean = np.setdiff1d(
-                modified_clean, [self.n_clusters, self.n_clusters + 1]
-            )
 
             log.debug(
                 f"Modified cleaning added states {np.setdiff1d(modified_clean, regular_clean)}"
