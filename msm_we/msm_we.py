@@ -3009,19 +3009,34 @@ class modelWE:
                 continue
 
             consecutive_index = self.clusters.legitimate_bins.index(we_bin)
-            offset = consecutive_index * self.clusters.n_clusters_per_bin
+            # offset = consecutive_index * self.clusters.n_clusters_per_bin
+            offset = sum(
+                [
+                    len(self.clusters.cluster_models[idx].cluster_centers_)
+                    if hasattr(self.clusters.cluster_models[idx], "cluster_centers_")
+                    else 0
+                    for idx in self.clusters.legitimate_bins[:consecutive_index]
+                ]
+            )
 
             # Get all the clusters that would be contained in this bin
-            clusters_in_bin = range(offset, offset + self.clusters.n_clusters_per_bin)
+            # clusters_in_bin = range(offset, offset + self.clusters.n_clusters_per_bin)
+            clusters_in_bin = range(
+                offset,
+                offset
+                + len(self.clusters.cluster_models[consecutive_index].cluster_centers_),
+            )
 
             # Find which of the removed clusters are in this
             bin_clusters_to_clean = np.intersect1d(states_to_remove, clusters_in_bin)
 
+            # Before actually cleaning, check if we're not cleaning anything, or if we're cleaning everything
             if len(bin_clusters_to_clean) == 0:
                 continue
             elif (
                 not (we_bin in basis or we_bin in target)
-                and len(bin_clusters_to_clean) == self.clusters.n_clusters_per_bin
+                # and len(bin_clusters_to_clean) == self.clusters.n_clusters_per_bin
+                and len(bin_clusters_to_clean) == clusters_in_bin
             ):
                 # TODO: What's the right way to handle this? A few options I can think of:
                 #   - Throw an error. Your WE bins are bad. Fixing this requires re-running something though, since bin
@@ -3811,6 +3826,7 @@ class modelWE:
             # If the user has manually specified states to keep, skip the normal cleaning, and just do what they said
             if "states_to_keep" in args.keys():
                 self.organize_aggregated(use_ray=use_ray, **args)
+                return
 
             # self.organize_aggregated(use_ray, **args)
 
