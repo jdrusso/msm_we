@@ -3812,7 +3812,7 @@ class modelWE:
 
             modified_clean = np.argwhere(~states_to_keep)
             modified_clean = np.setdiff1d(
-                modified_clean, [self.n_clusters, self.n_clusers + 1]
+                modified_clean, [self.n_clusters, self.n_clusters + 1]
             )
 
             log.debug(
