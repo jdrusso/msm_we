@@ -2785,6 +2785,7 @@ class modelWE:
         streaming=True,
         first_cluster_iter=1,
         use_ray=True,
+        bin_iteration=2,
         **_cluster_args,
     ):
         """
@@ -2806,6 +2807,9 @@ class modelWE:
         use_ray: bool (default True)
             Must be True for now.
 
+        bin_iteration: int (default 2)
+            Iteration to obtain bin definitions from.
+
         **_cluster_args:
             Arguments passed through to sklearn.cluster.MiniBatchKMeans
 
@@ -2824,7 +2828,10 @@ class modelWE:
             log.error("WESTPA must be installed for stratified clustering!")
             raise e
 
-        iteration = analysis.Run(self.fileList[0]).iteration(2)
+        log.info(
+            f"Obtaining bin definitions from iteration {bin_iteration} in file {self.fileList[0]}"
+        )
+        iteration = analysis.Run(self.fileList[0]).iteration(bin_iteration)
         bin_mapper = iteration.bin_mapper
         target_bin = bin_mapper.assign(iteration.target_state_pcoords)
         ignored_bins = target_bin
