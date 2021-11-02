@@ -3804,7 +3804,14 @@ class modelWE:
         if self.clustering_method == "stratified":
             self.organize_stratified(use_ray)
 
+            # TODO: Respect do_cleaning=False for blockwise stratified
+
         elif self.clustering_method == "aggregated":
+
+            # If the user has manually specified states to keep, skip the normal cleaning, and just do what they said
+            if "states_to_keep" in args.keys():
+                self.organize_aggregated(use_ray=use_ray, **args)
+
             # self.organize_aggregated(use_ray, **args)
 
             fmatrix = self.fluxMatrixRaw.copy()
