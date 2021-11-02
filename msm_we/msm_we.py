@@ -3803,9 +3803,10 @@ class modelWE:
                 [i for s in find_connected_sets(fmatrix, directed=True)[1:] for i in s]
             )
 
-            states_to_keep = self.organize_aggregated(
-                do_cleaning=False, use_ray=use_ray
-            ).astype(bool)
+            args["do_cleaning"] = False
+            states_to_keep = self.organize_aggregated(use_ray=use_ray, **args).astype(
+                bool
+            )
 
             regular_clean = np.argwhere(~states_to_keep)
 
@@ -3818,9 +3819,9 @@ class modelWE:
                 f"Modified cleaning added states {np.setdiff1d(modified_clean, regular_clean)}"
             )
 
-            self.organize_aggregated(
-                use_ray=use_ray, states_to_keep=np.argwhere(states_to_keep)
-            )
+            args["do_cleaning"] = True
+            args["states_to_keep"] = np.argwhere(states_to_keep)
+            self.organize_aggregated(use_ray=use_ray, **args)
 
         else:
             raise Exception(
