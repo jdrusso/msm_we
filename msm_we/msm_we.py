@@ -10,6 +10,7 @@ import h5py
 import concurrent
 import multiprocessing as mp
 from copy import deepcopy
+from westpa import analysis
 
 from scipy.sparse import coo_matrix, csr_matrix
 import scipy.sparse as sparse
@@ -2815,18 +2816,7 @@ class modelWE:
 
         Returns
         -------
-
-        TODO
-        ====
-        Refactor the name
         """
-
-        # TODO: Eventually this should be moved up top, but I need to bring WESTPA in as a dependency
-        try:
-            from westpa import analysis
-        except ImportError as e:
-            log.error("WESTPA must be installed for stratified clustering!")
-            raise e
 
         log.info(
             f"Obtaining bin definitions from iteration {bin_iteration} in file {self.fileList[0]}"
@@ -3821,6 +3811,9 @@ class modelWE:
                 states_to_keep[flat_raw_islands] = False
 
             modified_clean = np.argwhere(~states_to_keep)
+            modified_clean = np.setdiff1d(
+                modified_clean, [self.n_clusters, self.n_clusers + 1]
+            )
 
             log.debug(
                 f"Modified cleaning added states {np.setdiff1d(modified_clean, regular_clean)}"
