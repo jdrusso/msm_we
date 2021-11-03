@@ -3666,7 +3666,13 @@ class modelWE:
         # Overwrite this file, don't try to read from it.  Hence the "w" flag
         # TODO: Maybe in the future return to this,
         #  but it caused more problems than it was worth when doing multiple runs.
-        f = h5py.File(fileName + ".h5", "w")
+        try:
+            f = h5py.File(fileName + ".h5", "w")
+        except BlockingIOError:
+            # Janky -- if the file exists, pick a random name
+            import random
+            fileName += f'_{int(random.random()*1000):04d}'
+            f = h5py.File(fileName + ".h5", "w")
 
         dsetName = "fluxMatrix"
 
