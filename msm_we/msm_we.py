@@ -295,7 +295,7 @@ class StratifiedClusters:
 
             # Map this into the target
             if we_bins[i] in self.target_bins:
-                _discrete = [self.n_total_clusters + 1]
+                _discrete = [self.model.n_clusters + 1]
 
             # Meanwhile, if you're NOT in the target (ignored) bin...
             else:
@@ -2978,9 +2978,6 @@ class modelWE:
 
         # Find disconnected states
         fmatrix_original = self.fluxMatrixRaw.copy()
-        fmatrix = self.fluxMatrixRaw.copy()
-        fmatrix[-1, -2] = 1.0
-
         from westpa import analysis
 
         iteration = analysis.Run(self.fileList[0]).iteration(2)
@@ -2988,6 +2985,8 @@ class modelWE:
         basis = bin_mapper.assign(iteration.basis_state_pcoords)
         target = bin_mapper.assign(iteration.target_state_pcoords)
 
+        fmatrix = self.fluxMatrixRaw.copy()
+        fmatrix[-1, -2] = 1.0
         connected_sets = find_connected_sets(fmatrix, directed=True)
 
         # states_to_keep = connected_sets[0]
@@ -2997,35 +2996,47 @@ class modelWE:
             #         return
             states_to_remove = []
         else:
-            log.info(connected_sets[1:])
+            log.info(f"Cleaning {connected_sets[1:]}")
             states_to_remove = np.concatenate(connected_sets[1:])
+
+        pre_cleaning_n_clusters_per_bin = [
+            len(cluster_model.cluster_centers_)
+            if hasattr(cluster_model, "cluster_centers_")
+            else 0
+            for cluster_model in self.clusters.cluster_models
+        ]
 
         # Go through each WE bin, finding which clusters within it are not in the connected set
         #    and removing them.
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
             if we_bin in self.clusters.target_bins:
-                log.info(f"Skipping ignored bin {we_bin}")
+                log.debug(f"Skipping target bin {we_bin}")
                 continue
 
             consecutive_index = self.clusters.legitimate_bins.index(we_bin)
             # offset = consecutive_index * self.clusters.n_clusters_per_bin
             offset = sum(
-                [
-                    len(self.clusters.cluster_models[idx].cluster_centers_)
-                    if hasattr(self.clusters.cluster_models[idx], "cluster_centers_")
-                    else 0
-                    for idx in self.clusters.legitimate_bins[:consecutive_index]
-                ]
+                pre_cleaning_n_clusters_per_bin[:we_bin]
+                # [
+                #     len(self.clusters.cluster_models[idx].cluster_centers_)
+                #     if hasattr(self.clusters.cluster_models[idx], "cluster_centers_")
+                #     else 0
+                #     for idx in self.clusters.legitimate_bins[:consecutive_index]
+                # ]
             )
 
             # Get all the clusters that would be contained in this bin
             # clusters_in_bin = range(offset, offset + self.clusters.n_clusters_per_bin)
-            clusters_in_bin = range(
-                offset,
-                offset
-                + len(self.clusters.cluster_models[consecutive_index].cluster_centers_),
-            )
+            n_clusters_in_bin = 0
+            if hasattr(
+                self.clusters.cluster_models[consecutive_index], "cluster_centers_"
+            ):
+                n_clusters_in_bin = len(
+                    self.clusters.cluster_models[consecutive_index].cluster_centers_
+                )
+
+            clusters_in_bin = range(offset, offset + n_clusters_in_bin,)
 
             # Find which of the removed clusters are in this
             bin_clusters_to_clean = np.intersect1d(states_to_remove, clusters_in_bin)
@@ -3048,7 +3059,7 @@ class modelWE:
                     f"All clusters from WE bin {we_bin} would be cleaned! (Target: {target} Basis: {basis})"
                 )
 
-            log.debug(
+            log.info(
                 f"Cleaning {len(bin_clusters_to_clean)} clusters {bin_clusters_to_clean} from WE bin {we_bin}"
             )
 
@@ -3062,7 +3073,7 @@ class modelWE:
             f"Started with {self.n_clusters} clusters, and removed {len(states_to_remove)}"
         )
         self.n_clusters = self.n_clusters - len(states_to_remove)
-        log.info(f"n_clusters is now {self.n_clusters}")
+        log.debug(f"n_clusters is now {self.n_clusters}")
 
         _running_total = 0
         for we_bin in range(self.clusters.bin_mapper.nbins):
@@ -3103,8 +3114,16 @@ class modelWE:
         self.indTargets = np.array([self.n_clusters + 1])
         self.nBins = self.n_clusters + 2
 
-        self.cluster_mapping = {x: x for x in range(self.n_clusters + 1)}
-        self.cluster_mapping[1000000000] = self.n_clusters + 1
+        self.cluster_mapping = {x: x for x in range(self.n_clusters + 2)}
+
+        # Sanity check that cleaning worked
+        fmatrix = self.fluxMatrix.copy()
+        fmatrix[-1, -2] = 1.0
+        connected_sets = find_connected_sets(fmatrix, directed=True)
+        log.info(
+            f"After cleaning, shape is {fmatrix.shape} and disconnected sets are: {connected_sets[1:]}"
+        )
+        assert len(connected_sets[1:]) == 0, "Still not clean after cleaning!"
 
     def launch_ray_discretization(self):
         """
@@ -3211,7 +3230,14 @@ class modelWE:
                 offset += len(self.dtrajs[i])
 
             if len(self.pcoordSet[pcoord_indices, 0]) == 0:
-                log.warning(f"No trajectories in cluster {cluster}!")
+                target_bin_index = self.n_clusters + 1
+
+                if not cluster == target_bin_index:
+                    log.warning(idx_traj_in_cluster)
+                    log.warning(
+                        f"No trajectories in cluster {cluster}! (Target was {target_bin_index})"
+                    )
+
                 cluster_pcoord_centers[cluster] = np.nan
                 cluster_pcoord_range[cluster] = [np.nan, np.nan]
                 cluster_pcoord_all.append([None])
