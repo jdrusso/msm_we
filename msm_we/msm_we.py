@@ -809,6 +809,16 @@ class modelWE:
                 target_bin_centers[i] = [bound_min, bound_max][abs(bound_min) == np.inf]
         self.target_bin_centers = target_bin_centers
 
+    @staticmethod
+    def check_connect_ray():
+
+        assert ray.is_initialized(), (
+            "Ray cluster has not been initialized! "
+            "Launch from the code calling this with ray.init()."
+        )
+
+        log.info(f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!")
+
     def initialize_from_h5(self, refPDBfile, initPDBfile, modelName):
         """
         Like initialize, but sets state without
@@ -2668,9 +2678,7 @@ class modelWE:
             else:
 
                 # First, connect to the ray cluster
-                log.info(
-                    f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!"
-                )
+                self.check_connect_ray()
 
                 # Submit all the discretization tasks to the cluster
                 task_ids = []
@@ -3006,15 +3014,22 @@ class modelWE:
             for cluster_model in self.clusters.cluster_models
         ]
 
+        log.info(
+            f"Pre-cleaning clusters per bin: "
+            f"{list(zip(range(len(pre_cleaning_n_clusters_per_bin)), pre_cleaning_n_clusters_per_bin))}"
+        )
+
         # Go through each WE bin, finding which clusters within it are not in the connected set
         #    and removing them.
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
             if we_bin in self.clusters.target_bins:
-                log.debug(f"Skipping target bin {we_bin}")
+                log.info(f"Skipping target bin {we_bin}")
                 continue
 
-            consecutive_index = self.clusters.legitimate_bins.index(we_bin)
+            # consecutive_index = self.clusters.legitimate_bins.index(we_bin)
+            consecutive_index = we_bin
+
             # offset = consecutive_index * self.clusters.n_clusters_per_bin
             offset = sum(
                 pre_cleaning_n_clusters_per_bin[:we_bin]
@@ -3037,6 +3052,10 @@ class modelWE:
                 )
 
             clusters_in_bin = range(offset, offset + n_clusters_in_bin,)
+            log.info(f"Cluster models len: {len(self.clusters.cluster_models)}")
+            log.info(
+                f"WE Bin {we_bin} (consec. index {consecutive_index}) contains {n_clusters_in_bin} clusters {clusters_in_bin}"
+            )
 
             # Find which of the removed clusters are in this
             bin_clusters_to_clean = np.intersect1d(states_to_remove, clusters_in_bin)
@@ -3138,7 +3157,7 @@ class modelWE:
         Add flag to toggle between stratified and regular do_ray_discretization
         """
 
-        log.info(f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!")
+        self.check_connect_ray()
 
         self.dtrajs = []
 
@@ -3233,7 +3252,7 @@ class modelWE:
                 target_bin_index = self.n_clusters + 1
 
                 if not cluster == target_bin_index:
-                    log.warning(idx_traj_in_cluster)
+                    # log.warning(idx_traj_in_cluster)
                     log.warning(
                         f"No trajectories in cluster {cluster}! (Target was {target_bin_index})"
                     )
@@ -3713,9 +3732,7 @@ class modelWE:
             else:
 
                 # First, connect to the ray cluster
-                log.info(
-                    f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!"
-                )
+                self.check_connect_ray()
 
                 # Submit all the tasks for iteration fluxmatrix calculations
                 task_ids = []
@@ -4147,7 +4164,7 @@ class modelWE:
         elif rediscretize and use_ray:
 
             # First, connect to the ray cluster
-            log.info(f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!")
+            self.check_connect_ray()
 
             # Submit all the discretization tasks to the cluster
             task_ids = []
