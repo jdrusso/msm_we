@@ -2943,19 +2943,27 @@ class modelWE:
 
             # Throw coords in their appropriate bins
             #         print(iter_coords.shape)
-            for _bin in seen_we_bins:
+            for _bin_index, _bin in enumerate(seen_we_bins):
                 # Take the segments in this bin
                 segs_in_bin = np.argwhere(we_bin_assignments == _bin)
 
                 # squoze = np.squeeze(_iter_coords[segs_in_bin])
 
                 # Append them to we_bin_segs[_bin]
-                we_bin_segs[_bin].extend(_iter_coords[segs_in_bin])
+                we_bin_segs[_bin_index].extend(_iter_coords[segs_in_bin])
 
             bin_segs = [len(_segs) >= min_coords for _segs in we_bin_segs]
 
+            # For the "ignored" bins, i.e. target bins where we're not actually clustering, don't worry about
+            #   getting enough segs. Just call it good.
             for _bin in ignored_bins:
-                bin_segs[_bin] = True
+
+                if _bin not in seen_we_bins:
+                    continue
+
+                # Need the actual index of the ignored bin
+                _bin_index = np.argwhere(seen_we_bins == _bin)
+                bin_segs[_bin_index] = True
 
             all_bins_have_segments = np.all(bin_segs)
 
@@ -3071,8 +3079,12 @@ class modelWE:
             bin_clusters_to_clean = np.intersect1d(states_to_remove, clusters_in_bin)
 
             # Before actually cleaning, check if we're not cleaning anything, or if we're cleaning everything
+
+            # If not cleaning anything, just move on
             if len(bin_clusters_to_clean) == 0:
                 continue
+
+            # If cleaning EVERYTHING, handle this bin differently
             elif (
                 not (we_bin in basis or we_bin in target)
                 # and len(bin_clusters_to_clean) == self.clusters.n_clusters_per_bin
