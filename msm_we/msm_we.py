@@ -2907,10 +2907,16 @@ class modelWE:
         # Until all bins are populated
         used_iters = -1
         iter_coords = []
+        bin_segs = []
 
         # Maybe not even necessary to track iter_coords, just _iter_coords.
         # The problem with it as it stands is that assert -- imagine if I have to grab a second iteration
         while not all_bins_have_segments:
+
+            if used_iters > -1:
+                log.debug(
+                    f"Still missing segs in bin {np.argwhere(~bin_segs)}. Pulled {used_iters+1} extra iter"
+                )
 
             if iteration + used_iters > self.maxIter:
                 # TODO: Is this always a deal-breaker?
@@ -3019,6 +3025,7 @@ class modelWE:
             f"{list(zip(range(len(pre_cleaning_n_clusters_per_bin)), pre_cleaning_n_clusters_per_bin))}"
         )
 
+        empty_we_bins = set()
         # Go through each WE bin, finding which clusters within it are not in the connected set
         #    and removing them.
         for we_bin in range(self.clusters.bin_mapper.nbins):
@@ -3074,8 +3081,12 @@ class modelWE:
                 #   - Always leave 1 cluster per bin. But... If it's a bad cluster, then it's a bad cluster!
                 #       In the particular case I'm seeing this, I have a bad "uphill" bin. I suspect a bunch of trajs
                 #       go up there and get terminated. So if I keep it around, I'll have a big absorbing state.
-                raise Exception(
-                    f"All clusters from WE bin {we_bin} would be cleaned! (Target: {target} Basis: {basis})"
+
+                empty_we_bins.add(we_bin)
+
+                # raise Exception(
+                log.warning(
+                    f"All clusters from WE bin {we_bin} will be cleaned! (Target: {target} Basis: {basis})"
                 )
 
             log.info(
@@ -3093,6 +3104,31 @@ class modelWE:
         )
         self.n_clusters = self.n_clusters - len(states_to_remove)
         log.debug(f"n_clusters is now {self.n_clusters}")
+
+        # If a WE bin was completely emptied of cluster centers, map it to the nearest non-empty bin
+        populated_we_bins = np.setdiff1d(
+            range(self.clusters.bin_mapper.nbins), list(empty_we_bins)
+        )
+        for empty_we_bin in empty_we_bins:
+
+            # Find the nearest non-empty bin
+            nearest_populated_bin_idx = np.abs(
+                empty_we_bin - populated_we_bins
+            ).argmin()
+            nearest_populated_bin = populated_we_bins[nearest_populated_bin_idx]
+
+            log.warning(
+                f"All clusters in WE Bin {empty_we_bin} cleaned - replacing with clusters from"
+                f" WE bin {nearest_populated_bin}."
+            )
+
+            # Replace self.clusters.cluster_models[empty_we_bin].cluster_centers_ with
+            #   self.clusters.cluster_models[nearest_nonempty_we_bin].cluster_centers_
+            self.clusters.cluster_models[
+                empty_we_bin
+            ].cluster_centers_ = self.clusters.cluster_models[
+                nearest_populated_bin
+            ].cluster_centers_
 
         _running_total = 0
         for we_bin in range(self.clusters.bin_mapper.nbins):
@@ -3690,7 +3726,8 @@ class modelWE:
         except BlockingIOError:
             # Janky -- if the file exists, pick a random name
             import random
-            fileName += f'_{int(random.random()*1000):04d}'
+
+            fileName += f"_{int(random.random()*1000):04d}"
             f = h5py.File(fileName + ".h5", "w")
 
         dsetName = "fluxMatrix"
@@ -4616,7 +4653,7 @@ class modelWE:
         )
         if not connected:
             log.critical(
-                "There is no path in this matrix from the basis to the target, so no MFPT can be calculted."
+                "There is no path in this matrix from the basis to the target, so no MFPT can be calculated."
             )
             return -1
 
