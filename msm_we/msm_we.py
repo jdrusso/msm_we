@@ -2901,7 +2901,7 @@ class modelWE:
         min_coords = kmeans_models.cluster_args["n_clusters"]
 
         # The number of populated bins is the number of total bins - 1
-        we_bin_segs = [[] for _ in range(bin_mapper.nbins)]
+        # we_bin_segs = [[] for _ in range(bin_mapper.nbins)]
         all_bins_have_segments = False
 
         # Until all bins are populated
@@ -2938,9 +2938,12 @@ class modelWE:
 
             we_bin_assignments = bin_mapper.assign(self.pcoord0List)
 
+            seen_we_bins = np.unique(we_bin_assignments)
+            we_bin_segs = [[] for _ in seen_we_bins]
+
             # Throw coords in their appropriate bins
             #         print(iter_coords.shape)
-            for _bin in np.unique(we_bin_assignments):
+            for _bin in seen_we_bins:
                 # Take the segments in this bin
                 segs_in_bin = np.argwhere(we_bin_assignments == _bin)
 
