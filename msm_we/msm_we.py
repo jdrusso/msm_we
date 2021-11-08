@@ -2915,7 +2915,7 @@ class modelWE:
 
             if used_iters > -1:
                 log.debug(
-                    f"Still missing segs in bin {np.argwhere(~bin_segs)}. Pulled {used_iters+1} extra iter"
+                    f"Still missing segs in bin {np.argwhere(~np.array(bin_segs))}. Pulled {used_iters+1} extra iter"
                 )
 
             if iteration + used_iters > self.maxIter:
