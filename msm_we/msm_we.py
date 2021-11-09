@@ -2834,6 +2834,14 @@ class modelWE:
             f"Obtaining bin definitions from iteration {bin_iteration} in file {self.fileList[0]}"
         )
         iteration = analysis.Run(self.fileList[0]).iteration(bin_iteration)
+
+        # This provides backwards compatibility when loading WESTPA data from simulations where binning lived in westpa.binning
+        # It's a little sketchy, but it import westpa.tools.binning under westpa.binning
+        import importlib
+        import westpa
+
+        westpa.binning = importlib.import_module("westpa.tools.binning", "westpa.tools")
+
         bin_mapper = iteration.bin_mapper
         target_bin = bin_mapper.assign(iteration.target_state_pcoords)
         ignored_bins = target_bin
@@ -2862,6 +2870,9 @@ class modelWE:
                 extra_iters_used -= 1
                 log.debug(f"Already processed  iter  {iteration}")
                 continue
+
+            _iteration = analysis.Run(self.fileList[0]).iteration(iteration)
+            ignored_bins = _iteration.bin_mapper.assign(_iteration.target_state_pcoords)
 
             with concurrent.futures.ProcessPoolExecutor(
                 max_workers=1, mp_context=mp.get_context("fork")
@@ -2911,6 +2922,8 @@ class modelWE:
         used_iters = -1
         iter_coords = []
         bin_segs = []
+        seen_we_bins = []
+        we_bin_segs = []
 
         # Maybe not even necessary to track iter_coords, just _iter_coords.
         # The problem with it as it stands is that assert -- imagine if I have to grab a second iteration
@@ -2918,7 +2931,10 @@ class modelWE:
 
             if used_iters > -1:
                 log.debug(
-                    f"Still missing segs in bin {np.argwhere(~np.array(bin_segs))}. Pulled {used_iters+1} extra iter"
+                    f"Still missing segs in bin {seen_we_bins[~np.array(bin_segs)]}. Pulled {used_iters+1} extra iter"
+                )
+                log.debug(
+                    f"Had {[(seen_we_bins[i], len(_segs)) for i, _segs in enumerate(we_bin_segs)]}, need {min_coords}"
                 )
 
             if iteration + used_iters > self.maxIter:
@@ -2933,13 +2949,23 @@ class modelWE:
             _iter_coords = self.get_iter_coordinates(iteration + used_iters)
             if used_iters == 0:
                 iter_coords = _iter_coords
+                pcoords = [x for x in self.pcoord0List]
             else:
                 iter_coords = np.append(iter_coords, _iter_coords, axis=0)
+                pcoords.extend(self.pcoord0List)
 
             # Map coords to WE bins
-            assert self.pcoord0List.shape[0] == _iter_coords.shape[0]
+            pcoord_array = np.array(pcoords)
+            assert pcoord_array.shape[0] == iter_coords.shape[0]
 
-            we_bin_assignments = bin_mapper.assign(self.pcoord0List)
+            segment_in_target = self.is_WE_target(pcoord_array)
+            non_target_pcoord_array = pcoord_array[~segment_in_target]
+            non_target_iter_coords = iter_coords[~segment_in_target]
+            log.debug(
+                f"Segments {np.argwhere(segment_in_target)} were in target, and will be ignored"
+            )
+
+            we_bin_assignments = bin_mapper.assign(non_target_pcoord_array)
 
             seen_we_bins = np.unique(we_bin_assignments)
             we_bin_segs = [[] for _ in seen_we_bins]
@@ -2953,7 +2979,8 @@ class modelWE:
                 # squoze = np.squeeze(_iter_coords[segs_in_bin])
 
                 # Append them to we_bin_segs[_bin]
-                we_bin_segs[_bin_index].extend(_iter_coords[segs_in_bin])
+                # we_bin_segs[_bin_index] holds the WE bin at seen_we_bins[_bin_index]
+                we_bin_segs[_bin_index].extend(non_target_iter_coords[segs_in_bin])
 
             bin_segs = [len(_segs) >= min_coords for _segs in we_bin_segs]
 
@@ -2975,13 +3002,13 @@ class modelWE:
 
         # for _bin in range(bin_mapper.nbins):
         # Only cluster in WE bins that things were actually assigned to
-        for _bin in np.unique(we_bin_assignments):
+        for i, _bin in enumerate(seen_we_bins):
 
             if _bin in ignored_bins:
                 continue
 
             transformed_coords = self.coordinates.transform(
-                processCoordinates(np.squeeze(np.array(we_bin_segs[_bin])))
+                processCoordinates(np.squeeze(np.array(we_bin_segs[i])))
             )
             try:
                 kmeans_models.cluster_models[_bin].partial_fit(transformed_coords)
