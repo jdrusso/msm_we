@@ -244,6 +244,8 @@ class StratifiedClusters:
         # It's only really important to ignore targets, because you may not have structures in the target b/c of recycling
         self.target_bins = target_bins
 
+        self.we_remap = {x: x for x in range(self.bin_mapper.nbins)}
+
         # I need consecutive indices for each non-basis/non-target bin
         # In other words, remove the target, and then consecutively index all the remaining bins
         legitimate_bins = []
@@ -287,6 +289,7 @@ class StratifiedClusters:
             iter_pcoords = self.model.pcoord1List
 
         we_bins = self.bin_mapper.assign(iter_pcoords)
+        we_bins = [self.we_remap[we_bin] for we_bin in we_bins]
 
         # Discretize coords according to which WE bin they're in
         discrete = []
@@ -3085,18 +3088,12 @@ class modelWE:
                 continue
 
             # If cleaning EVERYTHING, handle this bin differently
+            # We'll just re-map it to a "good" adjacent WE bin
             elif (
                 not (we_bin in basis or we_bin in target)
                 # and len(bin_clusters_to_clean) == self.clusters.n_clusters_per_bin
                 and len(bin_clusters_to_clean) == clusters_in_bin
             ):
-                # TODO: What's the right way to handle this? A few options I can think of:
-                #   - Throw an error. Your WE bins are bad. Fixing this requires re-running something though, since bin
-                #       definitions are pulled from the 2nd iter (could pull from last)
-                #   - Always leave 1 cluster per bin. But... If it's a bad cluster, then it's a bad cluster!
-                #       In the particular case I'm seeing this, I have a bad "uphill" bin. I suspect a bunch of trajs
-                #       go up there and get terminated. So if I keep it around, I'll have a big absorbing state.
-
                 empty_we_bins.add(we_bin)
 
                 # raise Exception(
@@ -3139,11 +3136,12 @@ class modelWE:
 
             # Replace self.clusters.cluster_models[empty_we_bin].cluster_centers_ with
             #   self.clusters.cluster_models[nearest_nonempty_we_bin].cluster_centers_
-            self.clusters.cluster_models[
-                empty_we_bin
-            ].cluster_centers_ = self.clusters.cluster_models[
-                nearest_populated_bin
-            ].cluster_centers_
+            # self.clusters.cluster_models[
+            #     empty_we_bin
+            # ].cluster_centers_ = self.clusters.cluster_models[
+            #     nearest_populated_bin
+            # ].cluster_centers_
+            self.clusters.we_remap[empty_we_bin] = nearest_populated_bin
 
         _running_total = 0
         for we_bin in range(self.clusters.bin_mapper.nbins):
