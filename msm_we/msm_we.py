@@ -3362,6 +3362,10 @@ class modelWE:
 
         # model_id, kmeans_model_id, iteration, processCoordinates_id = arg
 
+        import sys
+        import westpa.core.binning
+        sys.modules['westpa.binning'] = sys.modules['westpa.core.binning']
+
         # self = ray.get(model_id)
         # kmeans_model = ray.get(kmeans_model_id)
         # processCoordinates = ray.get(processCoordinates_id)
