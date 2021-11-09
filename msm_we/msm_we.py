@@ -518,6 +518,7 @@ class modelWE:
         dim_reduce_method: str = "pca",
         tau: float = None,
         pcoord_ndim: int = 1,
+        auxpath: str = 'coord'
     ):
         """
         Initialize the model-builder.
@@ -597,7 +598,7 @@ class modelWE:
             self.target_pcoord_bounds = target_pcoord_bounds
 
         # self._basis_pcoord_bounds = None
-
+        self.auxpath = auxpath
         self.fileList = fileList
         self.n_data_files = len(fileList)
         #####
@@ -1281,12 +1282,12 @@ class modelWE:
             if seg_idx == 0:
                 westFile = self.fileList[self.westList[seg_idx]]
                 dataIn = h5py.File(westFile, "r")
-                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
                 dset = dataIn[dsetName]
                 coords_current = dset[:]
-                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(
                     self.n_iter - n_lag
-                )
+                ), self.auxpath)
                 dset = dataIn[dsetName]
                 coords_lagged = dset[:]
             elif self.westList[seg_idx] != self.westList[seg_idx - 1]:
@@ -1297,14 +1298,14 @@ class modelWE:
                 dataIn = h5py.File(westFile, "r")
 
                 # Load the data for the current iteration
-                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
                 dset = dataIn[dsetName]
                 coords_current = dset[:]
 
                 # Load the lagged data for (iteration - n_lag)
-                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(
                     self.n_iter - n_lag
-                )
+                ), self.auxpath)
                 dset = dataIn[dsetName]
                 coords_lagged = dset[:]
 
@@ -1446,7 +1447,7 @@ class modelWE:
 
             with h5py.File(west_file, "r") as data_file:
 
-                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
 
                 try:
                     dset = data_file[dsetName]
@@ -1732,9 +1733,9 @@ class modelWE:
             try:
                 if iS > 0:
                     if self.westList[iS] != self.westList[iS - 1] and iS < nS - 1:
-                        dsetName = "/iterations/iter_%08d/auxdata/coord" % int(
+                        dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(
                             self.n_iter
-                        )
+                        ), self.auxpath)
                         try:
                             # TODO: Why exclude the last point?
                             dset = dataIn.create_dataset(
@@ -1760,9 +1761,9 @@ class modelWE:
 
                     # If it's the last segment, don't exclude the last point (why?)
                     elif iS == nS - 1:
-                        dsetName = "/iterations/iter_%08d/auxdata/coord" % int(
+                        dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(
                             self.n_iter
-                        )
+                        ), self.auxpath)
                         try:
                             dset = dataIn.create_dataset(dsetName, np.shape(coords))
                             dset[:] = coords
@@ -1844,7 +1845,7 @@ class modelWE:
 
             with h5py.File(west_file, "r") as data_file:
 
-                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
 
                 try:
                     dset = data_file[dsetName]
@@ -1872,14 +1873,14 @@ class modelWE:
             if iS == 0:
                 westFile = self.fileList[self.westList[iS]]
                 dataIn = h5py.File(westFile, "r")
-                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
                 dset = dataIn[dsetName]
                 coord = dset[:]
             elif self.westList[iS] != self.westList[iS - 1]:
                 dataIn.close()
                 westFile = self.fileList[self.westList[iS]]
                 dataIn = h5py.File(westFile, "r")
-                dsetName = "/iterations/iter_%08d/auxdata/coord" % int(self.n_iter)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
                 dset = dataIn[dsetName]
                 coord = dset[:]
             coordList[iS, :, :] = coord[self.segindList[iS], 0, :, :]
