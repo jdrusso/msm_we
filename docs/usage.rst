@@ -63,24 +63,28 @@ Model building and preparation
 
     .. code-block:: python
 
-        model.initialize(h5_glob, reference_structure_file, model_name,
-                        basis_pcoord1_bounds, target_pcoord1_bounds,
-                        dim_reduce_method, tau)
+        model.initialize(file_paths, reference_structure_file, model_name,
+                        basis_pcoord_bounds, target_pcoord_bounds,
+                        dim_reduce_method, tau, pcoord_ndim)
 
 
-    :code:`h5_glob` is a list of paths to your WESTPA h5 files.
+    :code:`file_paths` is a list of paths to your WESTPA h5 files.
 
     :code:`reference_structure_file` is a file containing a topology describing your system.
 
     :code:`model_name` is what it sounds like, and is used to label various output files.
 
-    :code:`basis_pcoord1_bounds` is a list of [lower bound, upper bound]  of the basis in pcoord 1 space
+    :code:`basis_pcoord1_bounds` is a list of [[pcoord0 lower bound, pcoord1 upper bound], [pcoord1 lower bound, pcoord1 upper bound], ...]
+            in pcoord-space for the basis state
 
-    :code:`target_pcoord1_bounds` is a list of [lower bound, upper bound]  of the target in pcoord 1 space
+    :code:`target_pcoord1_bounds` is a list of [[pcoord0 lower bound, pcoord1 upper bound], [pcoord1 lower bound, pcoord1 upper bound], ...]
+            in pcoord-space for the target state
 
     :code:`dim_reduce_method` is the dimensionality reduction method ("pca", "vamp", or "none")
 
     :code:`tau` is the resampling time, or the length of one WE iteration in physical units.
+
+    :code:`pcoord_ndim` is the dimensionality of the progress coordinate.
 
 6. Load all coords and pcoords up to the last iteration you want to use for analysis with
 
