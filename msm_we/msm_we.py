@@ -3989,7 +3989,7 @@ class modelWE:
             )
 
             # If you didn't want to do cleaning, you've gone far enough, return the list of good state indices
-            if not args["do_cleaning"]:
+            if "do_cleaning" in args.keys() and not args["do_cleaning"]:
                 return np.argwhere(states_to_keep)
 
             # Otherwise, carry on and actually clean
