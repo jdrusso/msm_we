@@ -2872,7 +2872,7 @@ class modelWE:
                 log.debug(f"Already processed  iter  {iteration}")
                 continue
 
-            _iteration = analysis.Run(self.fileList[0]).iteration(iteration)
+            _iteration = analysis.Run(self.fileList[0]).iteration(max(2, iteration))
             ignored_bins = _iteration.bin_mapper.assign(_iteration.target_state_pcoords)
 
             with concurrent.futures.ProcessPoolExecutor(
