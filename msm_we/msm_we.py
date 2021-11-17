@@ -3855,7 +3855,9 @@ class modelWE:
 
         return fluxMatrix
 
-    def get_fluxMatrix(self, n_lag, first_iter, last_iter, use_ray=False):
+    def get_fluxMatrix(
+        self, n_lag, first_iter=None, last_iter=None, iters_to_use=None, use_ray=False
+    ):
         """
         Compute the matrix of fluxes at a given lag time, for a range of iterations.
 
@@ -3885,13 +3887,26 @@ class modelWE:
 
         """
 
+        if iters_to_use is None:
+            iters_to_use = range(first_iter + 1, last_iter + 1)
+        elif first_iter is None and last_iter is None:
+            log.info(
+                "Specific iterations to use were provided for fluxmatrix calculation, using those."
+            )
+        else:
+            log.error(
+                "Both specific iterations to use AND first/last were provided to fluxmatrix calculation. Specify"
+                " one or the other, not both."
+            )
+            raise Exception
+
         log.debug("Computing all flux matrices")
 
         self.n_lag = n_lag
         self.errorWeight = 0.0
         self.errorCount = 0
 
-        self._fluxMatrixParams = [n_lag, first_iter, last_iter]
+        self._fluxMatrixParams = [n_lag, first_iter, last_iter, iters_to_use]
 
         # +2 because the basis and target states are the last two indices
         fluxMatrix = np.zeros((self.n_clusters + 2, self.n_clusters + 2))
@@ -3939,10 +3954,7 @@ class modelWE:
             # FIXME: Duplicated code
             # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
             if not use_ray:
-                for iS in tqdm.tqdm(
-                    range(first_iter + 1, last_iter + 1),
-                    desc="Constructing flux matrix",
-                ):
+                for iS in tqdm.tqdm(iters_to_use, desc="Constructing flux matrix",):
                     log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
 
                     # fluxMatrixI = self.get_iter_fluxMatrix(iS)
@@ -3976,8 +3988,7 @@ class modelWE:
 
                 # max_inflight = 70
                 for iteration in tqdm.tqdm(
-                    range(first_iter + 1, last_iter + 1),
-                    desc="Submitting fluxmatrix tasks",
+                    iters_to_use, desc="Submitting fluxmatrix tasks",
                 ):
 
                     # Allow 1000 in flight calls
@@ -4007,7 +4018,7 @@ class modelWE:
                 # Additionally, this batches rather than getting them all at once, or one by one.
 
                 with tqdm.tqdm(
-                    total=(last_iter - first_iter), desc="Retrieving flux matrices"
+                    total=len(iters_to_use), desc="Retrieving flux matrices"
                 ) as pbar:
                     while task_ids:
                         result_batch_size = 50
@@ -4033,7 +4044,7 @@ class modelWE:
 
                 # Write the H5. Can't do this per-iteration, because we're not guaranteed to be going sequentially now
 
-                nI = last_iter - first_iter
+                nI = len(iters_to_use)
                 dsetP = f[dsetName]
                 dsetP[:] = fluxMatrix / nI
                 dsetP.attrs["iter"] = nI
@@ -4044,7 +4055,8 @@ class modelWE:
             fluxMatrix = fluxMatrix / nI
 
         # If this datafile DOES contain a fluxMatrix entry...
-        # This should never run now.
+        # HACK: This explicitly never runs now, but keep it around in case we decide to re-add this later.
+        # TODO: Update this to work with the specific iterations
         elif fluxmatrix_exists_in_h5:
 
             log.info("Fluxmatrix already exists in h5 file, loading saved.")
