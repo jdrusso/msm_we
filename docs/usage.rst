@@ -63,33 +63,39 @@ Model building and preparation
 
     .. code-block:: python
 
-        model.initialize(h5_glob, reference_structure_file, model_name,
-                        basis_pcoord1_bounds, target_pcoord1_bounds,
-                        dim_reduce_method, tau)
+        model.initialize(file_paths, reference_structure_file, model_name,
+                        basis_pcoord_bounds, target_pcoord_bounds,
+                        dim_reduce_method, tau, pcoord_ndim)
 
 
-    :code:`h5_glob` is a list of paths to your WESTPA h5 files.
+    :code:`file_paths` is a list of paths to your WESTPA h5 files.
 
     :code:`reference_structure_file` is a file containing a topology describing your system.
 
     :code:`model_name` is what it sounds like, and is used to label various output files.
 
-    :code:`basis_pcoord1_bounds` is a list of [lower bound, upper bound]  of the basis in pcoord 1 space
+    :code:`basis_pcoord1_bounds` is a list of [[pcoord0 lower bound, pcoord1 upper bound],
+    [pcoord1 lower bound, pcoord1 upper bound], ...] in pcoord-space for the basis state
 
-    :code:`target_pcoord1_bounds` is a list of [lower bound, upper bound]  of the target in pcoord 1 space
+    :code:`target_pcoord1_bounds` is a list of [[pcoord0 lower bound, pcoord1 upper bound],
+    [pcoord1 lower bound, pcoord1 upper bound], ...] in pcoord-space for the target state
 
     :code:`dim_reduce_method` is the dimensionality reduction method ("pca", "vamp", or "none")
 
     :code:`tau` is the resampling time, or the length of one WE iteration in physical units.
+
+    :code:`pcoord_ndim` is the dimensionality of the progress coordinate.
 
 6. Load all coords and pcoords up to the last iteration you want to use for analysis with
 
     .. code-block:: python
 
         model.get_iterations()
-        model.get_coordSet(last_iter)
+        model.get_coordSet(last_iter, streaming)
 
-    where `last_iter` is the number of iterations you have (AKA, the last iteration it'll load data from.)
+    where :code:`last_iter` is the number of iterations you have (AKA, the last iteration it'll load data from)
+    and :code:`streaming` enables streaming data processing, which allows large datasets to fit in memory at the cost of
+    a (nominally) small performance hit.
 
 7. Prepare dimensionality reduction transformer by running
 
@@ -101,19 +107,54 @@ Model building and preparation
 
     .. code-block:: python
 
-        model.cluster_coordinates(n_clusters)
+        model.cluster_coordinates(n_clusters, streaming,
+            first_cluster_iter, use_ray, stratified,
+            **_cluster_args)
+
+    :code:`n_clusters` is the total number of clusters if :code:`stratified=False`, or the number of clusters per bin if :code:`stratified=True`.
+
+    :code:`streaming` is whether or not to stream over the data.
+
+    :code:`first_cluster_iter` is the first iteration used for building the cluster centers (which may be desirable to exclude
+    initial burn-in iterations).
+
+    :code:`use_ray` enables parallelization with the Ray work manager. If enabled, a Ray cluster must be initialized by
+    the user *before calling this*.
+
+    :code:`stratified` enables stratified clustering instead of aggregate clustering. In stratified clustering,
+    clustering is done independently within each WE bin. This is strongly recommended to ensure your clusters provide a
+    good fine-grained description of your system.
+
+    **Note**: At time of writing, stratified clustering implies :code:`streaming=True, use_ray=True` and will enable this
+    with a warning if they are not set.
+
+    Any additional keyword arguments will be provided directly to the clustering function through :code:`**_cluster_args`.
 
 9. Create the flux matrix with
 
     .. code-block:: python
 
-        model.get_fluxMatrix(lag, first_iter, last_iter)
+        model.get_fluxMatrix(lag, first_iter, last_iter, use_ray)
+
+    :code:`lag` is the lag-time used for model-building. Currently, only 0 is supported, which corresponds to looking at
+    transitions from each parent segment directly to its child.
+
+    :code:`first_iter`, and :code:`last_iter` are the first and last iteration to use when computing the flux matrix.
+    Note that excluding many iterations may result in limited connectivity of the flux matrix, as early events may have
+    provided critical transitions between WE bins that may not be otherwise sampled.
+
+    :code:`use_ray` enables parallelization with the Ray work manager. If enabled, a Ray cluster must be initialized by
+    the user *before calling this*.
 
     a. Clean disconnected states and sort the flux matrix with
 
     .. code-block:: python
 
-        model.organize_fluxMatrix()
+        model.organize_fluxMatrix(use_ray)
+
+
+    :code:`use_ray` enables parallelization with the Ray work manager. If enabled, a Ray cluster must be initialized by
+    the user *before calling this*.
 
 Analysis
 --------
@@ -160,3 +201,21 @@ Streaming dimensionality reduction is automatically done for PCA.
 To use streaming clustering, pass :code:`streaming=True` to :code:`cluster_coordinates()`.
 
 Streaming is not supported for VAMP, because I don't know of a streaming implementation of VAMP dimensionality reduction.
+
+Parallelism
+-----------
+
+:code:`msm_we` supports parallelism of many "slow" parts of model-building -- namely, clustering, discretization, and
+flux matrix calculations. This is done through the Ray work manager.
+
+Before invoking any function with :code:`use_ray=True`, a Ray work manager must be initialized on the machine running
+the analysis. In the simplest case, this can just be
+
+.. code-block:: python
+
+    import ray
+    ray.init()
+
+:code:`msm_we` will connect to whatever Ray instance is running on the machine the analysis is being performed on.
+However, this can be used on a cluster to initialize a Ray cluster with workers on a number of nodes, and the :code:`msm_we`
+running on the same node as the Ray head.
