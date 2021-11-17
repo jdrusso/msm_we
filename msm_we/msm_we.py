@@ -518,7 +518,7 @@ class modelWE:
         dim_reduce_method: str = "pca",
         tau: float = None,
         pcoord_ndim: int = 1,
-        auxpath: str = 'coord'
+        auxpath: str = "coord",
     ):
         """
         Initialize the model-builder.
@@ -1282,12 +1282,16 @@ class modelWE:
             if seg_idx == 0:
                 westFile = self.fileList[self.westList[seg_idx]]
                 dataIn = h5py.File(westFile, "r")
-                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (
+                    int(self.n_iter),
+                    self.auxpath,
+                )
                 dset = dataIn[dsetName]
                 coords_current = dset[:]
-                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(
-                    self.n_iter - n_lag
-                ), self.auxpath)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (
+                    int(self.n_iter - n_lag),
+                    self.auxpath,
+                )
                 dset = dataIn[dsetName]
                 coords_lagged = dset[:]
             elif self.westList[seg_idx] != self.westList[seg_idx - 1]:
@@ -1298,14 +1302,18 @@ class modelWE:
                 dataIn = h5py.File(westFile, "r")
 
                 # Load the data for the current iteration
-                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (
+                    int(self.n_iter),
+                    self.auxpath,
+                )
                 dset = dataIn[dsetName]
                 coords_current = dset[:]
 
                 # Load the lagged data for (iteration - n_lag)
-                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(
-                    self.n_iter - n_lag
-                ), self.auxpath)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (
+                    int(self.n_iter - n_lag),
+                    self.auxpath,
+                )
                 dset = dataIn[dsetName]
                 coords_lagged = dset[:]
 
@@ -1447,7 +1455,10 @@ class modelWE:
 
             with h5py.File(west_file, "r") as data_file:
 
-                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (
+                    int(self.n_iter),
+                    self.auxpath,
+                )
 
                 try:
                     dset = data_file[dsetName]
@@ -1733,9 +1744,10 @@ class modelWE:
             try:
                 if iS > 0:
                     if self.westList[iS] != self.westList[iS - 1] and iS < nS - 1:
-                        dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(
-                            self.n_iter
-                        ), self.auxpath)
+                        dsetName = "/iterations/iter_%08d/auxdata/%s" % (
+                            int(self.n_iter),
+                            self.auxpath,
+                        )
                         try:
                             # TODO: Why exclude the last point?
                             dset = dataIn.create_dataset(
@@ -1761,9 +1773,10 @@ class modelWE:
 
                     # If it's the last segment, don't exclude the last point (why?)
                     elif iS == nS - 1:
-                        dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(
-                            self.n_iter
-                        ), self.auxpath)
+                        dsetName = "/iterations/iter_%08d/auxdata/%s" % (
+                            int(self.n_iter),
+                            self.auxpath,
+                        )
                         try:
                             dset = dataIn.create_dataset(dsetName, np.shape(coords))
                             dset[:] = coords
@@ -1845,7 +1858,10 @@ class modelWE:
 
             with h5py.File(west_file, "r") as data_file:
 
-                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (
+                    int(self.n_iter),
+                    self.auxpath,
+                )
 
                 try:
                     dset = data_file[dsetName]
@@ -1873,14 +1889,20 @@ class modelWE:
             if iS == 0:
                 westFile = self.fileList[self.westList[iS]]
                 dataIn = h5py.File(westFile, "r")
-                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (
+                    int(self.n_iter),
+                    self.auxpath,
+                )
                 dset = dataIn[dsetName]
                 coord = dset[:]
             elif self.westList[iS] != self.westList[iS - 1]:
                 dataIn.close()
                 westFile = self.fileList[self.westList[iS]]
                 dataIn = h5py.File(westFile, "r")
-                dsetName = "/iterations/iter_%08d/auxdata/%s" % (int(self.n_iter), self.auxpath)
+                dsetName = "/iterations/iter_%08d/auxdata/%s" % (
+                    int(self.n_iter),
+                    self.auxpath,
+                )
                 dset = dataIn[dsetName]
                 coord = dset[:]
             coordList[iS, :, :] = coord[self.segindList[iS], 0, :, :]
@@ -2371,7 +2393,8 @@ class modelWE:
 
     def do_clustering(self, arg):
 
-        kmeans_model, iteration, cluster_args, processCoordinates = arg
+        kmeans_model, iters_to_use, cluster_args, processCoordinates = arg
+        iteration = iters_to_use[0]
 
         min_coords = 1
 
@@ -2390,9 +2413,11 @@ class modelWE:
         # Keep adding coords until you have more than your components
         while iter_coords.shape[0] <= min_coords:
 
+            iteration = iters_to_use.pop(0)
+
             used_iters += 1
 
-            _iter_coords = self.get_iter_coordinates(iteration + used_iters)
+            _iter_coords = self.get_iter_coordinates(iteration)
             if _iter_coords.shape[0] == 0:
                 continue
 
@@ -2463,9 +2488,10 @@ class modelWE:
         self,
         n_clusters,
         streaming=False,
-        first_cluster_iter=1,
+        first_cluster_iter=None,
         use_ray=False,
         stratified=True,
+        iters_to_use=None,
         **_cluster_args,
     ):
 
@@ -2475,7 +2501,12 @@ class modelWE:
             log.info("Beginning stratified clustering.")
             self.clustering_method = "stratified"
             self.cluster_stratified(
-                n_clusters, streaming, first_cluster_iter, use_ray, **_cluster_args
+                n_clusters,
+                streaming,
+                first_cluster_iter,
+                use_ray,
+                iters_to_use,
+                **_cluster_args,
             )
 
         # Make sure you know what you're doing if using this!
@@ -2492,8 +2523,9 @@ class modelWE:
         self,
         n_clusters,
         streaming=False,
-        first_cluster_iter=1,
+        first_cluster_iter=None,
         use_ray=False,
+        iters_to_use=None,
         **_cluster_args,
     ):
         """
@@ -2527,9 +2559,29 @@ class modelWE:
 
         log.debug(f"Doing clustering on {n_clusters} clusters")
 
+        # Have to do this instead of setting a default argument so that we can specify custom iterations to use
+        if first_cluster_iter is None:
+            first_cluster_iter = 1
+
         self.n_clusters = n_clusters
         self.first_cluster_iter = first_cluster_iter
         # streaming = False
+
+        # This is a bit of a gnarly chain of if statements, but it handles checking whether a user explicitly passed
+        #   these arguments.
+        # If you haven't specified a range of iterations to use, then go with first_cluster_iter
+        if iters_to_use is None and first_cluster_iter is None:
+            first_cluster_iter = 1
+            iters_to_use = range(first_cluster_iter, self.maxIter)
+        elif iters_to_use is None and first_cluster_iter is not None:
+            iters_to_use = range(first_cluster_iter, self.maxIter)
+        elif iters_to_use is not None and first_cluster_iter is not None:
+            log.error(
+                "Conflicting parameters -- either iters_to_use OR first_cluster_iter should be provided, not both."
+            )
+        else:
+            # iters_to_use was provided, and first_cluster_iter was not
+            pass
 
         if "metric" in _cluster_args.keys() or "k" in _cluster_args.keys():
             log.error(
@@ -2572,7 +2624,7 @@ class modelWE:
 
                 _data = [
                     self.get_iter_coordinates(iteration).reshape(-1, 3 * self.nAtoms)
-                    for iteration in range(1, self.maxIter)
+                    for iteration in iters_to_use
                 ]
                 stacked_data = np.vstack(_data)
 
@@ -2591,8 +2643,8 @@ class modelWE:
                 self.dtrajs = []
 
                 extra_iters_used = 0
-                for iteration in tqdm.tqdm(
-                    range(first_cluster_iter, self.maxIter), desc="Clustering"
+                for iter_idx, iteration in tqdm.tqdm(
+                    enumerate(iters_to_use), desc="Clustering"
                 ):
 
                     if extra_iters_used > 0:
@@ -2607,7 +2659,7 @@ class modelWE:
                             self.do_clustering,
                             [
                                 cluster_model,
-                                iteration,
+                                iters_to_use[iter_idx],
                                 cluster_args,
                                 self.processCoordinates,
                             ],
@@ -2616,6 +2668,7 @@ class modelWE:
                 self.clusters = cluster_model
 
                 # Now compute dtrajs from the final model
+                # TODO: Do I want to always discretize the full data?
                 for iteration in range(1, self.maxIter):
                     iter_coords = self.get_iter_coordinates(iteration)
                     transformed_coords = self.coordinates.transform(
@@ -2630,8 +2683,8 @@ class modelWE:
 
             # continued = False
             extra_iters_used = 0
-            for iteration in tqdm.tqdm(
-                range(first_cluster_iter, self.maxIter), desc="Clustering"
+            for iter_idx, iteration in tqdm.tqdm(
+                enumerate(iters_to_use), desc="Clustering"
             ):
 
                 if extra_iters_used > 0:
@@ -2646,7 +2699,7 @@ class modelWE:
                         self.do_clustering,
                         [
                             cluster_model,
-                            iteration,
+                            iters_to_use[iter_idx:],
                             cluster_args,
                             self.processCoordinates,
                         ],
@@ -2746,7 +2799,7 @@ class modelWE:
             if self.dimReduceMethod == "pca":
                 transformed_data = []
 
-                for iteration in range(1, self.maxIter):
+                for iteration in iters_to_use:
                     iter_coords = self.get_iter_coordinates(iteration)
 
                     # Skip if  this is an empty iteration
@@ -2797,9 +2850,10 @@ class modelWE:
         self,
         n_clusters,
         streaming=True,
-        first_cluster_iter=1,
+        first_cluster_iter=None,
         use_ray=True,
         bin_iteration=2,
+        iters_to_use=None,
         **_cluster_args,
     ):
         """
@@ -2823,6 +2877,9 @@ class modelWE:
 
         bin_iteration: int (default 2)
             Iteration to obtain bin definitions from.
+
+        iters_to_use: array-like (default [1, model.maxIter])
+            Specific set of iterations to cluster on.
 
         **_cluster_args:
             Arguments passed through to sklearn.cluster.MiniBatchKMeans
@@ -2861,11 +2918,27 @@ class modelWE:
             bin_mapper, self, n_clusters, ignored_bins, **_cluster_args
         )
 
+        # This is a bit of a gnarly chain of if statements, but it handles checking whether a user explicitly passed
+        #   these arguments.
+        # If you haven't specified a range of iterations to use, then go with first_cluster_iter
+        if iters_to_use is None and first_cluster_iter is None:
+            first_cluster_iter = 1
+            iters_to_use = range(first_cluster_iter, self.maxIter)
+        elif iters_to_use is None and first_cluster_iter is not None:
+            iters_to_use = range(first_cluster_iter, self.maxIter)
+        elif iters_to_use is not None and first_cluster_iter is not None:
+            log.error(
+                "Conflicting parameters -- either iters_to_use OR first_cluster_iter should be provided, not both."
+            )
+        else:
+            # iters_to_use was provided, and first_cluster_iter was not
+            pass
+
         # ## Build the clustering model
         self.dtrajs = []
         extra_iters_used = 0
-        for iteration in tqdm.tqdm(
-            range(first_cluster_iter, self.maxIter), desc="Clustering"
+        for iter_idx, iteration in tqdm.tqdm(
+            enumerate(iters_to_use), desc="Clustering"
         ):
 
             if extra_iters_used > 0:
@@ -2876,17 +2949,23 @@ class modelWE:
             _iteration = analysis.Run(self.fileList[0]).iteration(max(2, iteration))
             ignored_bins = []
             try:
-                target_bins = _iteration.bin_mapper.assign(_iteration.target_state_pcoords)
+                target_bins = _iteration.bin_mapper.assign(
+                    _iteration.target_state_pcoords
+                )
             except Exception:
                 log.error(f"Couldn't get target bin for iteration {iteration}")
                 target_bins = target_bin
             try:
-                basis_bins = _iteration.bin_mapper.assign(_iteration.basis_state_pcoords)
+                basis_bins = _iteration.bin_mapper.assign(
+                    _iteration.basis_state_pcoords
+                )
             except Exception:
                 log.error(f"Couldn't get basis bins for iteration{iteration}")
                 basis_bins = []
 
-            ignored_bins = np.concatenate([ignored_bins, target_bins, basis_bins]).flatten()
+            ignored_bins = np.concatenate(
+                [ignored_bins, target_bins, basis_bins]
+            ).flatten()
 
             with concurrent.futures.ProcessPoolExecutor(
                 max_workers=1, mp_context=mp.get_context("fork")
@@ -2896,7 +2975,7 @@ class modelWE:
                     [
                         self,
                         stratified_clusters,
-                        iteration,
+                        iters_to_use[iter_idx:],
                         self.processCoordinates,
                         ignored_bins,
                     ],
@@ -2922,7 +3001,7 @@ class modelWE:
         Perform the full-stratified clustering.
         """
 
-        self, kmeans_models, iteration, processCoordinates, ignored_bins = arg
+        self, kmeans_models, iters_to_use, processCoordinates, ignored_bins = arg
 
         bin_mapper = kmeans_models.bin_mapper
 
@@ -2935,52 +3014,64 @@ class modelWE:
         # Until all bins are populated
         used_iters = -1
         iter_coords = []
-        bin_segs = np.array([])
-#        seen_we_bins = np.array([])
-#        we_bin_segs = []
+        unique_bins = np.array([])
+        counts = np.array([])
+        # bin_segs = np.array([])
+        #        seen_we_bins = np.array([])
+        #        we_bin_segs = []
 
         # Maybe not even necessary to track iter_coords, just _iter_coords.
         # The problem with it as it stands is that assert -- imagine if I have to grab a second iteration
         while not all_bins_have_segments:
 
+            # This may cover the same use case as iteration > self.maxIter below
+            try:
+                iteration = iters_to_use.pop(0)
+            except IndexError:
+                log.error(
+                    f"At iteration {iteration} (pulled {used_iters} extra), couldn't get segments in all bins, and no "
+                    f"iterations left"
+                )
+                break
+
             if used_iters > -1:
                 log.debug(
                     f"Still missing segs in bin {unique_bins[counts < min_coords]}. Pulled {used_iters+1} extra iter"
                 )
-                log.debug(
-                    f"Had {list(zip(unique_bins, counts))}, need {min_coords}"
-                )   
+                log.debug(f"Had {list(zip(unique_bins, counts))}, need {min_coords}")
 
-            if iteration + used_iters > self.maxIter:
+            if iteration > self.maxIter:
                 # TODO: Is this always a deal-breaker?
                 log.warning(
-                    f"At iteration {iteration}+{used_iters}, couldn't get segments in all bins, and no "
+                    f"At iteration {iteration} (pulled {used_iters} extra), couldn't get segments in all bins, and no "
                     f"iterations left"
                 )
                 break
 
             used_iters += 1
-            _iter_coords = self.get_iter_coordinates(iteration + used_iters)
+            _iter_coords = self.get_iter_coordinates(iteration)
             if used_iters == 0:
                 iter_coords = _iter_coords
                 pcoords = [x for x in self.pcoord0List]
             else:
                 iter_coords = np.append(iter_coords, _iter_coords, axis=0)
                 pcoords.extend(self.pcoord0List)
-                log.info(f"After extension, pcoords: {len(pcoords)}, iter_coords: {iter_coords.shape}. Ignored: {ignored_bins}. Mapper: {bin_mapper}")
+                log.info(
+                    f"After extension, pcoords: {len(pcoords)}, iter_coords: {iter_coords.shape}. Ignored: {ignored_bins}. Mapper: {bin_mapper}"
+                )
 
             # Map coords to WE bins
             pcoord_array = np.array(pcoords)
             assert pcoord_array.shape[0] == iter_coords.shape[0]
 
-            #segment_in_target = self.is_WE_target(pcoord_array)
-            
+            # segment_in_target = self.is_WE_target(pcoord_array)
+
             # TODO: Clean this up later, this is repetitive w/ the we_bin_assignments below
             # non_target_pcoord_array = pcoord_array[~segment_in_target]
-            #non_target_iter_coords = iter_coords[~segment_in_target]
-            #log.debug(
+            # non_target_iter_coords = iter_coords[~segment_in_target]
+            # log.debug(
             #    f"Segments {np.argwhere(segment_in_target)} were in target, and will be ignored"
-            #)
+            # )
 
             if len(pcoord_array) > 0:
                 we_bin_assignments = bin_mapper.assign(pcoord_array)
@@ -2989,55 +3080,59 @@ class modelWE:
                 we_bin_assignments = np.array([])
 
             # Select out stuff that ISN'T in the ignored bins, which should be target/basis
-            non_ignored_bins = np.argwhere(~np.isin(we_bin_assignments, ignored_bins)).squeeze()
+            non_ignored_bins = np.argwhere(
+                ~np.isin(we_bin_assignments, ignored_bins)
+            ).squeeze()
             log.debug(non_ignored_bins)
-            log.info(f"{len(we_bin_assignments)} segments, {len(non_ignored_bins)} non-basin/target after ignoring {ignored_bins}")
+            log.info(
+                f"{len(we_bin_assignments)} segments, {len(non_ignored_bins)} non-basin/target after ignoring {ignored_bins}"
+            )
             we_bin_assignments = we_bin_assignments[non_ignored_bins]
 
             all_bins_have_segments = False
-            
+
             log.debug(f"Pcoord shape: {pcoord_array.shape}")
             log.debug(f"First hundred: {we_bin_assignments[:20]}")
             log.debug(f"First hundred: {pcoord_array[:20]}")
-            #is_17 = np.argwhere(we_bin_assignments == 17)
-            #log.debug(f"{len(is_17)} points are 17, they are {is_17}")
+            # is_17 = np.argwhere(we_bin_assignments == 17)
+            # log.debug(f"{len(is_17)} points are 17, they are {is_17}")
             unique_bins, counts = np.unique(we_bin_assignments, return_counts=True)
             all_bins_have_segments = np.all(counts >= min_coords)
 
-#            seen_we_bins = np.unique(we_bin_assignments)
-#            we_bin_segs = [[] for _ in seen_we_bins]
-#
-#            # Throw coords in their appropriate bins
-#            #         print(iter_coords.shape)
-#            for _bin_index, _bin in enumerate(seen_we_bins):
-#                # Take the segments in this bin
-#                segs_in_bin = np.argwhere(we_bin_assignments == _bin)
-#
-#                # squoze = np.squeeze(_iter_coords[segs_in_bin])
-#
-#                # Append them to we_bin_segs[_bin]
-#                # we_bin_segs[_bin_index] holds the WE bin at seen_we_bins[_bin_index]
-#                #we_bin_segs[_bin_index].extend(non_target_iter_coords[segs_in_bin])
-#                we_bin_segs[_bin_index].extend(iter_coords[segs_in_bin])
-#
-#            bin_segs = np.array([len(_segs) >= min_coords for _segs in we_bin_segs])
-#
-#            # For the "ignored" bins, i.e. target bins where we're not actually clustering, don't worry about
-#            #   getting enough segs. Just call it good.
-#            for _bin in ignored_bins:
-#
-#                if _bin not in seen_we_bins:
-#                    continue
-#
-#                # Need the actual index of the ignored bin
-#                _bin_index = np.argwhere(seen_we_bins == _bin).flatten()
-#                try:
-#                    bin_segs[_bin_index] = True
-#                except Exception as e:
-#                    log.error(_bin_index)
-#                    raise e
-#
-#            all_bins_have_segments = np.all(bin_segs)
+        #            seen_we_bins = np.unique(we_bin_assignments)
+        #            we_bin_segs = [[] for _ in seen_we_bins]
+        #
+        #            # Throw coords in their appropriate bins
+        #            #         print(iter_coords.shape)
+        #            for _bin_index, _bin in enumerate(seen_we_bins):
+        #                # Take the segments in this bin
+        #                segs_in_bin = np.argwhere(we_bin_assignments == _bin)
+        #
+        #                # squoze = np.squeeze(_iter_coords[segs_in_bin])
+        #
+        #                # Append them to we_bin_segs[_bin]
+        #                # we_bin_segs[_bin_index] holds the WE bin at seen_we_bins[_bin_index]
+        #                #we_bin_segs[_bin_index].extend(non_target_iter_coords[segs_in_bin])
+        #                we_bin_segs[_bin_index].extend(iter_coords[segs_in_bin])
+        #
+        #            bin_segs = np.array([len(_segs) >= min_coords for _segs in we_bin_segs])
+        #
+        #            # For the "ignored" bins, i.e. target bins where we're not actually clustering, don't worry about
+        #            #   getting enough segs. Just call it good.
+        #            for _bin in ignored_bins:
+        #
+        #                if _bin not in seen_we_bins:
+        #                    continue
+        #
+        #                # Need the actual index of the ignored bin
+        #                _bin_index = np.argwhere(seen_we_bins == _bin).flatten()
+        #                try:
+        #                    bin_segs[_bin_index] = True
+        #                except Exception as e:
+        #                    log.error(_bin_index)
+        #                    raise e
+        #
+        #            all_bins_have_segments = np.all(bin_segs)
 
         # By now, I have some segments in each WE bin.
         # Now, do clustering within each WE bin
@@ -3050,7 +3145,9 @@ class modelWE:
                 continue
 
             segs_in_bin = np.argwhere(we_bin_assignments == _bin)
-            log.debug(f'Bin {_bin}: Segs {segs_in_bin} \n Iter_coords: {iter_coords[segs_in_bin].shape}')
+            log.debug(
+                f"Bin {_bin}: Segs {segs_in_bin} \n Iter_coords: {iter_coords[segs_in_bin].shape}"
+            )
 
             transformed_coords = self.coordinates.transform(
                 processCoordinates(np.squeeze(iter_coords[segs_in_bin]))
@@ -3274,7 +3371,7 @@ class modelWE:
 
         Todo
         ====
-        Replace manual discretization calls in cluster_coordinates with this
+        Replace manual discretization calls in cluster_aggregated with this
         Add flag to toggle between stratified and regular do_ray_discretization
         """
 
@@ -3408,8 +3505,13 @@ class modelWE:
         # model_id, kmeans_model_id, iteration, processCoordinates_id = arg
 
         import sys
+
         import westpa.core.binning
-        sys.modules['westpa.binning'] = sys.modules['westpa.core.binning']
+
+        sys.modules["westpa.binning"] = sys.modules["westpa.core.binning"]
+        # This is silly -- I need to import westpa.core.binning so it's loaded into sys.modules but the linter
+        #   complains that it's unused... so, use it.
+        log.debug(f"Loaded {westpa.core.binning}")
 
         # self = ray.get(model_id)
         # kmeans_model = ray.get(kmeans_model_id)
@@ -4033,7 +4135,7 @@ class modelWE:
             )
 
             # If you didn't want to do cleaning, you've gone far enough, return the list of good state indices
-            if 'do_cleaning' in args.keys() and not args["do_cleaning"]:
+            if "do_cleaning" in args.keys() and not args["do_cleaning"]:
                 return np.argwhere(states_to_keep)
 
             # Otherwise, carry on and actually clean
