@@ -107,7 +107,9 @@ Model building and preparation
 
     .. code-block:: python
 
-        model.cluster_coordinates(n_clusters, streaming, first_cluster_iter, use_ray, stratified, **_cluster_args)
+        model.cluster_coordinates(n_clusters, streaming,
+            first_cluster_iter, use_ray, stratified,
+            **_cluster_args)
 
     :code:`n_clusters` is the total number of clusters if :code:`stratified=False`, or the number of clusters per bin if :code:`stratified=True`.
 
