@@ -3,7 +3,7 @@ from __future__ import division, print_function
 
 __metaclass__ = type
 import numpy as np
-import tqdm
+import tqdm.auto as tqdm
 from functools import partialmethod
 import sys
 import h5py
@@ -2394,6 +2394,10 @@ class modelWE:
     def do_clustering(self, arg):
 
         kmeans_model, iters_to_use, cluster_args, processCoordinates = arg
+
+        # Cast to a list in case it's a np array
+        iters_to_use = list(iters_to_use)
+
         iteration = iters_to_use[0]
 
         min_coords = 1
@@ -2501,11 +2505,11 @@ class modelWE:
             log.info("Beginning stratified clustering.")
             self.clustering_method = "stratified"
             self.cluster_stratified(
-                n_clusters,
-                streaming,
-                first_cluster_iter,
-                use_ray,
-                iters_to_use,
+                n_clusters=n_clusters,
+                streaming=streaming,
+                first_cluster_iter=first_cluster_iter,
+                use_ray=use_ray,
+                iters_to_use=iters_to_use,
                 **_cluster_args,
             )
 
@@ -2516,7 +2520,11 @@ class modelWE:
             )
             self.clustering_method = "aggregated"
             self.cluster_aggregated(
-                n_clusters, streaming, first_cluster_iter, use_ray, **_cluster_args
+                n_clusters=n_clusters,
+                streaming=streaming,
+                first_cluster_iter=first_cluster_iter,
+                use_ray=use_ray,
+                **_cluster_args,
             )
 
     def cluster_aggregated(
@@ -3002,6 +3010,9 @@ class modelWE:
         """
 
         self, kmeans_models, iters_to_use, processCoordinates, ignored_bins = arg
+
+        # Cast to a list in case it's a np array
+        iters_to_use = list(iters_to_use)
 
         bin_mapper = kmeans_models.bin_mapper
 
