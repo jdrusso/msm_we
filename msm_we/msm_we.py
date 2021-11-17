@@ -4476,16 +4476,6 @@ class modelWE:
         # Cast the matrix to a sparse matrix, to reduce floating point operations
         sparse_mat = sparse.csr_matrix(self.Tmatrix)
 
-        # # ## First, get the scipy solver result
-        # eigenvalues, eigenvectors = sparse.linalg.eigs(
-        #     sparse_mat.T, sigma=1, k=1, which="LR"
-        # )
-        # max_eigval_index = np.argmax(np.real(eigenvalues))
-        # algebraic_pss = np.real(eigenvectors[:, max_eigval_index]).squeeze()
-        #
-        # # and normalize it
-        # algebraic_pss /= sum(algebraic_pss)
-
         algebraic_pss = self.get_steady_state_algebraic(
             max_iters=10, check_negative=False, set=False
         )
@@ -4527,7 +4517,8 @@ class modelWE:
             if N > 0:
                 if last_flux == 0 and not flux_warned:
                     log.warning(
-                        "Flux is 0, so will only converge after max iterations. "
+                        "Flux is 0, so steady-state solver will only converge after max iterations (using flux as "
+                        "convergence criterion is not meaningful if it's 0!). "
                         "If you're looking for equilibrium, this is probably OK."
                         " Otherwise, take a look at why you have 0 flux."
                     )
@@ -4545,7 +4536,7 @@ class modelWE:
         assert (last_pSS >= 0).all(), "Negative elements in pSS"
         assert last_flux >= 0, "Negative flux estimate from this pSS"
 
-        log.info("DONE")
+        log.info("Done with steady-state estimation.")
         self.pSS = last_pSS
 
     def get_steady_state_algebraic(self, max_iters=1000, check_negative=True, set=True):
@@ -4568,10 +4559,10 @@ class modelWE:
         None
         """
 
-        log.warning(
-            "get_steady_state_algebraic() will be deprecated soon. Use get_steady_state() instead, which has"
-            " a more robust eigensolver."
-        )
+        # log.warning(
+        #     "get_steady_state_algebraic() will be deprecated soon. Use get_steady_state() instead, which has"
+        #     " a more robust eigensolver."
+        # )
 
         log.debug("Computing steady-state from eigenvectors")
 
