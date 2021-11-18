@@ -2651,8 +2651,8 @@ class modelWE:
                 self.dtrajs = []
 
                 extra_iters_used = 0
-                for iter_idx, iteration in tqdm.tqdm(
-                    enumerate(iters_to_use), desc="Clustering"
+                for iter_idx, iteration in enumerate(
+                    tqdm.tqdm(iters_to_use, desc="Clustering")
                 ):
 
                     if extra_iters_used > 0:
@@ -2691,8 +2691,8 @@ class modelWE:
 
             # continued = False
             extra_iters_used = 0
-            for iter_idx, iteration in tqdm.tqdm(
-                enumerate(iters_to_use), desc="Clustering"
+            for iter_idx, iteration in enumerate(
+                tqdm.tqdm(iters_to_use, desc="Clustering")
             ):
 
                 if extra_iters_used > 0:
@@ -2945,8 +2945,8 @@ class modelWE:
         # ## Build the clustering model
         self.dtrajs = []
         extra_iters_used = 0
-        for iter_idx, iteration in tqdm.tqdm(
-            enumerate(iters_to_use), desc="Clustering"
+        for iter_idx, iteration in enumerate(
+            tqdm.tqdm(iters_to_use, desc="Clustering")
         ):
 
             if extra_iters_used > 0:
@@ -2994,12 +2994,12 @@ class modelWE:
 
         self.n_clusters = n_clusters * (bin_mapper.nbins - 1)
 
-        for i, model in enumerate(self.clusters.cluster_models):
-            print(f"Model {i}: \t ", end=" ")
-            try:
-                print(model.cluster_centers_)
-            except AttributeError:
-                print("No cluster centers!")
+        # for i, model in enumerate(self.clusters.cluster_models):
+        #     print(f"Model {i}: \t ", end=" ")
+        #     try:
+        #         print(model.cluster_centers_)
+        #     except AttributeError:
+        #         print("No cluster centers!")
 
         self.clusters.toggle = False
         self.launch_ray_discretization()
@@ -3225,7 +3225,7 @@ class modelWE:
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
             if we_bin in self.clusters.target_bins:
-                log.info(f"Skipping target bin {we_bin}")
+                log.debug(f"Skipping target bin {we_bin}")
                 continue
 
             # consecutive_index = self.clusters.legitimate_bins.index(we_bin)
@@ -3253,8 +3253,8 @@ class modelWE:
                 )
 
             clusters_in_bin = range(offset, offset + n_clusters_in_bin,)
-            log.info(f"Cluster models len: {len(self.clusters.cluster_models)}")
-            log.info(
+            log.debug(f"Cluster models len: {len(self.clusters.cluster_models)}")
+            log.debug(
                 f"WE Bin {we_bin} (consec. index {consecutive_index}) contains {n_clusters_in_bin} clusters {clusters_in_bin}"
             )
 
@@ -3281,7 +3281,7 @@ class modelWE:
                     f"All clusters from WE bin {we_bin} will be cleaned! (Target: {target} Basis: {basis})"
                 )
 
-            log.info(
+            log.debug(
                 f"Cleaning {len(bin_clusters_to_clean)} clusters {bin_clusters_to_clean} from WE bin {we_bin}"
             )
 
@@ -3898,12 +3898,15 @@ class modelWE:
 
         """
 
+        self._fluxMatrixParams = [n_lag, first_iter, last_iter, iters_to_use]
+
         if iters_to_use is None:
             iters_to_use = range(first_iter + 1, last_iter + 1)
         elif first_iter is None and last_iter is None:
             log.info(
                 "Specific iterations to use were provided for fluxmatrix calculation, using those."
             )
+        # Else, if iters_to_use is Not none, and Not (first_iter is None and last_iter is None)
         else:
             log.error(
                 "Both specific iterations to use AND first/last were provided to fluxmatrix calculation. Specify"
@@ -3916,8 +3919,6 @@ class modelWE:
         self.n_lag = n_lag
         self.errorWeight = 0.0
         self.errorCount = 0
-
-        self._fluxMatrixParams = [n_lag, first_iter, last_iter, iters_to_use]
 
         # +2 because the basis and target states are the last two indices
         fluxMatrix = np.zeros((self.n_clusters + 2, self.n_clusters + 2))
