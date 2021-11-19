@@ -3636,7 +3636,7 @@ class modelWE:
             for cluster_model in self.clusters.cluster_models
         ]
 
-        log.info(
+        log.debug(
             f"Pre-cleaning clusters per bin: "
             f"{list(zip(range(len(pre_cleaning_n_clusters_per_bin)), pre_cleaning_n_clusters_per_bin))}"
         )
@@ -3743,11 +3743,6 @@ class modelWE:
                 empty_we_bin - populated_we_bins
             ).argmin()
             nearest_populated_bin = populated_we_bins[nearest_populated_bin_idx]
-
-            log.warning(
-                f"All clusters in WE Bin {empty_we_bin} cleaned - replacing with clusters from"
-                f" WE bin {nearest_populated_bin}."
-            )
 
             # Replace self.clusters.cluster_models[empty_we_bin].cluster_centers_ with
             #   self.clusters.cluster_models[nearest_nonempty_we_bin].cluster_centers_
