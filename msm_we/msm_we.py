@@ -2909,8 +2909,15 @@ class modelWE:
         westpa.binning = importlib.import_module("westpa.tools.binning", "westpa.tools")
 
         bin_mapper = iteration.bin_mapper
-        target_bin = bin_mapper.assign(iteration.target_state_pcoords)
-        basis_bin = bin_mapper.assign(iteration.basis_state_pcoords)
+
+        ## We COULD get the target/basis coords from the iteration -- but what if they changed at some point?
+        ##  I think we want to use a consistent set of bounds.
+        ## TODO: Alternatively, I could read these from the bin iteration as well
+        # target_bin = bin_mapper.assign(iteration.target_state_pcoords)
+        # basis_bin = bin_mapper.assign(iteration.basis_state_pcoords)
+        target_bin = bin_mapper.assign(self.target_pcoord_bounds)
+        basis_bin = bin_mapper.assign(self.basis_pcoord_bounds)
+
         ignored_bins = np.concatenate([target_bin, basis_bin]).flatten()
 
         if not streaming or not use_ray:
@@ -2958,7 +2965,8 @@ class modelWE:
             ignored_bins = []
             try:
                 target_bins = _iteration.bin_mapper.assign(
-                    _iteration.target_state_pcoords
+                    # _iteration.target_state_pcoords
+                    self.target_pcoord_bounds
                 )
             except Exception:
                 log.error(f"Couldn't get target bin for iteration {iteration}")
