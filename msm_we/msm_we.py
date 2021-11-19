@@ -3199,13 +3199,32 @@ class modelWE:
 
         # states_to_keep = connected_sets[0]
 
+        start_cleaning_idx = 1
+
         if len(connected_sets) == 1:
             log.info("Nothing to clean")
             #         return
             states_to_remove = []
         else:
-            log.info(f"Cleaning {connected_sets[1:]}")
-            states_to_remove = np.concatenate(connected_sets[1:])
+
+            # # Experimental
+            # # I've seen cases where I have two large disconnected sets of similar size, with problems that arise from cleaning
+            # #   one entirely. I think maybe this is like two sides of a barrier, with weak connection between, so when you
+            # #   do the cleaning basically everything on one side gets lumped together.
+            # # To try and ameliorate this, what if we group together large clusters, and bank on the fact that after we clean
+            # #   all the small isolated clusters, those large ones will be connected?
+            # # This doesn't work :( After cleaning, these sets remain disconnected
+            #
+            # set_sizes = np.array([len(_set) for _set in connected_sets])
+            # primary_set_size = set_sizes[0]
+            #
+            # # Keep any sets that are at least half the size of the primary set
+            # start_cleaning_idx = np.argmin(set_sizes > (primary_set_size//2)).flatten()[0]
+            # log.info(f"Merging sets of size {set_sizes[:start_cleaning_idx]} and cleaning the rest")
+            # #
+
+            log.info(f"Cleaning {connected_sets[start_cleaning_idx:]}")
+            states_to_remove = np.concatenate(connected_sets[start_cleaning_idx:])
 
         pre_cleaning_n_clusters_per_bin = [
             len(cluster_model.cluster_centers_)
@@ -3265,6 +3284,7 @@ class modelWE:
 
             # If not cleaning anything, just move on
             if len(bin_clusters_to_clean) == 0:
+                log.debug(f"not cleaning any clusters from bin {we_bin}")
                 continue
 
             # If cleaning EVERYTHING, handle this bin differently
@@ -3272,7 +3292,7 @@ class modelWE:
             elif (
                 not (we_bin in basis or we_bin in target)
                 # and len(bin_clusters_to_clean) == self.clusters.n_clusters_per_bin
-                and len(bin_clusters_to_clean) == clusters_in_bin
+                and len(bin_clusters_to_clean) == len(clusters_in_bin)
             ):
                 empty_we_bins.add(we_bin)
 
@@ -3281,9 +3301,11 @@ class modelWE:
                     f"All clusters from WE bin {we_bin} will be cleaned! (Target: {target} Basis: {basis})"
                 )
 
-            log.debug(
-                f"Cleaning {len(bin_clusters_to_clean)} clusters {bin_clusters_to_clean} from WE bin {we_bin}"
-            )
+            else:
+                log.debug(
+                    f"Cleaning {len(bin_clusters_to_clean)} clusters {bin_clusters_to_clean} from WE bin {we_bin}."
+                    f" (Basis {basis}, target {target})"
+                )
 
             self.clusters.cluster_models[we_bin].cluster_centers_ = np.delete(
                 self.clusters.cluster_models[we_bin].cluster_centers_,
@@ -3299,8 +3321,9 @@ class modelWE:
 
         # If a WE bin was completely emptied of cluster centers, map it to the nearest non-empty bin
         populated_we_bins = np.setdiff1d(
-            range(self.clusters.bin_mapper.nbins), list(empty_we_bins)
+            range(self.clusters.bin_mapper.nbins), np.concatenate([target, basis])
         )
+        populated_we_bins = np.setdiff1d(populated_we_bins, list(empty_we_bins))
         for empty_we_bin in empty_we_bins:
 
             # Find the nearest non-empty bin
@@ -3371,7 +3394,9 @@ class modelWE:
         log.info(
             f"After cleaning, shape is {fmatrix.shape} and disconnected sets are: {connected_sets[1:]}"
         )
-        assert len(connected_sets[1:]) == 0, "Still not clean after cleaning!"
+        assert (
+            len(connected_sets[start_cleaning_idx:]) == 0
+        ), "Still not clean after cleaning!"
 
     def launch_ray_discretization(self):
         """
