@@ -40,6 +40,9 @@ import pyemma
 import scipy.sparse.csgraph as csgraph
 from scipy.sparse.sputils import isdense
 
+from rich.live import Live
+from rich.table import Table
+
 import ray
 
 
@@ -906,6 +909,270 @@ class modelWE:
         log.debug(f"{pcoords} in {self.target_pcoord_bounds}: {in_target}")
 
         return in_target
+
+    @staticmethod
+    def do_step(table, row, step, args=[], kwargs={}):
+
+        step_text = table.columns[1]._cells[row]
+
+        table.columns[0]._cells[row] = "[bold black][ [bold yellow]* [bold black]]"
+        table.columns[1]._cells[row] = f"[bold black]{step_text}"
+
+        step(*args, **kwargs)
+
+        table.columns[0]._cells[row] = "[bold black] [[bold green]✓[bold black]]"
+        table.columns[1]._cells[row] = f"[black]{step_text}"
+
+    @staticmethod
+    def set_note(table, row, text):
+        table.columns[2]._cells[row] = text
+
+    @staticmethod
+    def new_table():
+        table = Table(title="haMSM Progress")
+        table.add_column("Status")
+        table.add_column("Step")
+        table.add_column("Notes")
+
+        steps = [
+            "Ray initialization",
+            "Model initialization",
+            "Loading iterations",
+            "Loading coordinates",
+            "Computing dimensionality reduction",
+            "Clustering",
+            "Flux matrix",
+            "Cleaning",
+            "Transition matrix",
+            "Steady-state distribution",
+            "Steady-state target flux",
+        ]
+
+        for step in steps:
+            table.add_row(" [ ]", f"{step}", "")
+
+        return table
+
+    def build_analyze_model(
+        self,
+        ray_kwargs,
+        file_paths,
+        ref_struct,
+        modelName,
+        basis_pcoord_bounds,
+        target_pcoord_bounds,
+        dimreduce_method,
+        tau,
+        n_clusters,
+        max_coord_iter=-1,
+        stratified=True,
+        streaming=True,
+        use_ray=True,
+        fluxmatrix_iters=[1, -1],
+        fluxmatrix_iters_to_use=None,
+        cross_validation_groups=2,
+        show_live_display=True,
+    ):
+        """
+        One-shot function to build the model and analyze all at once. This provides a convenient interface for running
+        the blockwise estimation.
+
+        This may not be desirable for very long workflows, or workflows still being debugged, where it might make sense
+        to run the individual steps one by one.
+
+        Parameters
+        ----------
+        ray_kwargs: dict
+            Keyword arguments passed to ray.init(). Useful for specifying num_cpus. You could also use this to connect
+            to an existing Ray cluster.
+        file_paths: list
+            List of paths to H5 files to analyze.
+        ref_struct: string
+            Path to PDB file that defines topology.
+        modelName: string
+            Name to use in output filenames.
+        basis_pcoord_bounds: list
+            List of [[pcoord0 lower bound, pcoord1 upper bound], [pcoord1 lower bound, pcoord1 upper bound], ...]
+            in pcoord-space for the basis state
+        target_pcoord_bounds: list
+            List of [[pcoord0 lower bound, pcoord1 upper bound], [pcoord1 lower bound, pcoord1 upper bound], ...]
+            in pcoord-space for the target state
+        dimreduce_method: str
+            Dimensionality reduction method. "pca", "vamp", or "none".
+        tau: float
+            Resampling time (i.e. time of 1 WE iteration). Used to map fluxes to physical times.
+        n_clusters: int
+            Number of clusters to use when clustering. This is clusters per bin for stratified, or total clusters for
+            aggregate.
+        max_coord_iter: int, optional (Default = model.maxIter, so all)
+            Last iteration to obtain coordinates from. Useful for excluding the end of some data.
+        stratified: bool, optional (Default = True)
+            Enables stratified clustering, where clustering is performed independently within each WE bin.
+        streaming: bool, optional (Default = True)
+            Enables streaming over input data, rather than batch processing. Substantially improves memory efficiency,
+            at a potential small performance hit.
+        use_ray: bool, optional (Default = True)
+            Enable parallelization, using Ray. This provides substantial speedup in discretization and fluxmatrix
+            calculations.
+        fluxmatrix_iters: list, optional (Default = [1, -1])
+            List of [first, last] iteration to use when calculating fluxmatrix. Defaults to using all iterations.
+        fluxmatrix_iters_to_use: list, optional (Default = None)
+            Specific range of iterations to use, as opposed to bounds like fluxmatrix_iters. Note that either this OR
+            fluxmatrix_iters
+        cross_validation_groups: int, optional (Default = 4)
+            Number of groups to split the data into when doing cross-validation.
+        show_live_display
+
+        Returns
+        -------
+
+        """
+
+        table = self.new_table()
+
+        # Clean up any existing Ray instances
+        if use_ray:
+            ray.shutdown()
+
+        with Live(table, refresh_per_second=4, auto_refresh=show_live_display) as live:
+
+            model = self
+
+            ## Launch Ray
+            # TODO: Do I actually want to do this in here? Previously, I assumed the user would set it up.
+            step_idx = 0
+            if use_ray:
+                table.columns[0]._cells[
+                    0
+                ] = "[bold black][ [bold yellow]* [bold black]]"
+                table.columns[1]._cells[0] = "Ray initialization"
+                table.columns[2]._cells[0] = ""
+
+                self.do_step(table, step_idx, ray.init, kwargs=ray_kwargs)
+                self.set_note(
+                    table, step_idx, f"{ray.available_resources()['CPU']} CPUs"
+                )
+
+            ## Initialize model
+            step_idx += 1
+            self.do_step(
+                table,
+                step_idx,
+                step=model.initialize,
+                kwargs={
+                    "fileSpecifier": file_paths,
+                    "refPDBfile": ref_struct,
+                    "modelName": modelName,
+                    "basis_pcoord_bounds": basis_pcoord_bounds,
+                    "target_pcoord_bounds": target_pcoord_bounds,
+                    "dim_reduce_method": dimreduce_method,
+                    "tau": tau,
+                },
+            )
+            self.set_note(table, step_idx, "")
+
+            ## Get number of iterations
+            step_idx += 1
+            self.do_step(
+                table, step_idx, step=model.get_iterations,
+            )
+            self.set_note(table, step_idx, f"{model.maxIter} iterations exist")
+
+            ## Load coordinates
+            step_idx += 1
+            _max_coord_iter = [max_coord_iter, model.maxIter][max_coord_iter == -1]
+            self.do_step(
+                table, step_idx, step=model.get_coordSet, args=[_max_coord_iter],
+            )
+            self.set_note(
+                table, step_idx, f"Got coords for {_max_coord_iter} iterations"
+            )
+
+            ## Dimensionality reduction
+            step_idx += 1
+            self.set_note(table, step_idx, f"Method: {model.dimReduceMethod}")
+            self.do_step(
+                table, step_idx, step=model.dimReduce,
+            )
+
+            ## Clustering
+            step_idx += 1
+            self.do_step(
+                table,
+                step_idx,
+                step=model.cluster_coordinates,
+                kwargs={
+                    "n_clusters": n_clusters,
+                    "streaming": streaming,
+                    "use_ray": use_ray,
+                    "stratified": stratified,
+                },
+            )
+
+            post_cluster_model = deepcopy(model)
+
+            ## Flux matrix
+            step_idx += 1
+            _fluxmatrix_iters = fluxmatrix_iters
+            if fluxmatrix_iters[1] == -1:
+                _fluxmatrix_iters[1] = model.maxIter
+            self.do_step(
+                table,
+                step_idx,
+                step=model.get_fluxMatrix,
+                kwargs={
+                    "n_lag": 0,
+                    "first_iter": _fluxmatrix_iters[0],
+                    "last_iter": _fluxmatrix_iters[1],
+                    "iters_to_use": fluxmatrix_iters_to_use,
+                    "use_ray": use_ray,
+                },
+            )
+            self.set_note(
+                table,
+                step_idx,
+                f"Fluxmatrix built from iters "
+                f"{[f'{_fluxmatrix_iters[0]} - {_fluxmatrix_iters[1]}', fluxmatrix_iters_to_use][fluxmatrix_iters_to_use is not None]}",
+            )
+
+            ## Cleaning
+            step_idx += 1
+            original_clusters = model.fluxMatrixRaw.shape[0]
+            self.do_step(
+                table,
+                step_idx,
+                step=model.organize_fluxMatrix,
+                kwargs={"use_ray": use_ray},
+            )
+            final_clusters = model.fluxMatrix.shape[0]
+            self.set_note(
+                table,
+                step_idx,
+                f"{original_clusters} clusters cleaned to {final_clusters}",
+            )
+
+            ## Transition matrix
+            step_idx += 1
+            self.do_step(table, step_idx, step=model.get_Tmatrix)
+
+            ## Steady state
+            step_idx += 1
+            self.do_step(table, step_idx, step=model.get_steady_state)
+
+            ## Steady-state flux
+            step_idx += 1
+            self.do_step(table, step_idx, step=model.get_steady_state_target_flux)
+            self.set_note(table, step_idx, f"Target flux: {model.JtargetSS:.2e}")
+
+            ## Cross-validation
+            # TODO
+            # use `post_cluster_model`, which is the discretized model right before the fluxmatrix was calculated
+            # just do something useless w/ the post_cluster_model so linter doesn't complain
+            post_cluster_model.modelName
+            ##
+
+            # If live updating was disabled, write to the table once now
+            live.refresh()
 
     def load_iter_data(self, n_iter: int):
         """
