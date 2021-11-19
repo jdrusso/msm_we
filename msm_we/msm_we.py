@@ -245,18 +245,22 @@ class StratifiedClusters:
 
         # These are bases/targets
         # It's only really important to ignore targets, because you may not have structures in the target b/c of recycling
-        self.target_bins = target_bins
+        # self.target_bins = target_bins
 
         self.we_remap = {x: x for x in range(self.bin_mapper.nbins)}
 
         # I need consecutive indices for each non-basis/non-target bin
         # In other words, remove the target, and then consecutively index all the remaining bins
-        legitimate_bins = []
-        for bin_index in range(self.bin_mapper.nbins):
-            if bin_index not in target_bins:
-                legitimate_bins.append(bin_index)
+        # legitimate_bins = []
+        # for bin_index in range(self.bin_mapper.nbins):
+        #     if bin_index not in target_bins:
+        #         legitimate_bins.append(bin_index)
+        #
+        # self.legitimate_bins = legitimate_bins
+        self.legitimate_bins = range(self.bin_mapper.nbins)
 
-        self.legitimate_bins = legitimate_bins
+        self.target_bins = set()
+        self.basis_bins = set()
 
     def predict(self, coords):
         """
@@ -294,14 +298,25 @@ class StratifiedClusters:
         we_bins = self.bin_mapper.assign(iter_pcoords)
         we_bins = [self.we_remap[we_bin] for we_bin in we_bins]
 
+        is_target = self.model.is_WE_target(iter_pcoords)
+        is_basis = self.model.is_WE_basis(iter_pcoords)
+
         # Discretize coords according to which WE bin they're in
         discrete = []
 
         for i, coord in enumerate(coords):
 
-            # Map this into the target
-            if we_bins[i] in self.target_bins:
+            if is_target[i]:
                 _discrete = [self.model.n_clusters + 1]
+
+                _bin = we_bins[i]
+                self.target_bins.add(_bin)
+
+            elif is_basis[i]:
+                _discrete = [self.model.n_clusters]
+
+                _bin = we_bins[i]
+                self.basis_bins.add(_bin)
 
             # Meanwhile, if you're NOT in the target (ignored) bin...
             else:
@@ -321,7 +336,7 @@ class StratifiedClusters:
 
                 assert hasattr(
                     self.cluster_models[we_bins[i]], "cluster_centers_"
-                ), f"Not initialized in seg {i}, bin {we_bins[i]}"
+                ), f"Not initialized in seg {i}, bin {we_bins[i]}. Coord was {coord}, coords were {coords}"
                 try:
                     _discrete = [
                         self.cluster_models[we_bins[i]].predict([coord])[0] + offset
@@ -823,8 +838,14 @@ class modelWE:
             "Ray cluster has not been initialized! "
             "Launch from the code calling this with ray.init()."
         )
+        resources = ray.available_resources()
 
-        log.info(f"Using Ray cluster with {ray.available_resources()['CPU']} CPUs!")
+        try:
+            log.info(f"Using Ray cluster with {resources['CPU']} CPUs!")
+        except KeyError as e:
+            log.error(f"Available resources were {resources}")
+            log.error(f"However, now they're {ray.available_resources()}")
+            raise e
 
     def initialize_from_h5(self, refPDBfile, initPDBfile, modelName):
         """
@@ -911,14 +932,22 @@ class modelWE:
         return in_target
 
     @staticmethod
-    def do_step(table, row, step, args=[], kwargs={}):
+    def do_step(table, row, step, args=[], kwargs={}, in_subprocess=False):
 
         step_text = table.columns[1]._cells[row]
 
         table.columns[0]._cells[row] = "[bold black][ [bold yellow]* [bold black]]"
         table.columns[1]._cells[row] = f"[bold black]{step_text}"
 
-        step(*args, **kwargs)
+        if not in_subprocess:
+            step(*args, **kwargs)
+
+        else:
+            print(f"Calling {step} with args={args} and kwargs={kwargs}")
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=1, mp_context=mp.get_context("fork")
+            ) as executor:
+                executor.submit(step, *args, **kwargs).result()
 
         table.columns[0]._cells[row] = "[bold black] [[bold green]✓[bold black]]"
         table.columns[1]._cells[row] = f"[black]{step_text}"
@@ -946,6 +975,7 @@ class modelWE:
             "Transition matrix",
             "Steady-state distribution",
             "Steady-state target flux",
+            "Cross-validation",
         ]
 
         for step in steps:
@@ -971,6 +1001,7 @@ class modelWE:
         fluxmatrix_iters=[1, -1],
         fluxmatrix_iters_to_use=None,
         cross_validation_groups=2,
+        cross_validation_blocks=4,
         show_live_display=True,
     ):
         """
@@ -1006,6 +1037,7 @@ class modelWE:
             aggregate.
         max_coord_iter: int, optional (Default = model.maxIter, so all)
             Last iteration to obtain coordinates from. Useful for excluding the end of some data.
+
         stratified: bool, optional (Default = True)
             Enables stratified clustering, where clustering is performed independently within each WE bin.
         streaming: bool, optional (Default = True)
@@ -1014,13 +1046,19 @@ class modelWE:
         use_ray: bool, optional (Default = True)
             Enable parallelization, using Ray. This provides substantial speedup in discretization and fluxmatrix
             calculations.
+
         fluxmatrix_iters: list, optional (Default = [1, -1])
             List of [first, last] iteration to use when calculating fluxmatrix. Defaults to using all iterations.
         fluxmatrix_iters_to_use: list, optional (Default = None)
             Specific range of iterations to use, as opposed to bounds like fluxmatrix_iters. Note that either this OR
             fluxmatrix_iters
-        cross_validation_groups: int, optional (Default = 4)
-            Number of groups to split the data into when doing cross-validation.
+
+        cross_validation_groups: int, optional (Default = 2)
+            Number of independent models to build when doing cross-validation. Each group contains (blocks / groups)
+            blocks.
+        cross_validation_blocks: int, optional (Default = 4)
+            Number of blocks to split your data into, before building the independent models.
+
         show_live_display
 
         Returns
@@ -1035,6 +1073,9 @@ class modelWE:
             ray.shutdown()
 
         with Live(table, refresh_per_second=4, auto_refresh=show_live_display) as live:
+
+            # If live updating was disabled, write to the table once now. (Doesn't do anything if it was enabled)
+            live.refresh()
 
             model = self
 
@@ -1167,11 +1208,85 @@ class modelWE:
             ## Cross-validation
             # TODO
             # use `post_cluster_model`, which is the discretized model right before the fluxmatrix was calculated
-            # just do something useless w/ the post_cluster_model so linter doesn't complain
+            # for now just do something useless w/ the post_cluster_model so linter doesn't complain
+            step_idx += 1
             post_cluster_model.modelName
+
+            step_text = table.columns[1]._cells[step_idx]
+            table.columns[0]._cells[
+                step_idx
+            ] = "[bold black][ [bold yellow]* [bold black]]"
+            table.columns[1]._cells[step_idx] = f"[bold black]{step_text}"
+
+            # TODO: double-copying this seems like a bummer
+            validation_models = [
+                deepcopy(post_cluster_model) for _ in range(cross_validation_groups)
+            ]
+
+            # Get the number of iterations in each block
+            iters_per_block = post_cluster_model.maxIter // cross_validation_blocks
+            block_iterations = [
+                [start_iter, start_iter + iters_per_block]
+                for start_iter in range(1, post_cluster_model.maxIter, iters_per_block)
+            ]
+
+            # Otherwise, this may be maxIters + 1
+            block_iterations[-1][-1] = block_iterations[-1][-1] - 1
+
+            # Get the iterations corresponding to each group
+            validation_iterations = [
+                range(
+                    start_idx + 1,
+                    cross_validation_blocks,
+                    cross_validation_blocks // cross_validation_groups,
+                )
+                for start_idx in range(cross_validation_groups)
+            ]
+
+            flux_text = ""
+            for group in range(cross_validation_groups):
+
+                log.info(
+                    f"Beginning analysis of cross-validation group {group+1}/{cross_validation_groups}."
+                )
+
+                _model = validation_models[group]
+
+                # Get the flux matrix
+                _model.get_fluxMatrix(
+                    0, iters_to_use=validation_iterations[group], use_ray=use_ray
+                )
+
+                # Clean it
+                _model.organize_fluxMatrix(use_ray=use_ray)
+
+                # Get tmatrix
+                _model.get_Tmatrix()
+
+                # Get steady-state
+                _model.get_steady_state()
+
+                # Get target flux
+                _model.get_steady_state_target_flux()
+
+                flux_text += f"Group {group} flux: {_model.JtargetSS:.2e}\n"
+                self.set_note(table, step_idx, flux_text)
+
+                # Get FPT distribution?
+                pass
+            table.columns[0]._cells[
+                step_idx
+            ] = "[bold black] [[bold green]✓[bold black]]"
+            table.columns[1]._cells[step_idx] = f"[black]{step_text}"
+
+            # model_fluxes = '\n'.join([f"Group {group} flux: {validation_models[group].JtargetSS}"
+            #                           for group in range(cross_validation_groups)])
+            # self.set_note(table, step_idx, model_fluxes)
+
+            # TODO: Compare models for agreement
             ##
 
-            # If live updating was disabled, write to the table once now
+            # If live updating was disabled, write to the table once now. (Doesn't do anything if it was enabled)
             live.refresh()
 
     def load_iter_data(self, n_iter: int):
@@ -3182,10 +3297,15 @@ class modelWE:
         ## TODO: Alternatively, I could read these from the bin iteration as well
         # target_bin = bin_mapper.assign(iteration.target_state_pcoords)
         # basis_bin = bin_mapper.assign(iteration.basis_state_pcoords)
-        target_bin = bin_mapper.assign(self.target_pcoord_bounds)
-        basis_bin = bin_mapper.assign(self.basis_pcoord_bounds)
 
-        ignored_bins = np.concatenate([target_bin, basis_bin]).flatten()
+        # target_bin = bin_mapper.assign(self.target_pcoord_bounds)
+        # basis_bin = bin_mapper.assign(self.basis_pcoord_bounds)
+
+        # Actually, use the bin CENTERS, not the bounds..
+        # target_bin = bin_mapper.assign(self.target_bin_centers)
+        # basis_bin = bin_mapper.assign(self.basis_bin_centers)
+        # ignored_bins = np.concatenate([target_bin, basis_bin]).flatten()
+        ignored_bins = []
 
         if not streaming or not use_ray:
             log.error(
@@ -3228,27 +3348,27 @@ class modelWE:
                 log.debug(f"Already processed  iter  {iteration}")
                 continue
 
-            _iteration = analysis.Run(self.fileList[0]).iteration(max(2, iteration))
+            # _iteration = analysis.Run(self.fileList[0]).iteration(max(2, iteration))
             ignored_bins = []
-            try:
-                target_bins = _iteration.bin_mapper.assign(
-                    # _iteration.target_state_pcoords
-                    self.target_pcoord_bounds
-                )
-            except Exception:
-                log.error(f"Couldn't get target bin for iteration {iteration}")
-                target_bins = target_bin
-            try:
-                basis_bins = _iteration.bin_mapper.assign(
-                    _iteration.basis_state_pcoords
-                )
-            except Exception:
-                log.error(f"Couldn't get basis bins for iteration{iteration}")
-                basis_bins = []
-
-            ignored_bins = np.concatenate(
-                [ignored_bins, target_bins, basis_bins]
-            ).flatten()
+            # try:
+            #     target_bins = _iteration.bin_mapper.assign(
+            #         # _iteration.target_state_pcoords
+            #         self.target_pcoord_bounds
+            #     )
+            # except Exception:
+            #     log.error(f"Couldn't get target bin for iteration {iteration}")
+            #     target_bins = target_bin
+            # try:
+            #     basis_bins = _iteration.bin_mapper.assign(
+            #         _iteration.basis_state_pcoords
+            #     )
+            # except Exception:
+            #     log.error(f"Couldn't get basis bins for iteration{iteration}")
+            #     basis_bins = []
+            #
+            # ignored_bins = np.concatenate(
+            #     [ignored_bins, target_bins, basis_bins]
+            # ).flatten()
 
             with concurrent.futures.ProcessPoolExecutor(
                 max_workers=1, mp_context=mp.get_context("fork")
@@ -3342,13 +3462,18 @@ class modelWE:
             else:
                 iter_coords = np.append(iter_coords, _iter_coords, axis=0)
                 pcoords.extend(self.pcoord0List)
-                log.info(
+                log.debug(
                     f"After extension, pcoords: {len(pcoords)}, iter_coords: {iter_coords.shape}. Ignored: {ignored_bins}. Mapper: {bin_mapper}"
                 )
 
             # Map coords to WE bins
             pcoord_array = np.array(pcoords)
             assert pcoord_array.shape[0] == iter_coords.shape[0]
+
+            # Ignore any segments that are in the basis or target
+            pcoord_is_target = self.is_WE_target(pcoord_array)
+            pcoord_is_basis = self.is_WE_basis(pcoord_array)
+            pcoord_array = pcoord_array[~(pcoord_is_target | pcoord_is_basis)]
 
             # segment_in_target = self.is_WE_target(pcoord_array)
 
@@ -3365,15 +3490,16 @@ class modelWE:
                 log.debug("Pcoords len 0, we_bin_assignments will be empty")
                 we_bin_assignments = np.array([])
 
+            # # Now, by definition from the above selection, I'll never have pcoords in the target/basis
             # Select out stuff that ISN'T in the ignored bins, which should be target/basis
-            non_ignored_bins = np.argwhere(
-                ~np.isin(we_bin_assignments, ignored_bins)
-            ).squeeze()
-            log.debug(non_ignored_bins)
-            log.info(
-                f"{len(we_bin_assignments)} segments, {len(non_ignored_bins)} non-basin/target after ignoring {ignored_bins}"
-            )
-            we_bin_assignments = we_bin_assignments[non_ignored_bins]
+            # non_ignored_bins = np.argwhere(
+            #     ~np.isin(we_bin_assignments, ignored_bins)
+            # ).squeeze()
+            # log.debug(non_ignored_bins)
+            # log.info(
+            #     f"{len(we_bin_assignments)} segments, {len(non_ignored_bins)} non-basin/target after ignoring {ignored_bins}"
+            # )
+            # we_bin_assignments = we_bin_assignments[non_ignored_bins]
 
             all_bins_have_segments = False
 
@@ -3427,8 +3553,8 @@ class modelWE:
         # Only cluster in WE bins that things were actually assigned to
         for i, _bin in enumerate(unique_bins):
 
-            if _bin in ignored_bins:
-                continue
+            # if _bin in ignored_bins:
+            #     continue
 
             segs_in_bin = np.argwhere(we_bin_assignments == _bin)
             log.debug(
@@ -3498,7 +3624,9 @@ class modelWE:
             # log.info(f"Merging sets of size {set_sizes[:start_cleaning_idx]} and cleaning the rest")
             # #
 
-            log.info(f"Cleaning {connected_sets[start_cleaning_idx:]}")
+            log.info(
+                f"Cleaning states {np.concatenate(connected_sets[start_cleaning_idx:])}"
+            )
             states_to_remove = np.concatenate(connected_sets[start_cleaning_idx:])
 
         pre_cleaning_n_clusters_per_bin = [
@@ -3514,12 +3642,16 @@ class modelWE:
         )
 
         empty_we_bins = set()
+        target, basis = self.clusters.target_bins, self.clusters.basis_bins
         # Go through each WE bin, finding which clusters within it are not in the connected set
         #    and removing them.
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
-            if we_bin in self.clusters.target_bins:
+            if we_bin in target:
                 log.debug(f"Skipping target bin {we_bin}")
+                continue
+            if we_bin in basis:
+                log.debug(f"Skipping basis bin {we_bin}")
                 continue
 
             # consecutive_index = self.clusters.legitimate_bins.index(we_bin)
@@ -3545,6 +3677,10 @@ class modelWE:
                 n_clusters_in_bin = len(
                     self.clusters.cluster_models[consecutive_index].cluster_centers_
                 )
+            # Otherwise, this is an uninitialized bin.
+            # Bins can be uninitialized in 2 cases -- completely unvisited, or a basis/target
+            # Segments in a basis/target should not be mapped to other bins -- however, this is short-circuited in
+            #   StratifiedClusters.predict(), so even if they're mapped to those cluster centers, it's fine.
 
             clusters_in_bin = range(offset, offset + n_clusters_in_bin,)
             log.debug(f"Cluster models len: {len(self.clusters.cluster_models)}")
@@ -3571,11 +3707,6 @@ class modelWE:
             ):
                 empty_we_bins.add(we_bin)
 
-                # raise Exception(
-                log.warning(
-                    f"All clusters from WE bin {we_bin} will be cleaned! (Target: {target} Basis: {basis})"
-                )
-
             else:
                 log.debug(
                     f"Cleaning {len(bin_clusters_to_clean)} clusters {bin_clusters_to_clean} from WE bin {we_bin}."
@@ -3595,10 +3726,16 @@ class modelWE:
         log.debug(f"n_clusters is now {self.n_clusters}")
 
         # If a WE bin was completely emptied of cluster centers, map it to the nearest non-empty bin
+        log.info
         populated_we_bins = np.setdiff1d(
-            range(self.clusters.bin_mapper.nbins), np.concatenate([target, basis])
+            range(self.clusters.bin_mapper.nbins),
+            np.concatenate([list(target), list(basis)]),
         )
         populated_we_bins = np.setdiff1d(populated_we_bins, list(empty_we_bins))
+
+        if len(empty_we_bins) > 0:
+            log.warning(f"All clusters were cleaned from bins {empty_we_bins}")
+
         for empty_we_bin in empty_we_bins:
 
             # Find the nearest non-empty bin
@@ -3624,7 +3761,10 @@ class modelWE:
         _running_total = 0
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
-            if we_bin in self.clusters.target_bins:
+            if (
+                we_bin in self.clusters.target_bins
+                or we_bin in self.clusters.basis_bins
+            ):
                 #             log.info(f"Skipping ignored bin {we_bin}")
                 continue
 
@@ -3725,7 +3865,11 @@ class modelWE:
                 )
                 results = ray.get(finished)
 
-                for dtraj, _, iteration in results:
+                for dtraj, _, iteration, target_bins, basis_bins in results:
+
+                    self.clusters.target_bins.update(target_bins)
+                    self.clusters.basis_bins.update(basis_bins)
+
                     dtrajs[iteration - 1] = dtraj
                     pbar.update(1)
                     pbar.refresh()
@@ -3815,14 +3959,13 @@ class modelWE:
 
         # model_id, kmeans_model_id, iteration, processCoordinates_id = arg
 
-        import sys
+        # import sys
+        # import westpa.core.binning
 
-        import westpa.core.binning
-
-        sys.modules["westpa.binning"] = sys.modules["westpa.core.binning"]
+        # sys.modules["westpa.binning"] = sys.modules["westpa.core.binning"]
         # This is silly -- I need to import westpa.core.binning so it's loaded into sys.modules but the linter
         #   complains that it's unused... so, use it.
-        log.debug(f"Loaded {westpa.core.binning}")
+        # log.debug(f"Loaded {westpa.core.binning}")
 
         # self = ray.get(model_id)
         # kmeans_model = ray.get(kmeans_model_id)
@@ -3852,7 +3995,7 @@ class modelWE:
 
         dtrajs = kmeans_model.predict(transformed_coords)
 
-        return dtrajs, 1, iteration
+        return dtrajs, 1, iteration, kmeans_model.target_bins, kmeans_model.basis_bins
 
     def load_clusters(self, clusterFile):
         """
@@ -3958,6 +4101,7 @@ class modelWE:
         reduced_initial = self.reduceCoordinates(
             self.coordPairList[good_coords, :, :, 0]
         )
+
         reduced_final = self.reduceCoordinates(self.coordPairList[good_coords, :, :, 1])
 
         # Wrap this in a try to make sure we unset the toggle
@@ -3968,6 +4112,8 @@ class modelWE:
             start_cluster = self.clusters.predict(reduced_initial)
             end_cluster = self.clusters.predict(reduced_final)
         except Exception as e:
+            log.error(reduced_initial)
+            log.error(reduced_final)
             self.clusters.processing_from = False
             self.clusters.toggle = False
             raise e
