@@ -2667,7 +2667,7 @@ class modelWE:
                             self.do_clustering,
                             [
                                 cluster_model,
-                                iters_to_use[iter_idx],
+                                [iters_to_use[iter_idx]],
                                 cluster_args,
                                 self.processCoordinates,
                             ],
