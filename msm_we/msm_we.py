@@ -3532,12 +3532,12 @@ class modelWE:
 
         # Find disconnected states
         fmatrix_original = self.fluxMatrixRaw.copy()
-        from westpa import analysis
 
-        iteration = analysis.Run(self.fileList[0]).iteration(2)
-        bin_mapper = iteration.bin_mapper
-        basis = bin_mapper.assign(iteration.basis_state_pcoords)
-        target = bin_mapper.assign(iteration.target_state_pcoords)
+        # from westpa import analysis
+        # iteration = analysis.Run(self.fileList[0]).iteration(2)
+        # bin_mapper = iteration.bin_mapper
+        # basis = bin_mapper.assign(iteration.basis_state_pcoords)
+        # target = bin_mapper.assign(iteration.target_state_pcoords)
 
         fmatrix = self.fluxMatrixRaw.copy()
         fmatrix[-1, -2] = 1.0
