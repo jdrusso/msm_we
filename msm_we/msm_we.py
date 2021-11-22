@@ -985,7 +985,6 @@ class modelWE:
 
     def build_analyze_model(
         self,
-        ray_kwargs,
         file_paths,
         ref_struct,
         modelName,
@@ -994,6 +993,7 @@ class modelWE:
         dimreduce_method,
         tau,
         n_clusters,
+        ray_kwargs={},
         max_coord_iter=-1,
         stratified=True,
         streaming=True,
@@ -1013,9 +1013,6 @@ class modelWE:
 
         Parameters
         ----------
-        ray_kwargs: dict
-            Keyword arguments passed to ray.init(). Useful for specifying num_cpus. You could also use this to connect
-            to an existing Ray cluster.
         file_paths: list
             List of paths to H5 files to analyze.
         ref_struct: string
@@ -1035,6 +1032,9 @@ class modelWE:
         n_clusters: int
             Number of clusters to use when clustering. This is clusters per bin for stratified, or total clusters for
             aggregate.
+        ray_kwargs: dict
+            Keyword arguments passed to ray.init(). Useful for specifying num_cpus. You could also use this to connect
+            to an existing Ray cluster.
         max_coord_iter: int, optional (Default = model.maxIter, so all)
             Last iteration to obtain coordinates from. Useful for excluding the end of some data.
 
