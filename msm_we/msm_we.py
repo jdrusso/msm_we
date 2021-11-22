@@ -943,7 +943,7 @@ class modelWE:
             step(*args, **kwargs)
 
         else:
-            print(f"Calling {step} with args={args} and kwargs={kwargs}")
+            # print(f"Calling {step} with args={args} and kwargs={kwargs}")
             with concurrent.futures.ProcessPoolExecutor(
                 max_workers=1, mp_context=mp.get_context("fork")
             ) as executor:
@@ -1279,9 +1279,8 @@ class modelWE:
             ] = "[bold black] [[bold green]✓[bold black]]"
             table.columns[1]._cells[step_idx] = f"[black]{step_text}"
 
-            # model_fluxes = '\n'.join([f"Group {group} flux: {validation_models[group].JtargetSS}"
-            #                           for group in range(cross_validation_groups)])
-            # self.set_note(table, step_idx, model_fluxes)
+            # Store the validation models, in case you want to analyze them.
+            self.validation_models = validation_models
 
             # TODO: Compare models for agreement
             ##
@@ -3475,76 +3474,16 @@ class modelWE:
             pcoord_is_basis = self.is_WE_basis(pcoord_array)
             pcoord_array = pcoord_array[~(pcoord_is_target | pcoord_is_basis)]
 
-            # segment_in_target = self.is_WE_target(pcoord_array)
-
-            # TODO: Clean this up later, this is repetitive w/ the we_bin_assignments below
-            # non_target_pcoord_array = pcoord_array[~segment_in_target]
-            # non_target_iter_coords = iter_coords[~segment_in_target]
-            # log.debug(
-            #    f"Segments {np.argwhere(segment_in_target)} were in target, and will be ignored"
-            # )
-
             if len(pcoord_array) > 0:
                 we_bin_assignments = bin_mapper.assign(pcoord_array)
             else:
                 log.debug("Pcoords len 0, we_bin_assignments will be empty")
                 we_bin_assignments = np.array([])
 
-            # # Now, by definition from the above selection, I'll never have pcoords in the target/basis
-            # Select out stuff that ISN'T in the ignored bins, which should be target/basis
-            # non_ignored_bins = np.argwhere(
-            #     ~np.isin(we_bin_assignments, ignored_bins)
-            # ).squeeze()
-            # log.debug(non_ignored_bins)
-            # log.info(
-            #     f"{len(we_bin_assignments)} segments, {len(non_ignored_bins)} non-basin/target after ignoring {ignored_bins}"
-            # )
-            # we_bin_assignments = we_bin_assignments[non_ignored_bins]
-
             all_bins_have_segments = False
 
-            log.debug(f"Pcoord shape: {pcoord_array.shape}")
-            log.debug(f"First hundred: {we_bin_assignments[:20]}")
-            log.debug(f"First hundred: {pcoord_array[:20]}")
-            # is_17 = np.argwhere(we_bin_assignments == 17)
-            # log.debug(f"{len(is_17)} points are 17, they are {is_17}")
             unique_bins, counts = np.unique(we_bin_assignments, return_counts=True)
             all_bins_have_segments = np.all(counts >= min_coords)
-
-        #            seen_we_bins = np.unique(we_bin_assignments)
-        #            we_bin_segs = [[] for _ in seen_we_bins]
-        #
-        #            # Throw coords in their appropriate bins
-        #            #         print(iter_coords.shape)
-        #            for _bin_index, _bin in enumerate(seen_we_bins):
-        #                # Take the segments in this bin
-        #                segs_in_bin = np.argwhere(we_bin_assignments == _bin)
-        #
-        #                # squoze = np.squeeze(_iter_coords[segs_in_bin])
-        #
-        #                # Append them to we_bin_segs[_bin]
-        #                # we_bin_segs[_bin_index] holds the WE bin at seen_we_bins[_bin_index]
-        #                #we_bin_segs[_bin_index].extend(non_target_iter_coords[segs_in_bin])
-        #                we_bin_segs[_bin_index].extend(iter_coords[segs_in_bin])
-        #
-        #            bin_segs = np.array([len(_segs) >= min_coords for _segs in we_bin_segs])
-        #
-        #            # For the "ignored" bins, i.e. target bins where we're not actually clustering, don't worry about
-        #            #   getting enough segs. Just call it good.
-        #            for _bin in ignored_bins:
-        #
-        #                if _bin not in seen_we_bins:
-        #                    continue
-        #
-        #                # Need the actual index of the ignored bin
-        #                _bin_index = np.argwhere(seen_we_bins == _bin).flatten()
-        #                try:
-        #                    bin_segs[_bin_index] = True
-        #                except Exception as e:
-        #                    log.error(_bin_index)
-        #                    raise e
-        #
-        #            all_bins_have_segments = np.all(bin_segs)
 
         # By now, I have some segments in each WE bin.
         # Now, do clustering within each WE bin
@@ -3564,9 +3503,15 @@ class modelWE:
             transformed_coords = self.coordinates.transform(
                 processCoordinates(np.squeeze(iter_coords[segs_in_bin]))
             )
+
+            # log.info(f"Was on bin {_bin}, where there were {segs_in_bin}")
+
             try:
                 kmeans_models.cluster_models[_bin].partial_fit(transformed_coords)
             except ValueError as e:
+                log.info(f"Was on bin {_bin}")
+                raise Exception(f"Error fitting k-means to bin {_bin}")
+                log.error(f"Error fitting k-means to bin {_bin}")
                 raise e
 
         return kmeans_models, used_iters
