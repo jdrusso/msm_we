@@ -929,8 +929,6 @@ class modelWE:
 
         in_target = np.all(in_target, axis=1)
 
-        log.debug(f"{pcoords} in {self.target_pcoord_bounds}: {in_target}")
-
         return in_target
 
     @staticmethod
@@ -3361,19 +3359,32 @@ class modelWE:
         # -1 because we don't cluster in the target
         self.n_clusters = n_clusters * (bin_mapper.nbins - 1)
 
-        # for i, model in enumerate(self.clusters.cluster_models):
-        #     print(f"Model {i}: \t ", end=" ")
-        #     try:
-        #         print(model.cluster_centers_)
-        #     except AttributeError:
-        #         print("No cluster centers!")
-
         self.clusters.toggle = False
         self.launch_ray_discretization()
 
     def do_stratified_clustering(self, arg):
         """
         Perform the full-stratified clustering.
+
+        This works as follows:
+
+            1. Pull coordinates from the first iteration to process
+            2. Assign each segment to a WE bin, using its pcoord and the bin_mapper associated with this StratifiedCluster
+                object.
+            3a. If any of the seen WE bins have fewer segments than cluster centers, and there are more iterations left
+                to process, repeat from 1.
+                - Note that this may add NEW seen bins, and those new seen bins may not be full yet -- so more iterations
+                    may be required.
+            3b. If any seen WE bins have fewer segments than cluster centers, **but no iterations are left to process**,
+                then assign each structure in an "unfilled" WE bin to the "filled" WE bin with the closest index.,
+
+            At this point, we have a set of structures and the WE bins they're associated with, and each WE bin has a
+            number of structures equal to or greater than the target number of cluster centers.
+
+            Within each WE bin:
+
+            4. Apply dimensionality reduction to structures
+            5. Update clustering for that bin using this set of dimensionality reduced coordinates.
         """
 
         self, kmeans_models, iters_to_use, processCoordinates, ignored_bins = arg
@@ -3386,7 +3397,6 @@ class modelWE:
         min_coords = kmeans_models.cluster_args["n_clusters"]
 
         # The number of populated bins is the number of total bins - 1
-        # we_bin_segs = [[] for _ in range(bin_mapper.nbins)]
         all_bins_have_segments = False
 
         # Until all bins are populated
@@ -3394,9 +3404,7 @@ class modelWE:
         iter_coords = []
         unique_bins = np.array([])
         counts = np.array([])
-        # bin_segs = np.array([])
-        #        seen_we_bins = np.array([])
-        #        we_bin_segs = []
+        we_bin_assignments = []
 
         # Maybe not even necessary to track iter_coords, just _iter_coords.
         # The problem with it as it stands is that assert -- imagine if I have to grab a second iteration
@@ -3406,10 +3414,32 @@ class modelWE:
             try:
                 iteration = iters_to_use.pop(0)
             except IndexError:
-                log.error(
+                log.warning(
                     f"At iteration {iteration} (pulled {used_iters} extra), couldn't get segments in all bins, and no "
-                    f"iterations left"
+                    f"iterations left."
                 )
+
+                # Which bin didn't have enough clusters?
+                unfilled_bins = unique_bins[counts < min_coords]
+                filled_bins = np.setdiff1d(unique_bins, unfilled_bins)
+
+                # Find the nearest non-empty bin
+                # TODO: Do this by pcoord of the bins, instead of by index... though some bins may not always have
+                #   a pcoord associated with them (MAB, other functional bin mappers)
+                for unfilled_bin in unfilled_bins:
+                    nearest_filled_bin = filled_bins[
+                        np.abs(unfilled_bin - filled_bins).argmin()
+                    ]
+                    unfilled_bin_indices = np.where(we_bin_assignments == unfilled_bin)
+                    log.warning(
+                        f"Remapping {len(unfilled_bin_indices)} segments from unfilled bin {unfilled_bin} to "
+                        f"{nearest_filled_bin} for stratified clustering"
+                    )
+                    we_bin_assignments[unfilled_bin_indices] = nearest_filled_bin
+
+                # Remove unfilled bins from unique_bins
+                unique_bins = filled_bins
+
                 break
 
             if used_iters > -1:
@@ -3450,40 +3480,31 @@ class modelWE:
             if len(pcoord_array) > 0:
                 we_bin_assignments = bin_mapper.assign(pcoord_array)
             else:
-                log.debug("Pcoords len 0, we_bin_assignments will be empty")
+                log.debug(
+                    "No coordinates outside of basis/target, we_bin_assignments will be empty and clustering"
+                    f" will be skipped for this iteration. ({sum(pcoord_is_target)} in target, {sum(pcoord_is_basis)} in basis)"
+                )
                 we_bin_assignments = np.array([])
-
-            all_bins_have_segments = False
 
             unique_bins, counts = np.unique(we_bin_assignments, return_counts=True)
             all_bins_have_segments = np.all(counts >= min_coords)
 
         # By now, I have some segments in each WE bin.
-        # Now, do clustering within each WE bin
-
-        # for _bin in range(bin_mapper.nbins):
-        # Only cluster in WE bins that things were actually assigned to
+        # Now, do clustering within each WE bin, and only cluster in WE bins that things were actually assigned to
         for i, _bin in enumerate(unique_bins):
 
-            # if _bin in ignored_bins:
-            #     continue
-
             segs_in_bin = np.argwhere(we_bin_assignments == _bin)
-            log.debug(
-                f"Bin {_bin}: Segs {segs_in_bin} \n Iter_coords: {iter_coords[segs_in_bin].shape}"
-            )
+
+            log.debug(f"Clustering {segs_in_bin} segments in WE bin {_bin}.")
 
             transformed_coords = self.coordinates.transform(
                 processCoordinates(np.squeeze(iter_coords[segs_in_bin]))
             )
 
-            # log.info(f"Was on bin {_bin}, where there were {segs_in_bin}")
-
             try:
                 kmeans_models.cluster_models[_bin].partial_fit(transformed_coords)
             except ValueError as e:
                 log.info(f"Was on bin {_bin}")
-                raise Exception(f"Error fitting k-means to bin {_bin}")
                 log.error(f"Error fitting k-means to bin {_bin}")
                 raise e
 
