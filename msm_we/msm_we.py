@@ -3386,6 +3386,7 @@ class modelWE:
         self.clusters = stratified_clusters
         self.clusters.model = self
 
+        # -1 because we don't cluster in the target
         self.n_clusters = n_clusters * (bin_mapper.nbins - 1)
 
         # for i, model in enumerate(self.clusters.cluster_models):
@@ -3574,6 +3575,8 @@ class modelWE:
             )
             states_to_remove = np.concatenate(connected_sets[start_cleaning_idx:])
 
+        # Does NOT include the basis/target -- none of these numbers of cluster centers should,
+        #   since they're explicitly not clustered in
         pre_cleaning_n_clusters_per_bin = [
             len(cluster_model.cluster_centers_)
             if hasattr(cluster_model, "cluster_centers_")
@@ -3671,7 +3674,6 @@ class modelWE:
         log.debug(f"n_clusters is now {self.n_clusters}")
 
         # If a WE bin was completely emptied of cluster centers, map it to the nearest non-empty bin
-        log.info
         populated_we_bins = np.setdiff1d(
             range(self.clusters.bin_mapper.nbins),
             np.concatenate([list(target), list(basis)]),
