@@ -12,6 +12,8 @@ import multiprocessing as mp
 from copy import deepcopy
 from westpa import analysis
 
+from westpa.core.binning import MABBinMapper
+
 from scipy.sparse import coo_matrix, csr_matrix
 import scipy.sparse as sparse
 from sklearn.decomposition import IncrementalPCA as iPCA
@@ -3291,19 +3293,9 @@ class modelWE:
 
         bin_mapper = iteration.bin_mapper
 
-        ## We COULD get the target/basis coords from the iteration -- but what if they changed at some point?
-        ##  I think we want to use a consistent set of bounds.
-        ## TODO: Alternatively, I could read these from the bin iteration as well
-        # target_bin = bin_mapper.assign(iteration.target_state_pcoords)
-        # basis_bin = bin_mapper.assign(iteration.basis_state_pcoords)
+        if bin_mapper is MABBinMapper:
+            pass
 
-        # target_bin = bin_mapper.assign(self.target_pcoord_bounds)
-        # basis_bin = bin_mapper.assign(self.basis_pcoord_bounds)
-
-        # Actually, use the bin CENTERS, not the bounds..
-        # target_bin = bin_mapper.assign(self.target_bin_centers)
-        # basis_bin = bin_mapper.assign(self.basis_bin_centers)
-        # ignored_bins = np.concatenate([target_bin, basis_bin]).flatten()
         ignored_bins = []
 
         if not streaming or not use_ray:
@@ -3347,27 +3339,7 @@ class modelWE:
                 log.debug(f"Already processed  iter  {iteration}")
                 continue
 
-            # _iteration = analysis.Run(self.fileList[0]).iteration(max(2, iteration))
             ignored_bins = []
-            # try:
-            #     target_bins = _iteration.bin_mapper.assign(
-            #         # _iteration.target_state_pcoords
-            #         self.target_pcoord_bounds
-            #     )
-            # except Exception:
-            #     log.error(f"Couldn't get target bin for iteration {iteration}")
-            #     target_bins = target_bin
-            # try:
-            #     basis_bins = _iteration.bin_mapper.assign(
-            #         _iteration.basis_state_pcoords
-            #     )
-            # except Exception:
-            #     log.error(f"Couldn't get basis bins for iteration{iteration}")
-            #     basis_bins = []
-            #
-            # ignored_bins = np.concatenate(
-            #     [ignored_bins, target_bins, basis_bins]
-            # ).flatten()
 
             with concurrent.futures.ProcessPoolExecutor(
                 max_workers=1, mp_context=mp.get_context("fork")
