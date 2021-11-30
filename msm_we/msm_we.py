@@ -3309,8 +3309,17 @@ class modelWE:
                     "Bin_mapper has no nbins_per_dim attribute. This was added in a later version of MAB, ensure"
                     " that it's actually present and set."
                 )
-                log.exception(e)
-                raise e
+
+                # TODO: Find some more official way to support this, maybe pass as an optional kwarg
+                if hasattr(self, "n_bins_per_dim"):
+                    n_bins_per_dim = self.n_bins_per_dim
+                    log.warning(
+                        f"Setting bins per dimension to {n_bins_per_dim} from self.n_bins_per_dim -- "
+                        f"this is experimental!"
+                    )
+                else:
+                    log.exception(e)
+                    raise e
 
             min_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
             max_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
