@@ -3274,6 +3274,11 @@ class modelWE:
 
         Returns
         -------
+
+        TODO
+        ----
+        Allow directly passing in a bin mapper or equivalent here. Way easier than trying to reverse engineer one.
+        Require it if the existing is not supported.
         """
 
         log.info(
@@ -3316,8 +3321,11 @@ class modelWE:
             # 2. Get the number of bins in each dimension
             # 3. Make an N-D Rectilinear bin-mapper using those
             total_bins = bin_mapper.nbins
+            # TODO: Do this better than just uniform, maybe try to get number of bins in each dimension. But this is
+            #   not easy to get out of bin mappers in a general way.
             nbins_per_dim = [
-                total_bins // self.pcoord_ndim for _ in range(self.pcoord_ndim)
+                int(np.power(self.pcoord_ndim, 1 / self.pcoord_ndim))
+                for _ in range(self.pcoord_ndim)
             ]
             log.info(
                 f"Using {total_bins} total WE bins, so"
