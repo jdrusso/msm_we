@@ -3410,6 +3410,63 @@ class modelWE:
         self.clusters.toggle = False
         self.launch_ray_discretization()
 
+    @staticmethod
+    def find_nearest_bin(bin_mapper, bin_idx, unfilled_bins):
+        """
+        Given a bin mapper, find the bin closest to bin_idx (that isn't bin_idx).
+
+        Do this Voronoi-style by obtaining a set of bin centers, and finding which center bin_idx is closest to.
+
+        Parameters
+        ----------
+        bin_mapper
+        bin_idx
+
+        Returns
+        -------
+        Index of the closest bin.
+
+        TODO
+        ----
+        Note in the documentation that this can be overriden for finer control over empty bin mapping, if so desired.
+        """
+
+        assert type(bin_mapper) in [
+            VoronoiBinMapper,
+            RectilinearBinMapper,
+        ], f"{type(bin_mapper)} is unsupported!"
+
+        if type(bin_mapper) is VoronoiBinMapper:
+
+            centers = bin_mapper.centers
+            distance_function = bin_mapper.dfunc
+
+        elif type(bin_mapper) is RectilinearBinMapper:
+
+            def _rmsd(point, _centers):
+                return np.sqrt(np.mean(np.power(point - _centers, 2), axis=1))
+
+            distance_function = _rmsd
+
+            bounds = np.array(bin_mapper.boundaries)
+            _centers = []
+            for dim in bounds:
+                _centers.append(dim[:-1] + (dim[1:] - dim[:-1]) / 2)
+            centers = np.array(np.meshgrid(*_centers)).T.squeeze()
+
+        # Remove both the bin you're looking at, and any other unfilled bins
+        other_centers = np.delete(
+            centers, np.concatenate([bin_idx], unfilled_bins), axis=0
+        )
+
+        closest = np.argmin(distance_function(centers[bin_idx], other_centers))
+
+        # Increment index if it's past the one we deleted
+        if closest >= bin_idx:
+            closest += 1
+
+        return closest
+
     def do_stratified_clustering(self, arg):
         """
         Perform the full-stratified clustering.
@@ -3472,12 +3529,12 @@ class modelWE:
                 filled_bins = np.setdiff1d(unique_bins, unfilled_bins)
 
                 # Find the nearest non-empty bin
-                # TODO: Do this by pcoord of the bins, instead of by index... though some bins may not always have
-                #   a pcoord associated with them (MAB, other functional bin mappers)
                 for unfilled_bin in unfilled_bins:
-                    nearest_filled_bin = filled_bins[
-                        np.abs(unfilled_bin - filled_bins).argmin()
-                    ]
+
+                    nearest_filled_bin = self.find_nearest_bin(
+                        bin_mapper, unfilled_bin, unfilled_bins
+                    )
+
                     unfilled_bin_indices = np.where(we_bin_assignments == unfilled_bin)
                     log.warning(
                         f"Remapping {len(unfilled_bin_indices)} segments from unfilled bin {unfilled_bin} to "
