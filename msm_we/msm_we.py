@@ -3464,7 +3464,7 @@ class modelWE:
 
         # Remove both the bin you're looking at, and any other unfilled bins
         other_centers = np.delete(
-            centers, np.concatenate([bin_idx], unfilled_bins), axis=0
+            centers, np.concatenate([[bin_idx], unfilled_bins]), axis=0
         )
 
         closest = np.argmin(distance_function(centers[bin_idx], other_centers))
