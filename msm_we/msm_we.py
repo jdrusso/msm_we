@@ -12,8 +12,6 @@ import multiprocessing as mp
 from copy import deepcopy
 from westpa import analysis
 
-from westpa.core.binning import MABBinMapper
-
 from scipy.sparse import coo_matrix, csr_matrix
 import scipy.sparse as sparse
 from sklearn.decomposition import IncrementalPCA as iPCA
@@ -3290,9 +3288,6 @@ class modelWE:
         westpa.binning = importlib.import_module("westpa.tools.binning", "westpa.tools")
 
         bin_mapper = iteration.bin_mapper
-
-        if bin_mapper is MABBinMapper:
-            pass
 
         ignored_bins = []
 
