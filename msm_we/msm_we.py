@@ -11,7 +11,7 @@ import concurrent
 import multiprocessing as mp
 from copy import deepcopy
 from westpa import analysis
-from westpa.core.binning import MABBinMapper, RectilinearBinMapper
+from westpa.core.binning import RectilinearBinMapper, VoronoiBinMapper
 
 from scipy.sparse import coo_matrix, csr_matrix
 import scipy.sparse as sparse
@@ -3290,36 +3290,39 @@ class modelWE:
 
         bin_mapper = iteration.bin_mapper
 
-        # TODO: Do I need to handle the Voronoi mapper in any particular way?
+        # Problem: I need a consistent set of bins, and some bin mappers may not return that! Some may re-calculate bins
+        #    on-the-fly whenever data is passed to them, which will produce different bins for each iteration.
+        #   In particular, ones that may are really any functional mapper:
+        #   -   MABBinMapper will by construction never return bins that have everything populated, and by default,
+        #       calculates boundaries on the fly
+        #   -   PiecewiseBinMapper/VectorizingFuncBinMapper/FuncBinMapper are also function-based so they may do whatever
+        #   Ones that won't:
+        #   -   VoronoiBinMapper takes in a set of centers when it's initialized, so it'll be consistent
+        #   -   Rectilinear is of course always consistent
+        # Ideally, the best approach here would be to go through your bin mapper, recursing as necessary, and replacing
+        #   any of the above functional bin mapper types with static bin mappers.
 
-        if type(bin_mapper) is MABBinMapper:
+        supported_mappers = [RectilinearBinMapper, VoronoiBinMapper]
+        if type(bin_mapper) not in supported_mappers:
             log.warning(
-                "MAB bin-mapper identified. Replacing with linear bins in each pcoord."
+                f"{type(bin_mapper)} mapper identified, but supported mappers are {supported_mappers} and others may"
+                f"produce inconsistent bins between iterations. Replacing with linear bins in each pcoord for consistency."
             )
+            log.warning("WE bin boundaries matter for ")
 
             # Here I need to turn an N-dimensional MAB bin mapper into an n-dimensional rectilinear bin mapper..
             # 1. Get the min-max in each dimension
             #       -- Using iteration.pcoords, which has shape (segments, 2, n_dim)
             # 2. Get the number of bins in each dimension
             # 3. Make an N-D Rectilinear bin-mapper using those
-            try:
-                n_bins_per_dim = bin_mapper.nbins_per_dim
-            except AttributeError as e:
-                log.error(
-                    "Bin_mapper has no nbins_per_dim attribute. This was added in a later version of MAB, ensure"
-                    " that it's actually present and set."
-                )
-
-                # TODO: Find some more official way to support this, maybe pass as an optional kwarg
-                if hasattr(self, "n_bins_per_dim"):
-                    n_bins_per_dim = self.n_bins_per_dim
-                    log.warning(
-                        f"Setting bins per dimension to {n_bins_per_dim} from self.n_bins_per_dim -- "
-                        f"this is experimental!"
-                    )
-                else:
-                    log.exception(e)
-                    raise e
+            total_bins = bin_mapper.nbins
+            nbins_per_dim = [
+                total_bins // self.pcoord_ndim for _ in range(self.pcoord_ndim)
+            ]
+            log.info(
+                f"Using {total_bins} total WE bins, so"
+                f" {nbins_per_dim} in each of {self.pcoord_ndim} pcoord dimensions"
+            )
 
             min_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
             max_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
@@ -3331,7 +3334,7 @@ class modelWE:
                 )
 
                 boundaries = np.linspace(
-                    min_coords[dim], max_coords[dim], n_bins_per_dim[dim]
+                    min_coords[dim], max_coords[dim], nbins_per_dim[dim]
                 )
                 boundaries[0] = -np.inf
                 boundaries[1] = np.inf
