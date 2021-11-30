@@ -3324,7 +3324,7 @@ class modelWE:
             # TODO: Do this better than just uniform, maybe try to get number of bins in each dimension. But this is
             #   not easy to get out of bin mappers in a general way.
             nbins_per_dim = [
-                int(np.power(self.pcoord_ndim, 1 / self.pcoord_ndim))
+                max(2, int(np.power(total_bins, 1 / self.pcoord_ndim)))
                 for _ in range(self.pcoord_ndim)
             ]
             log.info(
