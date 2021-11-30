@@ -3345,7 +3345,7 @@ class modelWE:
                     min_coords[dim], max_coords[dim], nbins_per_dim[dim]
                 )
                 boundaries[0] = -np.inf
-                boundaries[1] = np.inf
+                boundaries[-1] = np.inf
                 all_boundaries.append(boundaries)
 
             bin_mapper = RectilinearBinMapper(all_boundaries)
