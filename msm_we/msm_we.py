@@ -3242,6 +3242,7 @@ class modelWE:
         use_ray=True,
         bin_iteration=2,
         iters_to_use=None,
+        user_bin_mapper=None,
         **_cluster_args,
     ):
         """
@@ -3293,63 +3294,79 @@ class modelWE:
 
         westpa.binning = importlib.import_module("westpa.tools.binning", "westpa.tools")
 
-        bin_mapper = iteration.bin_mapper
+        if user_bin_mapper is not None:
+            log.info("Loading user-specified bin mapper for stratified clustering.")
+            bin_mapper = user_bin_mapper
+        else:
+            log.info("Loading pickled bin mapper from H5 for stratified clustering...")
+            bin_mapper = iteration.bin_mapper
 
-        # Problem: I need a consistent set of bins, and some bin mappers may not return that! Some may re-calculate bins
-        #    on-the-fly whenever data is passed to them, which will produce different bins for each iteration.
-        #   In particular, ones that may are really any functional mapper:
-        #   -   MABBinMapper will by construction never return bins that have everything populated, and by default,
-        #       calculates boundaries on the fly
-        #   -   PiecewiseBinMapper/VectorizingFuncBinMapper/FuncBinMapper are also function-based so they may do whatever
-        #   Ones that won't:
-        #   -   VoronoiBinMapper takes in a set of centers when it's initialized, so it'll be consistent
-        #   -   Rectilinear is of course always consistent
-        # Ideally, the best approach here would be to go through your bin mapper, recursing as necessary, and replacing
-        #   any of the above functional bin mapper types with static bin mappers.
+            # Problem: I need a consistent set of bins, and some bin mappers may not return that! Some may re-calculate bins
+            #    on-the-fly whenever data is passed to them, which will produce different bins for each iteration.
+            #   In particular, ones that may are really any functional mapper:
+            #   -   MABBinMapper will by construction never return bins that have everything populated, and by default,
+            #       calculates boundaries on the fly
+            #   -   PiecewiseBinMapper/VectorizingFuncBinMapper/FuncBinMapper are also function-based so they may do whatever
+            #   Ones that won't:
+            #   -   VoronoiBinMapper takes in a set of centers when it's initialized, so it'll be consistent
+            #   -   Rectilinear is of course always consistent
+            # Ideally, the best approach here would be to go through your bin mapper, recursing as necessary, and replacing
+            #   any of the above functional bin mapper types with static bin mappers.
 
-        supported_mappers = [RectilinearBinMapper, VoronoiBinMapper]
-        if type(bin_mapper) not in supported_mappers:
-            log.warning(
-                f"{type(bin_mapper)} mapper identified, but supported mappers are {supported_mappers} and others may"
-                f"produce inconsistent bins between iterations. Replacing with linear bins in each pcoord for consistency."
-            )
-            log.warning("WE bin boundaries matter for ")
+            supported_mappers = [RectilinearBinMapper, VoronoiBinMapper]
+            if type(bin_mapper) not in supported_mappers:
+                log.warning(
+                    f"{type(bin_mapper)} mapper loaded, but supported mappers are {supported_mappers} and others may"
+                    f"produce inconsistent bins between iterations. Replacing with linear bins in each pcoord for consistency."
+                )
+                log.warning("WE bin boundaries matter for ")
 
-            # Here I need to turn an N-dimensional MAB bin mapper into an n-dimensional rectilinear bin mapper..
-            # 1. Get the min-max in each dimension
-            #       -- Using iteration.pcoords, which has shape (segments, 2, n_dim)
-            # 2. Get the number of bins in each dimension
-            # 3. Make an N-D Rectilinear bin-mapper using those
-            total_bins = bin_mapper.nbins
-            # TODO: Do this better than just uniform, maybe try to get number of bins in each dimension. But this is
-            #   not easy to get out of bin mappers in a general way.
-            nbins_per_dim = [
-                max(2, int(np.power(total_bins, 1 / self.pcoord_ndim)))
-                for _ in range(self.pcoord_ndim)
-            ]
-            log.info(
-                f"Using {total_bins} total WE bins, so"
-                f" {nbins_per_dim} in each of {self.pcoord_ndim} pcoord dimensions"
-            )
-
-            min_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
-            max_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
-            all_boundaries = []
-            for dim in range(self.pcoord_ndim):
-                min_coords[dim], max_coords[dim] = (
-                    np.min(iteration.pcoords[:, :, dim]),
-                    np.max(iteration.pcoords[:, :, dim]),
+                # Here I need to turn an N-dimensional MAB bin mapper into an n-dimensional rectilinear bin mapper..
+                # 1. Get the min-max in each dimension
+                #       -- Using iteration.pcoords, which has shape (segments, 2, n_dim)
+                # 2. Get the number of bins in each dimension
+                # 3. Make an N-D Rectilinear bin-mapper using those
+                total_bins = bin_mapper.nbins
+                # TODO: Do this better than just uniform, maybe try to get number of bins in each dimension. But this is
+                #   not easy to get out of bin mappers in a general way.
+                nbins_per_dim = [
+                    max(2, int(np.power(total_bins, 1 / self.pcoord_ndim)))
+                    for _ in range(self.pcoord_ndim)
+                ]
+                log.info(
+                    f"Using {total_bins} total WE bins, so"
+                    f" {nbins_per_dim} in each of {self.pcoord_ndim} pcoord dimensions"
                 )
 
-                boundaries = np.linspace(
-                    min_coords[dim], max_coords[dim], nbins_per_dim[dim]
-                )
-                boundaries[0] = -np.inf
-                boundaries[-1] = np.inf
-                all_boundaries.append(boundaries)
+                min_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
+                max_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
+                all_boundaries = []
+                for dim in range(self.pcoord_ndim):
+                    min_coords[dim], max_coords[dim] = (
+                        np.min(iteration.pcoords[:, :, dim]),
+                        np.max(iteration.pcoords[:, :, dim]),
+                    )
 
-            bin_mapper = RectilinearBinMapper(all_boundaries)
+                    boundaries = np.linspace(
+                        min_coords[dim], max_coords[dim], nbins_per_dim[dim]
+                    )
+                    boundaries[0] = -np.inf
+                    boundaries[-1] = np.inf
+                    all_boundaries.append(boundaries)
 
+                bin_mapper = RectilinearBinMapper(all_boundaries)
+
+            # TODO: Before moving on, make sure it's actually possible to populate each bin with enough segments to cluster
+            #       at least once from the given set of iterations.
+            #   In other words, just load up pcoords iteration by iteration, and count the total number in each bin.
+            #   Note that it's possible you'll end up clustering in a bin once, but then pulling too few in that bin for
+            #       the rest of the iterations after that, or something like that.
+            #   The alternative to this would be in do_stratified_clustering(), if a bin isn't populated, check every
+            #       subsequent iteration and see if it's possible to populate it from them.
+            #   This is a little more flexible/dynamic, however, I think it may potentially require much more looping
+            #       through iterations.
+
+        # Clustering will not be performed in these bins
         ignored_bins = []
 
         if not streaming or not use_ray:
@@ -3463,15 +3480,15 @@ class modelWE:
             centers = np.array(np.meshgrid(*_centers)).T.squeeze()
 
         # Remove both the bin you're looking at, and any other unfilled bins
-        other_centers = np.delete(
-            centers, np.concatenate([[bin_idx], unfilled_bins]), axis=0
-        )
+        all_ignored = np.concatenate([[bin_idx], unfilled_bins])
+        other_centers = np.delete(centers, all_ignored, axis=0)
 
         closest = np.argmin(distance_function(centers[bin_idx], other_centers))
 
-        # Increment index if it's past the one we deleted
-        if closest >= bin_idx:
-            closest += 1
+        # Increment index if it's past the ones we deleted
+        for _bin_idx in all_ignored:
+            if closest >= _bin_idx:
+                closest += 1
 
         return closest
 
