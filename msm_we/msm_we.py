@@ -3337,6 +3337,11 @@ class modelWE:
                     f"Using {total_bins} total WE bins, so"
                     f" {nbins_per_dim} in each of {self.pcoord_ndim} pcoord dimensions"
                 )
+                boundaries[0] = -np.inf
+                boundaries[-1] = np.inf
+                all_boundaries.append(boundaries)
+            
+                log.info(all_boundaries)
 
                 min_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
                 max_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
@@ -3477,7 +3482,7 @@ class modelWE:
             _centers = []
             for dim in bounds:
                 _centers.append(dim[:-1] + (dim[1:] - dim[:-1]) / 2)
-            centers = np.array(np.meshgrid(*_centers)).T.squeeze()
+            centers = np.array(np.meshgrid(*_centers)).T.squeeze().reshape(-1, len(bounds))
 
         # Remove both the bin you're looking at, and any other unfilled bins
         all_ignored = np.concatenate([[bin_idx], unfilled_bins])
@@ -3486,7 +3491,7 @@ class modelWE:
         closest = np.argmin(distance_function(centers[bin_idx], other_centers))
 
         # Increment index if it's past the ones we deleted
-        for _bin_idx in all_ignored:
+        for _bin_idx in sorted(all_ignored):
             if closest >= _bin_idx:
                 closest += 1
 
