@@ -11,6 +11,7 @@ import concurrent
 import multiprocessing as mp
 from copy import deepcopy
 from westpa import analysis
+from westpa.core.binning import MABBinMapper, RectilinearBinMapper
 
 from scipy.sparse import coo_matrix, csr_matrix
 import scipy.sparse as sparse
@@ -3288,6 +3289,46 @@ class modelWE:
         westpa.binning = importlib.import_module("westpa.tools.binning", "westpa.tools")
 
         bin_mapper = iteration.bin_mapper
+
+        # TODO: Do I need to handle the Voronoi mapper in any particular way?
+
+        if type(bin_mapper) is MABBinMapper:
+            log.warning(
+                "MAB bin-mapper identified. Replacing with linear bins in each pcoord."
+            )
+
+            # Here I need to turn an N-dimensional MAB bin mapper into an n-dimensional rectilinear bin mapper..
+            # 1. Get the min-max in each dimension
+            #       -- Using iteration.pcoords, which has shape (segments, 2, n_dim)
+            # 2. Get the number of bins in each dimension
+            # 3. Make an N-D Rectilinear bin-mapper using those
+            try:
+                n_bins_per_dim = bin_mapper.nbins_per_dim
+            except AttributeError as e:
+                log.error(
+                    "Bin_mapper has no nbins_per_dim attribute. This was added in a later version of MAB, ensure"
+                    " that it's actually present and set."
+                )
+                log.exception(e)
+                raise e
+
+            min_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
+            max_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
+            all_boundaries = []
+            for dim in range(self.pcoord_ndim):
+                min_coords[dim], max_coords[dim] = (
+                    np.min(iteration.pcoords[:, :, dim]),
+                    np.max(iteration.pcoords[:, :, dim]),
+                )
+
+                boundaries = np.linspace(
+                    min_coords[dim], max_coords[dim], n_bins_per_dim[dim]
+                )
+                boundaries[0] = -np.inf
+                boundaries[1] = np.inf
+                all_boundaries.append(boundaries)
+
+            bin_mapper = RectilinearBinMapper(all_boundaries)
 
         ignored_bins = []
 
