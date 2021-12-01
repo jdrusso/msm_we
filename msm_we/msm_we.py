@@ -3809,6 +3809,10 @@ class modelWE:
             # If not cleaning anything, just move on
             if len(bin_clusters_to_clean) == 0:
                 log.debug(f"not cleaning any clusters from bin {we_bin}")
+
+                if len(clusters_in_bin) == 0:
+                    empty_we_bins.add(we_bin)
+
                 continue
 
             # If cleaning EVERYTHING, handle this bin differently
