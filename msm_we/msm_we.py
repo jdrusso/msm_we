@@ -3317,52 +3317,12 @@ class modelWE:
             if type(bin_mapper) not in supported_mappers:
                 log.warning(
                     f"{type(bin_mapper)} mapper loaded, but supported mappers are {supported_mappers} and others may"
-                    f"produce inconsistent bins between iterations. Replacing with linear bins in each pcoord for consistency."
+                    f"produce inconsistent bins between iterations. Please provide a supported user_bin_mapper."
                 )
                 raise Exception
 
-                # # Here I need to turn an N-dimensional MAB bin mapper into an n-dimensional rectilinear bin mapper..
-                # # 1. Get the min-max in each dimension
-                # #       -- Using iteration.pcoords, which has shape (segments, 2, n_dim)
-                # # 2. Get the number of bins in each dimension
-                # # 3. Make an N-D Rectilinear bin-mapper using those
-                # total_bins = bin_mapper.nbins
-                # # TODO: Do this better than just uniform, maybe try to get number of bins in each dimension. But this is
-                # #   not easy to get out of bin mappers in a general way.
-                # nbins_per_dim = [
-                #     max(2, int(np.power(total_bins, 1 / self.pcoord_ndim)))
-                #     for _ in range(self.pcoord_ndim)
-                # ]
-                # log.info(
-                #     f"Using {total_bins} total WE bins, so"
-                #     f" {nbins_per_dim} in each of {self.pcoord_ndim} pcoord dimensions"
-                # )
-                # boundaries[0] = -np.inf
-                # boundaries[-1] = np.inf
-                # all_boundaries.append(boundaries)
-                #
-                # log.info(all_boundaries)
-                #
-                # min_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
-                # max_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
-                # all_boundaries = []
-                # for dim in range(self.pcoord_ndim):
-                #     min_coords[dim], max_coords[dim] = (
-                #         np.min(iteration.pcoords[:, :, dim]),
-                #         np.max(iteration.pcoords[:, :, dim]),
-                #     )
-                #
-                #     boundaries = np.linspace(
-                #         min_coords[dim], max_coords[dim], nbins_per_dim[dim]
-                #     )
-                #     boundaries[0] = -np.inf
-                #     boundaries[-1] = np.inf
-                #     all_boundaries.append(boundaries)
-                #
-                # bin_mapper = RectilinearBinMapper(all_boundaries)
-
-            # TODO: Before moving on, make sure it's actually possible to populate each bin with enough segments to cluster
-            #       at least once from the given set of iterations.
+            # TODO: Before moving on, make sure it's actually possible to populate each bin with enough segments to
+            #       cluster at least once from the given set of iterations.
             #   In other words, just load up pcoords iteration by iteration, and count the total number in each bin.
             #   Note that it's possible you'll end up clustering in a bin once, but then pulling too few in that bin for
             #       the rest of the iterations after that, or something like that.
@@ -3444,9 +3404,6 @@ class modelWE:
         # all_filled_bins holds every bin that was clustered in
         # all_unfilled_bins holds any bin that was ever attempted, but unfilled
         # so, get the unfilled that were unfilled always, and never got clustered in
-        # todo: take my stratified clusters model, and update we_remap for all the true unfilled clusters
-
-        # true_unfilled = np.setdiff1d(list(all_unfilled_bins), list(all_filled_bins))
         true_unfilled = np.setdiff1d(range(bin_mapper.nbins), list(all_filled_bins))
         log.debug(f"Filled bins are {all_filled_bins}")
         log.debug(f"Unfilled bins were {all_unfilled_bins}")
@@ -3701,17 +3658,9 @@ class modelWE:
         # Find disconnected states
         fmatrix_original = self.fluxMatrixRaw.copy()
 
-        # from westpa import analysis
-        # iteration = analysis.Run(self.fileList[0]).iteration(2)
-        # bin_mapper = iteration.bin_mapper
-        # basis = bin_mapper.assign(iteration.basis_state_pcoords)
-        # target = bin_mapper.assign(iteration.target_state_pcoords)
-
         fmatrix = self.fluxMatrixRaw.copy()
         fmatrix[-1, -2] = 1.0
         connected_sets = find_connected_sets(fmatrix, directed=True)
-
-        # states_to_keep = connected_sets[0]
 
         start_cleaning_idx = 1
 
@@ -3762,26 +3711,9 @@ class modelWE:
         #    and removing them.
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
-            # if we_bin in target:
-            #     log.debug(f"Skipping target bin {we_bin}")
-            #     continue
-            # if we_bin in basis:
-            #     log.debug(f"Skipping basis bin {we_bin}")
-            #     continue
-
-            # consecutive_index = self.clusters.legitimate_bins.index(we_bin)
             consecutive_index = we_bin
 
-            # offset = consecutive_index * self.clusters.n_clusters_per_bin
-            offset = sum(
-                pre_cleaning_n_clusters_per_bin[:we_bin]
-                # [
-                #     len(self.clusters.cluster_models[idx].cluster_centers_)
-                #     if hasattr(self.clusters.cluster_models[idx], "cluster_centers_")
-                #     else 0
-                #     for idx in self.clusters.legitimate_bins[:consecutive_index]
-                # ]
-            )
+            offset = sum(pre_cleaning_n_clusters_per_bin[:we_bin])
 
             # Get all the clusters that would be contained in this bin
             # clusters_in_bin = range(offset, offset + self.clusters.n_clusters_per_bin)
@@ -3819,19 +3751,12 @@ class modelWE:
 
             # If cleaning EVERYTHING, handle this bin differently
             # We'll just re-map it to a "good" adjacent WE bin
-            elif (
-                # not (we_bin in basis or we_bin in target)
-                # and len(bin_clusters_to_clean) == self.clusters.n_clusters_per_bin
-                # and
-                len(bin_clusters_to_clean)
-                == len(clusters_in_bin)
-            ):
+            elif len(bin_clusters_to_clean) == len(clusters_in_bin):
                 empty_we_bins.add(we_bin)
 
             else:
                 log.debug(
                     f"Cleaning {len(bin_clusters_to_clean)} clusters {bin_clusters_to_clean} from WE bin {we_bin}."
-                    # f" (Basis {basis}, target {target})"
                 )
 
             self.clusters.cluster_models[we_bin].cluster_centers_ = np.delete(
@@ -3847,11 +3772,6 @@ class modelWE:
         log.debug(f"n_clusters is now {self.n_clusters}")
 
         # If a WE bin was completely emptied of cluster centers, map it to the nearest non-empty bin
-        # populated_we_bins = np.setdiff1d(
-        #     range(self.clusters.bin_mapper.nbins),
-        #     np.concatenate([list(target), list(basis)]),
-        # )
-        # populated_we_bins = np.setdiff1d(populated_we_bins, list(empty_we_bins))
         populated_we_bins = np.setdiff1d(
             range(self.clusters.bin_mapper.nbins), list(empty_we_bins)
         )
@@ -3862,32 +3782,17 @@ class modelWE:
         for empty_we_bin in empty_we_bins:
 
             # Find the nearest non-empty bin
-            # nearest_populated_bin_idx = np.abs(
-            #    empty_we_bin - populated_we_bins
-            # ).argmin()
-            # nearest_populated_bin = populated_we_bins[nearest_populated_bin_idx]
             nearest_populated_bin = self.find_nearest_bin(
                 self.clusters.bin_mapper, empty_we_bin, populated_we_bins
             )
 
             # Replace self.clusters.cluster_models[empty_we_bin].cluster_centers_ with
             #   self.clusters.cluster_models[nearest_nonempty_we_bin].cluster_centers_
-            # self.clusters.cluster_models[
-            #     empty_we_bin
-            # ].cluster_centers_ = self.clusters.cluster_models[
-            #     nearest_populated_bin
-            # ].cluster_centers_
             self.clusters.we_remap[empty_we_bin] = nearest_populated_bin
 
         _running_total = 0
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
-            # if (
-            #     we_bin in self.clusters.target_bins
-            #     or we_bin in self.clusters.basis_bins
-            # ):
-            #     #             log.info(f"Skipping ignored bin {we_bin}")
-            #     continue
             try:
                 clusters_in_bin = len(
                     self.clusters.cluster_models[
