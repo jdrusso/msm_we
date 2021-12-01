@@ -3757,17 +3757,17 @@ class modelWE:
         )
 
         empty_we_bins = set()
-        target, basis = self.clusters.target_bins, self.clusters.basis_bins
+        # target, basis = self.clusters.target_bins, self.clusters.basis_bins
         # Go through each WE bin, finding which clusters within it are not in the connected set
         #    and removing them.
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
-            if we_bin in target:
-                log.debug(f"Skipping target bin {we_bin}")
-                continue
-            if we_bin in basis:
-                log.debug(f"Skipping basis bin {we_bin}")
-                continue
+            # if we_bin in target:
+            #     log.debug(f"Skipping target bin {we_bin}")
+            #     continue
+            # if we_bin in basis:
+            #     log.debug(f"Skipping basis bin {we_bin}")
+            #     continue
 
             # consecutive_index = self.clusters.legitimate_bins.index(we_bin)
             consecutive_index = we_bin
@@ -3820,16 +3820,18 @@ class modelWE:
             # If cleaning EVERYTHING, handle this bin differently
             # We'll just re-map it to a "good" adjacent WE bin
             elif (
-                not (we_bin in basis or we_bin in target)
+                # not (we_bin in basis or we_bin in target)
                 # and len(bin_clusters_to_clean) == self.clusters.n_clusters_per_bin
-                and len(bin_clusters_to_clean) == len(clusters_in_bin)
+                # and
+                len(bin_clusters_to_clean)
+                == len(clusters_in_bin)
             ):
                 empty_we_bins.add(we_bin)
 
             else:
                 log.debug(
                     f"Cleaning {len(bin_clusters_to_clean)} clusters {bin_clusters_to_clean} from WE bin {we_bin}."
-                    f" (Basis {basis}, target {target})"
+                    # f" (Basis {basis}, target {target})"
                 )
 
             self.clusters.cluster_models[we_bin].cluster_centers_ = np.delete(
@@ -3845,11 +3847,14 @@ class modelWE:
         log.debug(f"n_clusters is now {self.n_clusters}")
 
         # If a WE bin was completely emptied of cluster centers, map it to the nearest non-empty bin
+        # populated_we_bins = np.setdiff1d(
+        #     range(self.clusters.bin_mapper.nbins),
+        #     np.concatenate([list(target), list(basis)]),
+        # )
+        # populated_we_bins = np.setdiff1d(populated_we_bins, list(empty_we_bins))
         populated_we_bins = np.setdiff1d(
-            range(self.clusters.bin_mapper.nbins),
-            np.concatenate([list(target), list(basis)]),
+            range(self.clusters.bin_mapper.nbins), list(empty_we_bins)
         )
-        populated_we_bins = np.setdiff1d(populated_we_bins, list(empty_we_bins))
 
         if len(empty_we_bins) > 0:
             log.warning(f"All clusters were cleaned from bins {empty_we_bins}")
@@ -3877,12 +3882,12 @@ class modelWE:
         _running_total = 0
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
-            if (
-                we_bin in self.clusters.target_bins
-                or we_bin in self.clusters.basis_bins
-            ):
-                #             log.info(f"Skipping ignored bin {we_bin}")
-                continue
+            # if (
+            #     we_bin in self.clusters.target_bins
+            #     or we_bin in self.clusters.basis_bins
+            # ):
+            #     #             log.info(f"Skipping ignored bin {we_bin}")
+            #     continue
             try:
                 clusters_in_bin = len(
                     self.clusters.cluster_models[
@@ -3891,7 +3896,8 @@ class modelWE:
                 )
             except AttributeError as e:
                 log.error(
-                    f"Error obtaining clusters for WE bin {we_bin}, remapped to {self.clusters.we_remap[we_bin]}. Target {self.clusters.target_bins}, basis {self.clusters.basis_bins}"
+                    f"Error obtaining clusters for WE bin {we_bin}, remapped to {self.clusters.we_remap[we_bin]}. "
+                    f"Target {self.clusters.target_bins}, basis {self.clusters.basis_bins}"
                 )
                 raise e
 
