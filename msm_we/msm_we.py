@@ -3445,13 +3445,19 @@ class modelWE:
         # all_unfilled_bins holds any bin that was ever attempted, but unfilled
         # so, get the unfilled that were unfilled always, and never got clustered in
         # todo: take my stratified clusters model, and update we_remap for all the true unfilled clusters
-        true_unfilled = np.setdiff1d(list(all_unfilled_bins), list(all_filled_bins))
+
+        #true_unfilled = np.setdiff1d(list(all_unfilled_bins), list(all_filled_bins))
+        true_unfilled = np.setdiff1d(range(bin_mapper.nbins), list(all_filled_bins))
+        log.debug(f"Filled bins are {all_filled_bins}")
+        log.debug(f"Unfilled bins were {all_unfilled_bins}")
+        log.debug(f"True unfilled bins are {true_unfilled}")
 
         for unfilled_bin_idx in true_unfilled:
             remap_bin = self.find_nearest_bin(
-                bin_mapper, unfilled_bin_idx, list(true_unfilled)
+                bin_mapper, unfilled_bin_idx, list(all_filled_bins)
             )
             stratified_clusters.we_remap[unfilled_bin_idx] = remap_bin
+            log.debug(f"Remapped {unfilled_bin_idx} to {remap_bin}")
 
         # make sure this doesn't mess up we_remap later.. I think it should be fine, when I write to we_remap in the cleaning
         #       it should identify a superset of the bins identified here.
@@ -3466,7 +3472,7 @@ class modelWE:
         self.launch_ray_discretization()
 
     @staticmethod
-    def find_nearest_bin(bin_mapper, bin_idx, unfilled_bins):
+    def find_nearest_bin(bin_mapper, bin_idx, filled_bins):
         """
         Given a bin mapper, find the bin closest to bin_idx (that isn't bin_idx).
 
@@ -3512,7 +3518,10 @@ class modelWE:
             )
 
         # Remove both the bin you're looking at, and any other unfilled bins
-        all_ignored = np.concatenate([[bin_idx], unfilled_bins])
+        # all_ignored = np.concatenate([[bin_idx], unfilled_bins])
+
+        # Ignore any bin that isn't an explicitly provided filled bin
+        all_ignored = np.setdiff1d( range(centers.shape[0]), filled_bins)
         other_centers = np.delete(centers, all_ignored, axis=0)
 
         closest = np.argmin(distance_function(centers[bin_idx], other_centers))
@@ -3590,7 +3599,7 @@ class modelWE:
                 for unfilled_bin in unfilled_bins:
 
                     nearest_filled_bin = self.find_nearest_bin(
-                        bin_mapper, unfilled_bin, list(unfilled_bins)
+                        bin_mapper, unfilled_bin, list(filled_bins)
                     )
 
                     unfilled_bin_indices = np.where(we_bin_assignments == unfilled_bin)
@@ -4094,7 +4103,8 @@ class modelWE:
         try:
             dtrajs = kmeans_model.predict(transformed_coords)
         except AttributeError as e:
-            log.debug("Cluster center was not initialized and not remapped")
+            log.error("Cluster center was not initialized and not remapped")
+            log.error(kmeans_model.we_remap)
             raise e
             # TODO: Remap to nearest visited
 
