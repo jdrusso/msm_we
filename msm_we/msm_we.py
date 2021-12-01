@@ -3446,7 +3446,7 @@ class modelWE:
         # so, get the unfilled that were unfilled always, and never got clustered in
         # todo: take my stratified clusters model, and update we_remap for all the true unfilled clusters
 
-        #true_unfilled = np.setdiff1d(list(all_unfilled_bins), list(all_filled_bins))
+        # true_unfilled = np.setdiff1d(list(all_unfilled_bins), list(all_filled_bins))
         true_unfilled = np.setdiff1d(range(bin_mapper.nbins), list(all_filled_bins))
         log.debug(f"Filled bins are {all_filled_bins}")
         log.debug(f"Unfilled bins were {all_unfilled_bins}")
@@ -3521,7 +3521,7 @@ class modelWE:
         # all_ignored = np.concatenate([[bin_idx], unfilled_bins])
 
         # Ignore any bin that isn't an explicitly provided filled bin
-        all_ignored = np.setdiff1d( range(centers.shape[0]), filled_bins)
+        all_ignored = np.setdiff1d(range(centers.shape[0]), filled_bins)
         other_centers = np.delete(centers, all_ignored, axis=0)
 
         closest = np.argmin(distance_function(centers[bin_idx], other_centers))
@@ -4426,7 +4426,7 @@ class modelWE:
         return fluxMatrix
 
     def get_fluxMatrix(
-        self, n_lag, first_iter=None, last_iter=None, iters_to_use=None, use_ray=False
+        self, n_lag, first_iter=1, last_iter=None, iters_to_use=None, use_ray=False
     ):
         """
         Compute the matrix of fluxes at a given lag time, for a range of iterations.
@@ -4459,12 +4459,16 @@ class modelWE:
 
         self._fluxMatrixParams = [n_lag, first_iter, last_iter, iters_to_use]
 
-        if iters_to_use is None:
-            iters_to_use = range(first_iter + 1, last_iter + 1)
-        elif first_iter is None and last_iter is None:
+        if iters_to_use is not None:
             log.info(
                 "Specific iterations to use were provided for fluxmatrix calculation, using those."
             )
+        if iters_to_use is None:
+
+            if last_iter is None:
+                last_iter = self.maxIter
+            iters_to_use = range(first_iter + 1, last_iter + 1)
+
         # Else, if iters_to_use is Not none, and Not (first_iter is None and last_iter is None)
         else:
             log.error(
