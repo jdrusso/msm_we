@@ -3319,47 +3319,47 @@ class modelWE:
                     f"{type(bin_mapper)} mapper loaded, but supported mappers are {supported_mappers} and others may"
                     f"produce inconsistent bins between iterations. Replacing with linear bins in each pcoord for consistency."
                 )
-                log.warning("WE bin boundaries matter for ")
+                raise Exception
 
-                # Here I need to turn an N-dimensional MAB bin mapper into an n-dimensional rectilinear bin mapper..
-                # 1. Get the min-max in each dimension
-                #       -- Using iteration.pcoords, which has shape (segments, 2, n_dim)
-                # 2. Get the number of bins in each dimension
-                # 3. Make an N-D Rectilinear bin-mapper using those
-                total_bins = bin_mapper.nbins
-                # TODO: Do this better than just uniform, maybe try to get number of bins in each dimension. But this is
-                #   not easy to get out of bin mappers in a general way.
-                nbins_per_dim = [
-                    max(2, int(np.power(total_bins, 1 / self.pcoord_ndim)))
-                    for _ in range(self.pcoord_ndim)
-                ]
-                log.info(
-                    f"Using {total_bins} total WE bins, so"
-                    f" {nbins_per_dim} in each of {self.pcoord_ndim} pcoord dimensions"
-                )
-                boundaries[0] = -np.inf
-                boundaries[-1] = np.inf
-                all_boundaries.append(boundaries)
-            
-                log.info(all_boundaries)
-
-                min_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
-                max_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
-                all_boundaries = []
-                for dim in range(self.pcoord_ndim):
-                    min_coords[dim], max_coords[dim] = (
-                        np.min(iteration.pcoords[:, :, dim]),
-                        np.max(iteration.pcoords[:, :, dim]),
-                    )
-
-                    boundaries = np.linspace(
-                        min_coords[dim], max_coords[dim], nbins_per_dim[dim]
-                    )
-                    boundaries[0] = -np.inf
-                    boundaries[-1] = np.inf
-                    all_boundaries.append(boundaries)
-
-                bin_mapper = RectilinearBinMapper(all_boundaries)
+                # # Here I need to turn an N-dimensional MAB bin mapper into an n-dimensional rectilinear bin mapper..
+                # # 1. Get the min-max in each dimension
+                # #       -- Using iteration.pcoords, which has shape (segments, 2, n_dim)
+                # # 2. Get the number of bins in each dimension
+                # # 3. Make an N-D Rectilinear bin-mapper using those
+                # total_bins = bin_mapper.nbins
+                # # TODO: Do this better than just uniform, maybe try to get number of bins in each dimension. But this is
+                # #   not easy to get out of bin mappers in a general way.
+                # nbins_per_dim = [
+                #     max(2, int(np.power(total_bins, 1 / self.pcoord_ndim)))
+                #     for _ in range(self.pcoord_ndim)
+                # ]
+                # log.info(
+                #     f"Using {total_bins} total WE bins, so"
+                #     f" {nbins_per_dim} in each of {self.pcoord_ndim} pcoord dimensions"
+                # )
+                # boundaries[0] = -np.inf
+                # boundaries[-1] = np.inf
+                # all_boundaries.append(boundaries)
+                #
+                # log.info(all_boundaries)
+                #
+                # min_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
+                # max_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
+                # all_boundaries = []
+                # for dim in range(self.pcoord_ndim):
+                #     min_coords[dim], max_coords[dim] = (
+                #         np.min(iteration.pcoords[:, :, dim]),
+                #         np.max(iteration.pcoords[:, :, dim]),
+                #     )
+                #
+                #     boundaries = np.linspace(
+                #         min_coords[dim], max_coords[dim], nbins_per_dim[dim]
+                #     )
+                #     boundaries[0] = -np.inf
+                #     boundaries[-1] = np.inf
+                #     all_boundaries.append(boundaries)
+                #
+                # bin_mapper = RectilinearBinMapper(all_boundaries)
 
             # TODO: Before moving on, make sure it's actually possible to populate each bin with enough segments to cluster
             #       at least once from the given set of iterations.
@@ -3406,6 +3406,8 @@ class modelWE:
         # ## Build the clustering model
         self.dtrajs = []
         extra_iters_used = 0
+        all_filled_bins = set()
+        all_unfilled_bins = set()
         for iter_idx, iteration in enumerate(
             tqdm.tqdm(iters_to_use, desc="Clustering")
         ):
@@ -3420,7 +3422,12 @@ class modelWE:
             with concurrent.futures.ProcessPoolExecutor(
                 max_workers=1, mp_context=mp.get_context("fork")
             ) as executor:
-                stratified_clusters, extra_iters_used = executor.submit(
+                (
+                    stratified_clusters,
+                    extra_iters_used,
+                    filled_bins,
+                    unfilled_bins,
+                ) = executor.submit(
                     self.do_stratified_clustering,
                     [
                         self,
@@ -3430,6 +3437,23 @@ class modelWE:
                         ignored_bins,
                     ],
                 ).result()
+
+                all_filled_bins.update(filled_bins)
+                all_unfilled_bins.update(unfilled_bins)
+
+        # all_filled_bins holds every bin that was clustered in
+        # all_unfilled_bins holds any bin that was ever attempted, but unfilled
+        # so, get the unfilled that were unfilled always, and never got clustered in
+        # todo: take my stratified clusters model, and update we_remap for all the true unfilled clusters
+        true_unfilled = np.setdiff1d(all_unfilled_bins, all_filled_bins)
+
+        for unfilled_bin_idx in true_unfilled:
+            remap_bin = self.find_nearest_bin(
+                bin_mapper, unfilled_bin_idx, true_unfilled
+            )
+            stratified_clusters.we_remap[unfilled_bin_idx] = remap_bin
+
+        # TODO: make sure this doesn't mess up we_remap later
 
         self.clusters = stratified_clusters
         self.clusters.model = self
@@ -3482,7 +3506,9 @@ class modelWE:
             _centers = []
             for dim in bounds:
                 _centers.append(dim[:-1] + (dim[1:] - dim[:-1]) / 2)
-            centers = np.array(np.meshgrid(*_centers)).T.squeeze().reshape(-1, len(bounds))
+            centers = (
+                np.array(np.meshgrid(*_centers)).T.squeeze().reshape(-1, len(bounds))
+            )
 
         # Remove both the bin you're looking at, and any other unfilled bins
         all_ignored = np.concatenate([[bin_idx], unfilled_bins])
@@ -3544,6 +3570,7 @@ class modelWE:
         # Maybe not even necessary to track iter_coords, just _iter_coords.
         # The problem with it as it stands is that assert -- imagine if I have to grab a second iteration
         while not all_bins_have_segments:
+            unfilled_bins = []
 
             # This may cover the same use case as iteration > self.maxIter below
             try:
@@ -3643,7 +3670,7 @@ class modelWE:
                 log.error(f"Error fitting k-means to bin {_bin}")
                 raise e
 
-        return kmeans_models, used_iters
+        return kmeans_models, used_iters, unique_bins, unfilled_bins
 
     def organize_stratified(self, use_ray=True):
         """
@@ -4063,7 +4090,12 @@ class modelWE:
         # Otherwise, apply the k-means model and discretize
         transformed_coords = self.coordinates.transform(processCoordinates(iter_coords))
 
-        dtrajs = kmeans_model.predict(transformed_coords)
+        try:
+            dtrajs = kmeans_model.predict(transformed_coords)
+        except AttributeError as e:
+            log.debug("Cluster center was not initialized and not remapped")
+            raise e
+            # TODO: Remap to nearest visited
 
         return dtrajs, 1, iteration, kmeans_model.target_bins, kmeans_model.basis_bins
 
