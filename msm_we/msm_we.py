@@ -3465,8 +3465,10 @@ class modelWE:
         self.clusters = stratified_clusters
         self.clusters.model = self
 
-        # -1 because we don't cluster in the target
-        self.n_clusters = n_clusters * (bin_mapper.nbins - 1)
+        ## The below -1 was removed, because now I may specify a custom set of WE bins
+        ## -1 because we don't cluster in the target
+
+        self.n_clusters = n_clusters * (bin_mapper.nbins)
 
         self.clusters.toggle = False
         self.launch_ray_discretization()
@@ -3855,11 +3857,13 @@ class modelWE:
         for empty_we_bin in empty_we_bins:
 
             # Find the nearest non-empty bin
-            #nearest_populated_bin_idx = np.abs(
+            # nearest_populated_bin_idx = np.abs(
             #    empty_we_bin - populated_we_bins
-            #).argmin()
-            #nearest_populated_bin = populated_we_bins[nearest_populated_bin_idx]
-            nearest_populated_bin = self.find_nearest_bin(self.clusters.bin_mapper, empty_we_bin, populated_we_bins)
+            # ).argmin()
+            # nearest_populated_bin = populated_we_bins[nearest_populated_bin_idx]
+            nearest_populated_bin = self.find_nearest_bin(
+                self.clusters.bin_mapper, empty_we_bin, populated_we_bins
+            )
 
             # Replace self.clusters.cluster_models[empty_we_bin].cluster_centers_ with
             #   self.clusters.cluster_models[nearest_nonempty_we_bin].cluster_centers_
@@ -3886,7 +3890,9 @@ class modelWE:
                     ].cluster_centers_
                 )
             except AttributeError as e:
-                log.error(f"Error obtaining clusters for WE bin {we_bin}, remapped to {self.clusters.we_remap[we_bin]}. Target {self.clusters.target_bins}, basis {self.clusters.basis_bins}")
+                log.error(
+                    f"Error obtaining clusters for WE bin {we_bin}, remapped to {self.clusters.we_remap[we_bin]}. Target {self.clusters.target_bins}, basis {self.clusters.basis_bins}"
+                )
                 raise e
 
             _running_total += clusters_in_bin
