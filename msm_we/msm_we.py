@@ -11,8 +11,7 @@ import concurrent
 import multiprocessing as mp
 from copy import deepcopy
 from westpa import analysis
-
-from westpa.core.binning import MABBinMapper
+from westpa.core.binning import RectilinearBinMapper, VoronoiBinMapper
 
 from scipy.sparse import coo_matrix, csr_matrix
 import scipy.sparse as sparse
@@ -928,8 +927,6 @@ class modelWE:
             )
 
         in_target = np.all(in_target, axis=1)
-
-        log.debug(f"{pcoords} in {self.target_pcoord_bounds}: {in_target}")
 
         return in_target
 
@@ -3245,6 +3242,7 @@ class modelWE:
         use_ray=True,
         bin_iteration=2,
         iters_to_use=None,
+        user_bin_mapper=None,
         **_cluster_args,
     ):
         """
@@ -3277,6 +3275,11 @@ class modelWE:
 
         Returns
         -------
+
+        TODO
+        ----
+        Allow directly passing in a bin mapper or equivalent here. Way easier than trying to reverse engineer one.
+        Require it if the existing is not supported.
         """
 
         log.info(
@@ -3291,11 +3294,84 @@ class modelWE:
 
         westpa.binning = importlib.import_module("westpa.tools.binning", "westpa.tools")
 
-        bin_mapper = iteration.bin_mapper
+        if user_bin_mapper is not None:
+            log.info("Loading user-specified bin mapper for stratified clustering.")
+            bin_mapper = user_bin_mapper
+        else:
+            log.info("Loading pickled bin mapper from H5 for stratified clustering...")
+            bin_mapper = iteration.bin_mapper
 
-        if bin_mapper is MABBinMapper:
-            pass
+            # Problem: I need a consistent set of bins, and some bin mappers may not return that! Some may re-calculate bins
+            #    on-the-fly whenever data is passed to them, which will produce different bins for each iteration.
+            #   In particular, ones that may are really any functional mapper:
+            #   -   MABBinMapper will by construction never return bins that have everything populated, and by default,
+            #       calculates boundaries on the fly
+            #   -   PiecewiseBinMapper/VectorizingFuncBinMapper/FuncBinMapper are also function-based so they may do whatever
+            #   Ones that won't:
+            #   -   VoronoiBinMapper takes in a set of centers when it's initialized, so it'll be consistent
+            #   -   Rectilinear is of course always consistent
+            # Ideally, the best approach here would be to go through your bin mapper, recursing as necessary, and replacing
+            #   any of the above functional bin mapper types with static bin mappers.
 
+            supported_mappers = [RectilinearBinMapper, VoronoiBinMapper]
+            if type(bin_mapper) not in supported_mappers:
+                log.warning(
+                    f"{type(bin_mapper)} mapper loaded, but supported mappers are {supported_mappers} and others may"
+                    f"produce inconsistent bins between iterations. Replacing with linear bins in each pcoord for consistency."
+                )
+                raise Exception
+
+                # # Here I need to turn an N-dimensional MAB bin mapper into an n-dimensional rectilinear bin mapper..
+                # # 1. Get the min-max in each dimension
+                # #       -- Using iteration.pcoords, which has shape (segments, 2, n_dim)
+                # # 2. Get the number of bins in each dimension
+                # # 3. Make an N-D Rectilinear bin-mapper using those
+                # total_bins = bin_mapper.nbins
+                # # TODO: Do this better than just uniform, maybe try to get number of bins in each dimension. But this is
+                # #   not easy to get out of bin mappers in a general way.
+                # nbins_per_dim = [
+                #     max(2, int(np.power(total_bins, 1 / self.pcoord_ndim)))
+                #     for _ in range(self.pcoord_ndim)
+                # ]
+                # log.info(
+                #     f"Using {total_bins} total WE bins, so"
+                #     f" {nbins_per_dim} in each of {self.pcoord_ndim} pcoord dimensions"
+                # )
+                # boundaries[0] = -np.inf
+                # boundaries[-1] = np.inf
+                # all_boundaries.append(boundaries)
+                #
+                # log.info(all_boundaries)
+                #
+                # min_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
+                # max_coords = np.full(shape=(self.pcoord_ndim), fill_value=np.nan)
+                # all_boundaries = []
+                # for dim in range(self.pcoord_ndim):
+                #     min_coords[dim], max_coords[dim] = (
+                #         np.min(iteration.pcoords[:, :, dim]),
+                #         np.max(iteration.pcoords[:, :, dim]),
+                #     )
+                #
+                #     boundaries = np.linspace(
+                #         min_coords[dim], max_coords[dim], nbins_per_dim[dim]
+                #     )
+                #     boundaries[0] = -np.inf
+                #     boundaries[-1] = np.inf
+                #     all_boundaries.append(boundaries)
+                #
+                # bin_mapper = RectilinearBinMapper(all_boundaries)
+
+            # TODO: Before moving on, make sure it's actually possible to populate each bin with enough segments to cluster
+            #       at least once from the given set of iterations.
+            #   In other words, just load up pcoords iteration by iteration, and count the total number in each bin.
+            #   Note that it's possible you'll end up clustering in a bin once, but then pulling too few in that bin for
+            #       the rest of the iterations after that, or something like that.
+            #   The alternative to this would be in do_stratified_clustering(), if a bin isn't populated, check every
+            #       subsequent iteration and see if it's possible to populate it from them.
+            #   This is a little more flexible/dynamic, however, I think it may potentially require much more looping
+            #       through iterations.
+
+        # Clustering will not be performed in these bins
         ignored_bins = []
 
         if not streaming or not use_ray:
@@ -3330,6 +3406,8 @@ class modelWE:
         # ## Build the clustering model
         self.dtrajs = []
         extra_iters_used = 0
+        all_filled_bins = set()
+        all_unfilled_bins = set()
         for iter_idx, iteration in enumerate(
             tqdm.tqdm(iters_to_use, desc="Clustering")
         ):
@@ -3344,7 +3422,12 @@ class modelWE:
             with concurrent.futures.ProcessPoolExecutor(
                 max_workers=1, mp_context=mp.get_context("fork")
             ) as executor:
-                stratified_clusters, extra_iters_used = executor.submit(
+                (
+                    stratified_clusters,
+                    extra_iters_used,
+                    filled_bins,
+                    unfilled_bins,
+                ) = executor.submit(
                     self.do_stratified_clustering,
                     [
                         self,
@@ -3355,25 +3438,126 @@ class modelWE:
                     ],
                 ).result()
 
+                all_filled_bins.update(filled_bins)
+                all_unfilled_bins.update(unfilled_bins)
+
+        # all_filled_bins holds every bin that was clustered in
+        # all_unfilled_bins holds any bin that was ever attempted, but unfilled
+        # so, get the unfilled that were unfilled always, and never got clustered in
+        # todo: take my stratified clusters model, and update we_remap for all the true unfilled clusters
+
+        # true_unfilled = np.setdiff1d(list(all_unfilled_bins), list(all_filled_bins))
+        true_unfilled = np.setdiff1d(range(bin_mapper.nbins), list(all_filled_bins))
+        log.debug(f"Filled bins are {all_filled_bins}")
+        log.debug(f"Unfilled bins were {all_unfilled_bins}")
+        log.debug(f"True unfilled bins are {true_unfilled}")
+
+        for unfilled_bin_idx in true_unfilled:
+            remap_bin = self.find_nearest_bin(
+                bin_mapper, unfilled_bin_idx, list(all_filled_bins)
+            )
+            stratified_clusters.we_remap[unfilled_bin_idx] = remap_bin
+            log.debug(f"Remapped {unfilled_bin_idx} to {remap_bin}")
+
+        # make sure this doesn't mess up we_remap later.. I think it should be fine, when I write to we_remap in the cleaning
+        #       it should identify a superset of the bins identified here.
+
         self.clusters = stratified_clusters
         self.clusters.model = self
 
-        # -1 because we don't cluster in the target
-        self.n_clusters = n_clusters * (bin_mapper.nbins - 1)
+        ## The below -1 was removed, because now I may specify a custom set of WE bins
+        ## -1 because we don't cluster in the target
 
-        # for i, model in enumerate(self.clusters.cluster_models):
-        #     print(f"Model {i}: \t ", end=" ")
-        #     try:
-        #         print(model.cluster_centers_)
-        #     except AttributeError:
-        #         print("No cluster centers!")
+        self.n_clusters = n_clusters * (bin_mapper.nbins)
 
         self.clusters.toggle = False
         self.launch_ray_discretization()
 
+    @staticmethod
+    def find_nearest_bin(bin_mapper, bin_idx, filled_bins):
+        """
+        Given a bin mapper, find the bin closest to bin_idx (that isn't bin_idx).
+
+        Do this Voronoi-style by obtaining a set of bin centers, and finding which center bin_idx is closest to.
+
+        Parameters
+        ----------
+        bin_mapper
+        bin_idx
+
+        Returns
+        -------
+        Index of the closest bin.
+
+        TODO
+        ----
+        Note in the documentation that this can be overriden for finer control over empty bin mapping, if so desired.
+        """
+
+        assert type(bin_mapper) in [
+            VoronoiBinMapper,
+            RectilinearBinMapper,
+        ], f"{type(bin_mapper)} is unsupported!"
+
+        if type(bin_mapper) is VoronoiBinMapper:
+
+            centers = bin_mapper.centers
+            distance_function = bin_mapper.dfunc
+
+        elif type(bin_mapper) is RectilinearBinMapper:
+
+            def _rmsd(point, _centers):
+                return np.sqrt(np.mean(np.power(point - _centers, 2), axis=1))
+
+            distance_function = _rmsd
+
+            bounds = np.array(bin_mapper.boundaries)
+            _centers = []
+            for dim in bounds:
+                _centers.append(dim[:-1] + (dim[1:] - dim[:-1]) / 2)
+            centers = (
+                np.array(np.meshgrid(*_centers)).T.squeeze().reshape(-1, len(bounds))
+            )
+
+        # Remove both the bin you're looking at, and any other unfilled bins
+        # all_ignored = np.concatenate([[bin_idx], unfilled_bins])
+
+        # Ignore any bin that isn't an explicitly provided filled bin
+        all_ignored = np.setdiff1d(range(centers.shape[0]), filled_bins)
+        other_centers = np.delete(centers, all_ignored, axis=0)
+
+        closest = np.argmin(distance_function(centers[bin_idx], other_centers))
+
+        # Increment index if it's past the ones we deleted
+        for _bin_idx in sorted(all_ignored):
+            if closest >= _bin_idx:
+                closest += 1
+
+        return closest
+
     def do_stratified_clustering(self, arg):
         """
         Perform the full-stratified clustering.
+
+        This works as follows:
+
+            1. Pull coordinates from the first iteration to process
+            2. Assign each segment to a WE bin, using its pcoord and the bin_mapper associated with this StratifiedCluster
+                object.
+            3a. If any of the seen WE bins have fewer segments than cluster centers, and there are more iterations left
+                to process, repeat from 1.
+                - Note that this may add NEW seen bins, and those new seen bins may not be full yet -- so more iterations
+                    may be required.
+            3b. If any seen WE bins have fewer segments than cluster centers, **but no iterations are left to process**,
+                then assign each structure in an "unfilled" WE bin to the "filled" WE bin with the closest index.,
+
+            At this point, we have a set of structures and the WE bins they're associated with, and each WE bin has a
+            number of structures equal to or greater than the target number of cluster centers.
+
+            Within each WE bin:
+
+            4. Apply dimensionality reduction to structures
+            5. Update clustering for that bin using this set of dimensionality reduced coordinates.
         """
 
         self, kmeans_models, iters_to_use, processCoordinates, ignored_bins = arg
@@ -3386,7 +3570,6 @@ class modelWE:
         min_coords = kmeans_models.cluster_args["n_clusters"]
 
         # The number of populated bins is the number of total bins - 1
-        # we_bin_segs = [[] for _ in range(bin_mapper.nbins)]
         all_bins_have_segments = False
 
         # Until all bins are populated
@@ -3394,22 +3577,43 @@ class modelWE:
         iter_coords = []
         unique_bins = np.array([])
         counts = np.array([])
-        # bin_segs = np.array([])
-        #        seen_we_bins = np.array([])
-        #        we_bin_segs = []
+        we_bin_assignments = []
 
         # Maybe not even necessary to track iter_coords, just _iter_coords.
         # The problem with it as it stands is that assert -- imagine if I have to grab a second iteration
         while not all_bins_have_segments:
+            unfilled_bins = []
 
             # This may cover the same use case as iteration > self.maxIter below
             try:
                 iteration = iters_to_use.pop(0)
             except IndexError:
-                log.error(
+                log.warning(
                     f"At iteration {iteration} (pulled {used_iters} extra), couldn't get segments in all bins, and no "
-                    f"iterations left"
+                    f"iterations left."
                 )
+
+                # Which bin didn't have enough clusters?
+                unfilled_bins = unique_bins[counts < min_coords]
+                filled_bins = np.setdiff1d(unique_bins, unfilled_bins)
+
+                # Find the nearest non-empty bin
+                for unfilled_bin in unfilled_bins:
+
+                    nearest_filled_bin = self.find_nearest_bin(
+                        bin_mapper, unfilled_bin, list(filled_bins)
+                    )
+
+                    unfilled_bin_indices = np.where(we_bin_assignments == unfilled_bin)
+                    log.warning(
+                        f"Remapping {len(unfilled_bin_indices)} segments from unfilled bin {unfilled_bin} to "
+                        f"{nearest_filled_bin} for stratified clustering"
+                    )
+                    we_bin_assignments[unfilled_bin_indices] = nearest_filled_bin
+
+                # Remove unfilled bins from unique_bins
+                unique_bins = filled_bins
+
                 break
 
             if used_iters > -1:
@@ -3450,44 +3654,35 @@ class modelWE:
             if len(pcoord_array) > 0:
                 we_bin_assignments = bin_mapper.assign(pcoord_array)
             else:
-                log.debug("Pcoords len 0, we_bin_assignments will be empty")
+                log.debug(
+                    "No coordinates outside of basis/target, we_bin_assignments will be empty and clustering"
+                    f" will be skipped for this iteration. ({sum(pcoord_is_target)} in target, {sum(pcoord_is_basis)} in basis)"
+                )
                 we_bin_assignments = np.array([])
-
-            all_bins_have_segments = False
 
             unique_bins, counts = np.unique(we_bin_assignments, return_counts=True)
             all_bins_have_segments = np.all(counts >= min_coords)
 
         # By now, I have some segments in each WE bin.
-        # Now, do clustering within each WE bin
-
-        # for _bin in range(bin_mapper.nbins):
-        # Only cluster in WE bins that things were actually assigned to
+        # Now, do clustering within each WE bin, and only cluster in WE bins that things were actually assigned to
         for i, _bin in enumerate(unique_bins):
 
-            # if _bin in ignored_bins:
-            #     continue
-
             segs_in_bin = np.argwhere(we_bin_assignments == _bin)
-            log.debug(
-                f"Bin {_bin}: Segs {segs_in_bin} \n Iter_coords: {iter_coords[segs_in_bin].shape}"
-            )
+
+            log.debug(f"Clustering {segs_in_bin} segments in WE bin {_bin}.")
 
             transformed_coords = self.coordinates.transform(
                 processCoordinates(np.squeeze(iter_coords[segs_in_bin]))
             )
 
-            # log.info(f"Was on bin {_bin}, where there were {segs_in_bin}")
-
             try:
                 kmeans_models.cluster_models[_bin].partial_fit(transformed_coords)
             except ValueError as e:
                 log.info(f"Was on bin {_bin}")
-                raise Exception(f"Error fitting k-means to bin {_bin}")
                 log.error(f"Error fitting k-means to bin {_bin}")
                 raise e
 
-        return kmeans_models, used_iters
+        return kmeans_models, used_iters, unique_bins, unfilled_bins
 
     def organize_stratified(self, use_ray=True):
         """
@@ -3562,17 +3757,17 @@ class modelWE:
         )
 
         empty_we_bins = set()
-        target, basis = self.clusters.target_bins, self.clusters.basis_bins
+        # target, basis = self.clusters.target_bins, self.clusters.basis_bins
         # Go through each WE bin, finding which clusters within it are not in the connected set
         #    and removing them.
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
-            if we_bin in target:
-                log.debug(f"Skipping target bin {we_bin}")
-                continue
-            if we_bin in basis:
-                log.debug(f"Skipping basis bin {we_bin}")
-                continue
+            # if we_bin in target:
+            #     log.debug(f"Skipping target bin {we_bin}")
+            #     continue
+            # if we_bin in basis:
+            #     log.debug(f"Skipping basis bin {we_bin}")
+            #     continue
 
             # consecutive_index = self.clusters.legitimate_bins.index(we_bin)
             consecutive_index = we_bin
@@ -3616,21 +3811,27 @@ class modelWE:
             # If not cleaning anything, just move on
             if len(bin_clusters_to_clean) == 0:
                 log.debug(f"not cleaning any clusters from bin {we_bin}")
+
+                if len(clusters_in_bin) == 0:
+                    empty_we_bins.add(we_bin)
+
                 continue
 
             # If cleaning EVERYTHING, handle this bin differently
             # We'll just re-map it to a "good" adjacent WE bin
             elif (
-                not (we_bin in basis or we_bin in target)
+                # not (we_bin in basis or we_bin in target)
                 # and len(bin_clusters_to_clean) == self.clusters.n_clusters_per_bin
-                and len(bin_clusters_to_clean) == len(clusters_in_bin)
+                # and
+                len(bin_clusters_to_clean)
+                == len(clusters_in_bin)
             ):
                 empty_we_bins.add(we_bin)
 
             else:
                 log.debug(
                     f"Cleaning {len(bin_clusters_to_clean)} clusters {bin_clusters_to_clean} from WE bin {we_bin}."
-                    f" (Basis {basis}, target {target})"
+                    # f" (Basis {basis}, target {target})"
                 )
 
             self.clusters.cluster_models[we_bin].cluster_centers_ = np.delete(
@@ -3646,11 +3847,14 @@ class modelWE:
         log.debug(f"n_clusters is now {self.n_clusters}")
 
         # If a WE bin was completely emptied of cluster centers, map it to the nearest non-empty bin
+        # populated_we_bins = np.setdiff1d(
+        #     range(self.clusters.bin_mapper.nbins),
+        #     np.concatenate([list(target), list(basis)]),
+        # )
+        # populated_we_bins = np.setdiff1d(populated_we_bins, list(empty_we_bins))
         populated_we_bins = np.setdiff1d(
-            range(self.clusters.bin_mapper.nbins),
-            np.concatenate([list(target), list(basis)]),
+            range(self.clusters.bin_mapper.nbins), list(empty_we_bins)
         )
-        populated_we_bins = np.setdiff1d(populated_we_bins, list(empty_we_bins))
 
         if len(empty_we_bins) > 0:
             log.warning(f"All clusters were cleaned from bins {empty_we_bins}")
@@ -3658,10 +3862,13 @@ class modelWE:
         for empty_we_bin in empty_we_bins:
 
             # Find the nearest non-empty bin
-            nearest_populated_bin_idx = np.abs(
-                empty_we_bin - populated_we_bins
-            ).argmin()
-            nearest_populated_bin = populated_we_bins[nearest_populated_bin_idx]
+            # nearest_populated_bin_idx = np.abs(
+            #    empty_we_bin - populated_we_bins
+            # ).argmin()
+            # nearest_populated_bin = populated_we_bins[nearest_populated_bin_idx]
+            nearest_populated_bin = self.find_nearest_bin(
+                self.clusters.bin_mapper, empty_we_bin, populated_we_bins
+            )
 
             # Replace self.clusters.cluster_models[empty_we_bin].cluster_centers_ with
             #   self.clusters.cluster_models[nearest_nonempty_we_bin].cluster_centers_
@@ -3675,14 +3882,25 @@ class modelWE:
         _running_total = 0
         for we_bin in range(self.clusters.bin_mapper.nbins):
 
-            if (
-                we_bin in self.clusters.target_bins
-                or we_bin in self.clusters.basis_bins
-            ):
-                #             log.info(f"Skipping ignored bin {we_bin}")
-                continue
+            # if (
+            #     we_bin in self.clusters.target_bins
+            #     or we_bin in self.clusters.basis_bins
+            # ):
+            #     #             log.info(f"Skipping ignored bin {we_bin}")
+            #     continue
+            try:
+                clusters_in_bin = len(
+                    self.clusters.cluster_models[
+                        self.clusters.we_remap[we_bin]
+                    ].cluster_centers_
+                )
+            except AttributeError as e:
+                log.error(
+                    f"Error obtaining clusters for WE bin {we_bin}, remapped to {self.clusters.we_remap[we_bin]}. "
+                    f"Target {self.clusters.target_bins}, basis {self.clusters.basis_bins}"
+                )
+                raise e
 
-            clusters_in_bin = len(self.clusters.cluster_models[we_bin].cluster_centers_)
             _running_total += clusters_in_bin
             log.debug(
                 f"{clusters_in_bin} in bin {we_bin}. Running total: {_running_total}"
@@ -3907,7 +4125,13 @@ class modelWE:
         # Otherwise, apply the k-means model and discretize
         transformed_coords = self.coordinates.transform(processCoordinates(iter_coords))
 
-        dtrajs = kmeans_model.predict(transformed_coords)
+        try:
+            dtrajs = kmeans_model.predict(transformed_coords)
+        except AttributeError as e:
+            log.error("Cluster center was not initialized and not remapped")
+            log.error(kmeans_model.we_remap)
+            raise e
+            # TODO: Remap to nearest visited
 
         return dtrajs, 1, iteration, kmeans_model.target_bins, kmeans_model.basis_bins
 
@@ -4227,7 +4451,7 @@ class modelWE:
         return fluxMatrix
 
     def get_fluxMatrix(
-        self, n_lag, first_iter=None, last_iter=None, iters_to_use=None, use_ray=False
+        self, n_lag, first_iter=1, last_iter=None, iters_to_use=None, use_ray=False
     ):
         """
         Compute the matrix of fluxes at a given lag time, for a range of iterations.
@@ -4260,12 +4484,16 @@ class modelWE:
 
         self._fluxMatrixParams = [n_lag, first_iter, last_iter, iters_to_use]
 
-        if iters_to_use is None:
-            iters_to_use = range(first_iter + 1, last_iter + 1)
-        elif first_iter is None and last_iter is None:
+        if iters_to_use is not None:
             log.info(
                 "Specific iterations to use were provided for fluxmatrix calculation, using those."
             )
+        if iters_to_use is None:
+
+            if last_iter is None:
+                last_iter = self.maxIter
+            iters_to_use = range(first_iter + 1, last_iter + 1)
+
         # Else, if iters_to_use is Not none, and Not (first_iter is None and last_iter is None)
         else:
             log.error(
