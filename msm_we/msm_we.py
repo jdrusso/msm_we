@@ -3855,10 +3855,11 @@ class modelWE:
         for empty_we_bin in empty_we_bins:
 
             # Find the nearest non-empty bin
-            nearest_populated_bin_idx = np.abs(
-                empty_we_bin - populated_we_bins
-            ).argmin()
-            nearest_populated_bin = populated_we_bins[nearest_populated_bin_idx]
+            #nearest_populated_bin_idx = np.abs(
+            #    empty_we_bin - populated_we_bins
+            #).argmin()
+            #nearest_populated_bin = populated_we_bins[nearest_populated_bin_idx]
+            nearest_populated_bin = self.find_nearest_bin(self.clusters.bin_mapper, empty_we_bin, populated_we_bins)
 
             # Replace self.clusters.cluster_models[empty_we_bin].cluster_centers_ with
             #   self.clusters.cluster_models[nearest_nonempty_we_bin].cluster_centers_
@@ -3878,12 +3879,16 @@ class modelWE:
             ):
                 #             log.info(f"Skipping ignored bin {we_bin}")
                 continue
+            try:
+                clusters_in_bin = len(
+                    self.clusters.cluster_models[
+                        self.clusters.we_remap[we_bin]
+                    ].cluster_centers_
+                )
+            except AttributeError as e:
+                log.error(f"Error obtaining clusters for WE bin {we_bin}, remapped to {self.clusters.we_remap[we_bin]}. Target {self.clusters.target_bins}, basis {self.clusters.basis_bins}")
+                raise e
 
-            clusters_in_bin = len(
-                self.clusters.cluster_models[
-                    self.clusters.we_remap[we_bin]
-                ].cluster_centers_
-            )
             _running_total += clusters_in_bin
             log.debug(
                 f"{clusters_in_bin} in bin {we_bin}. Running total: {_running_total}"
