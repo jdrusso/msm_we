@@ -3875,7 +3875,11 @@ class modelWE:
                 #             log.info(f"Skipping ignored bin {we_bin}")
                 continue
 
-            clusters_in_bin = len(self.clusters.cluster_models[we_bin].cluster_centers_)
+            clusters_in_bin = len(
+                self.clusters.cluster_models[
+                    self.clusters.we_remap[we_bin]
+                ].cluster_centers_
+            )
             _running_total += clusters_in_bin
             log.debug(
                 f"{clusters_in_bin} in bin {we_bin}. Running total: {_running_total}"
