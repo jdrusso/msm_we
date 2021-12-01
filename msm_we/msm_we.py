@@ -3445,15 +3445,16 @@ class modelWE:
         # all_unfilled_bins holds any bin that was ever attempted, but unfilled
         # so, get the unfilled that were unfilled always, and never got clustered in
         # todo: take my stratified clusters model, and update we_remap for all the true unfilled clusters
-        true_unfilled = np.setdiff1d(all_unfilled_bins, all_filled_bins)
+        true_unfilled = np.setdiff1d(list(all_unfilled_bins), list(all_filled_bins))
 
         for unfilled_bin_idx in true_unfilled:
             remap_bin = self.find_nearest_bin(
-                bin_mapper, unfilled_bin_idx, true_unfilled
+                bin_mapper, unfilled_bin_idx, list(true_unfilled)
             )
             stratified_clusters.we_remap[unfilled_bin_idx] = remap_bin
 
-        # TODO: make sure this doesn't mess up we_remap later
+        # make sure this doesn't mess up we_remap later.. I think it should be fine, when I write to we_remap in the cleaning
+        #       it should identify a superset of the bins identified here.
 
         self.clusters = stratified_clusters
         self.clusters.model = self
@@ -3589,7 +3590,7 @@ class modelWE:
                 for unfilled_bin in unfilled_bins:
 
                     nearest_filled_bin = self.find_nearest_bin(
-                        bin_mapper, unfilled_bin, unfilled_bins
+                        bin_mapper, unfilled_bin, list(unfilled_bins)
                     )
 
                     unfilled_bin_indices = np.where(we_bin_assignments == unfilled_bin)
