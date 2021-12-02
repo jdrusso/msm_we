@@ -231,7 +231,9 @@ class StratifiedClusters:
         self.n_total_clusters = self.n_clusters_per_bin * (
             self.bin_mapper.nbins - len(target_bins)
         )
-        log.info(f"Doing strat clustering with {self.n_total_clusters} total")
+        log.info(
+            f"Doing stratified clustering with {self.n_total_clusters} total clusters"
+        )
 
         self.cluster_args = cluster_args
         self.model = model
@@ -250,6 +252,7 @@ class StratifiedClusters:
 
         self.we_remap = {x: x for x in range(self.bin_mapper.nbins)}
 
+        # This isn't really used any more, excise it at some point.
         # I need consecutive indices for each non-basis/non-target bin
         # In other words, remove the target, and then consecutively index all the remaining bins
         # legitimate_bins = []
@@ -650,6 +653,8 @@ class modelWE:
         self.allocationMethod = (
             "adaptive"  # adaptive for dynamic allocation, uniform for equal allocation
         )
+
+        self.validation_models = None
 
         try:
             self.load_iter_data(1)
@@ -1078,7 +1083,7 @@ class modelWE:
 
             model = self
 
-            ## Launch Ray
+            # # Launch Ray
             # TODO: Do I actually want to do this in here? Previously, I assumed the user would set it up.
             step_idx = 0
             if use_ray:
@@ -1093,7 +1098,7 @@ class modelWE:
                     table, step_idx, f"{ray.available_resources()['CPU']} CPUs"
                 )
 
-            ## Initialize model
+            # # Initialize model
             step_idx += 1
             self.do_step(
                 table,
@@ -1111,14 +1116,14 @@ class modelWE:
             )
             self.set_note(table, step_idx, "")
 
-            ## Get number of iterations
+            # # Get number of iterations
             step_idx += 1
             self.do_step(
                 table, step_idx, step=model.get_iterations,
             )
             self.set_note(table, step_idx, f"{model.maxIter} iterations exist")
 
-            ## Load coordinates
+            # # Load coordinates
             step_idx += 1
             _max_coord_iter = [max_coord_iter, model.maxIter][max_coord_iter == -1]
             self.do_step(
@@ -1128,14 +1133,14 @@ class modelWE:
                 table, step_idx, f"Got coords for {_max_coord_iter} iterations"
             )
 
-            ## Dimensionality reduction
+            # # Dimensionality reduction
             step_idx += 1
             self.set_note(table, step_idx, f"Method: {model.dimReduceMethod}")
             self.do_step(
                 table, step_idx, step=model.dimReduce,
             )
 
-            ## Clustering
+            # # Clustering
             step_idx += 1
             self.do_step(
                 table,
@@ -1149,9 +1154,7 @@ class modelWE:
                 },
             )
 
-            post_cluster_model = deepcopy(model)
-
-            ## Flux matrix
+            # # Flux matrix
             step_idx += 1
             _fluxmatrix_iters = fluxmatrix_iters
             if fluxmatrix_iters[1] == -1:
@@ -1175,7 +1178,7 @@ class modelWE:
                 f"{[f'{_fluxmatrix_iters[0]} - {_fluxmatrix_iters[1]}', fluxmatrix_iters_to_use][fluxmatrix_iters_to_use is not None]}",
             )
 
-            ## Cleaning
+            # # Cleaning
             step_idx += 1
             original_clusters = model.fluxMatrixRaw.shape[0]
             self.do_step(
@@ -1191,101 +1194,108 @@ class modelWE:
                 f"{original_clusters} clusters cleaned to {final_clusters}",
             )
 
-            ## Transition matrix
+            # # Transition matrix
             step_idx += 1
             self.do_step(table, step_idx, step=model.get_Tmatrix)
 
-            ## Steady state
+            # # Steady state
             step_idx += 1
             self.do_step(table, step_idx, step=model.get_steady_state)
 
-            ## Steady-state flux
+            # # Steady-state flux
             step_idx += 1
             self.do_step(table, step_idx, step=model.get_steady_state_target_flux)
             self.set_note(table, step_idx, f"Target flux: {model.JtargetSS:.2e}")
 
-            ## Cross-validation
+            # # Cross-validation
             # TODO
             # use `post_cluster_model`, which is the discretized model right before the fluxmatrix was calculated
             # for now just do something useless w/ the post_cluster_model so linter doesn't complain
             step_idx += 1
-            post_cluster_model.modelName
-
-            step_text = table.columns[1]._cells[step_idx]
-            table.columns[0]._cells[
-                step_idx
-            ] = "[bold black][ [bold yellow]* [bold black]]"
-            table.columns[1]._cells[step_idx] = f"[bold black]{step_text}"
-
-            # TODO: double-copying this seems like a bummer
-            validation_models = [
-                deepcopy(post_cluster_model) for _ in range(cross_validation_groups)
-            ]
-
-            # Get the number of iterations in each block
-            iters_per_block = post_cluster_model.maxIter // cross_validation_blocks
-            block_iterations = [
-                [start_iter, start_iter + iters_per_block]
-                for start_iter in range(1, post_cluster_model.maxIter, iters_per_block)
-            ]
-
-            # Otherwise, this may be maxIters + 1
-            block_iterations[-1][-1] = block_iterations[-1][-1] - 1
-
-            # Get the iterations corresponding to each group
-            validation_iterations = [
-                range(
-                    start_idx + 1,
-                    cross_validation_blocks,
-                    cross_validation_blocks // cross_validation_groups,
-                )
-                for start_idx in range(cross_validation_groups)
-            ]
-
+            self.do_step(
+                table,
+                step_idx,
+                step=model.do_block_validation,
+                kwargs={
+                    "cross_validation_groups": cross_validation_groups,
+                    "cross_validation_blocks": cross_validation_blocks,
+                    "use_ray": use_ray,
+                },
+            )
             flux_text = ""
-            for group in range(cross_validation_groups):
-
-                log.info(
-                    f"Beginning analysis of cross-validation group {group+1}/{cross_validation_groups}."
-                )
-
-                _model = validation_models[group]
-
-                # Get the flux matrix
-                _model.get_fluxMatrix(
-                    0, iters_to_use=validation_iterations[group], use_ray=use_ray
-                )
-
-                # Clean it
-                _model.organize_fluxMatrix(use_ray=use_ray)
-
-                # Get tmatrix
-                _model.get_Tmatrix()
-
-                # Get steady-state
-                _model.get_steady_state()
-
-                # Get target flux
-                _model.get_steady_state_target_flux()
-
-                flux_text += f"Group {group} flux: {_model.JtargetSS:.2e}\n"
-                self.set_note(table, step_idx, flux_text)
-
-                # Get FPT distribution?
-                pass
-            table.columns[0]._cells[
-                step_idx
-            ] = "[bold black] [[bold green]✓[bold black]]"
-            table.columns[1]._cells[step_idx] = f"[black]{step_text}"
-
-            # Store the validation models, in case you want to analyze them.
-            self.validation_models = validation_models
-
-            # TODO: Compare models for agreement
-            ##
+            for group, _validation_model in enumerate(self.validation_models):
+                flux_text += f"Group {group} flux: {_validation_model.JtargetSS:.2e}\n"
+            self.set_note(table, step_idx, flux_text)
 
             # If live updating was disabled, write to the table once now. (Doesn't do anything if it was enabled)
             live.refresh()
+
+    def do_block_validation(
+        self, cross_validation_groups, cross_validation_blocks, use_ray=True
+    ):
+
+        assert (
+            hasattr(self, "post_cluster_model") and self.post_cluster_model is not None
+        ), (
+            "Perform clustering with cluster_coordinates() before attempting"
+            "block validation -- self.post_cluster_model is not set."
+        )
+
+        # TODO: Best way to move around post_cluster_model? Copying it will get massive.
+        # TODO: copying AGAIN seems suboptimal...
+        validation_models = [
+            deepcopy(self.post_cluster_model) for _ in range(cross_validation_groups)
+        ]
+
+        # Get the number of iterations in each block
+        iters_per_block = self.post_cluster_model.maxIter // cross_validation_blocks
+        block_iterations = [
+            [start_iter, start_iter + iters_per_block]
+            for start_iter in range(1, self.post_cluster_model.maxIter, iters_per_block)
+        ]
+
+        # Otherwise, this may be maxIters + 1
+        block_iterations[-1][-1] = block_iterations[-1][-1] - 1
+
+        # Get the iterations corresponding to each group
+        validation_iterations = [
+            range(
+                start_idx + 1,
+                cross_validation_blocks,
+                cross_validation_blocks // cross_validation_groups,
+            )
+            for start_idx in range(cross_validation_groups)
+        ]
+
+        for group in range(cross_validation_groups):
+            log.info(
+                f"Beginning analysis of cross-validation group {group + 1}/{cross_validation_groups}."
+            )
+
+            _model = validation_models[group]
+
+            # Get the flux matrix
+            _model.get_fluxMatrix(
+                0, iters_to_use=validation_iterations[group], use_ray=use_ray
+            )
+
+            # Clean it
+            _model.organize_fluxMatrix(use_ray=use_ray)
+
+            # Get tmatrix
+            _model.get_Tmatrix()
+
+            # Get steady-state
+            _model.get_steady_state()
+
+            # Get target flux
+            _model.get_steady_state_target_flux()
+
+            # Get FPT distribution?
+            pass
+
+        # Store the validation models, in case you want to analyze them.
+        self.validation_models = validation_models
 
     def load_iter_data(self, n_iter: int):
         """
@@ -2907,6 +2917,11 @@ class modelWE:
                 **_cluster_args,
             )
 
+        # Do this so you can use it for building the validation models.
+        #   We directly modify the clusters in cleaning, so this is the easiest way of recreating the original,
+        #   "unclean" validation model.
+        self.post_cluster_model = deepcopy(self)
+
     def cluster_aggregated(
         self,
         n_clusters,
@@ -3282,11 +3297,6 @@ class modelWE:
         Require it if the existing is not supported.
         """
 
-        log.info(
-            f"Obtaining bin definitions from iteration {bin_iteration} in file {self.fileList[0]}"
-        )
-        iteration = analysis.Run(self.fileList[0]).iteration(bin_iteration)
-
         # This provides backwards compatibility when loading WESTPA data from simulations where binning lived in westpa.binning
         # It's a little sketchy, but it import westpa.tools.binning under westpa.binning
         import importlib
@@ -3298,6 +3308,10 @@ class modelWE:
             log.info("Loading user-specified bin mapper for stratified clustering.")
             bin_mapper = user_bin_mapper
         else:
+            log.info(
+                f"Obtaining bin definitions from iteration {bin_iteration} in file {self.fileList[0]}"
+            )
+            iteration = analysis.Run(self.fileList[0]).iteration(bin_iteration)
             log.info("Loading pickled bin mapper from H5 for stratified clustering...")
             bin_mapper = iteration.bin_mapper
 
@@ -3686,7 +3700,7 @@ class modelWE:
             # log.info(f"Merging sets of size {set_sizes[:start_cleaning_idx]} and cleaning the rest")
             # #
 
-            log.info(
+            log.debug(
                 f"Cleaning states {np.concatenate(connected_sets[start_cleaning_idx:])}"
             )
             states_to_remove = np.concatenate(connected_sets[start_cleaning_idx:])
@@ -3843,7 +3857,7 @@ class modelWE:
         fmatrix = self.fluxMatrix.copy()
         fmatrix[-1, -2] = 1.0
         connected_sets = find_connected_sets(fmatrix, directed=True)
-        log.info(
+        log.debug(
             f"After cleaning, shape is {fmatrix.shape} and disconnected sets are: {connected_sets[1:]}"
         )
         assert (
@@ -4390,10 +4404,10 @@ class modelWE:
         self._fluxMatrixParams = [n_lag, first_iter, last_iter, iters_to_use]
 
         if iters_to_use is not None:
-            log.info(
+            log.debug(
                 "Specific iterations to use were provided for fluxmatrix calculation, using those."
             )
-        if iters_to_use is None:
+        elif iters_to_use is None:
 
             if last_iter is None:
                 last_iter = self.maxIter
@@ -5573,8 +5587,9 @@ class modelWE:
         Get the measured flux (i.e. from the flux matrix) into the target.
         """
 
-        J = np.zeros_like(self.binCenters)
-        nBins = np.shape(self.binCenters)[0]
+        # J = np.zeros_like(self.binCenters)
+        nBins = np.shape(self.targetRMSD_centers)[0]
+        J = np.zeros(nBins)
         fluxMatrix = self.fluxMatrix.copy()
         for i in range(0, nBins - 1):
             indBack = range(i + 1)
@@ -5597,8 +5612,10 @@ class modelWE:
 
         """
 
-        J = np.zeros_like(self.binCenters)
-        nBins = np.shape(self.binCenters)[0]
+        # J = np.zeros_like(self.targetRMSD_centers)
+        # nBins = np.shape(self.binCenters)[0]
+        nBins = np.shape(self.targetRMSD_centers)[0]
+        J = np.zeros(nBins)
         fluxMatrix = self.fluxMatrix.copy()
         indq = np.argsort(np.squeeze(1.0 - self.q))
         fluxMatrix = fluxMatrix[indq, :]
@@ -5617,49 +5634,138 @@ class modelWE:
             self.Jq = J.squeeze() / self.tau
             # sys.stdout.write("%s " % i)
 
-    def plot_flux_committor(self, nwin):
+    def plot_flux_committor(
+        self,
+        nwin=1,
+        ax=None,
+        save=False,
+        suppress_validation=False,
+        _from_colors=None,
+        _to_colors=None,
+        **_plot_args,
+    ):
 
-        nBins = np.shape(self.binCenters)[0]
-        Jq_av = self.Jq.copy()
-        Jq_std = np.zeros_like(Jq_av)
-        q_av = np.zeros_like(Jq_av)
-        indq = np.argsort(np.squeeze(1.0 - self.q))
-        for i in range(nBins - 1, nwin - 1, -1):
-            iav = i - nwin
-            ind = range(i - nwin, i)
-            Jq_av[iav] = np.mean(self.Jq[ind])
-            Jq_std[iav] = np.std(self.Jq[ind])
-            q_av[iav] = np.mean(self.q[indq[ind]])
-        fig = plt.figure(figsize=(8, 6))
-        ax = fig.add_subplot(111)
-        indPlus = np.where(Jq_av > 0.0)
-        indMinus = np.where(Jq_av < 0.0)
-        ax.plot(
-            q_av[indMinus],
-            -np.squeeze(Jq_av[indMinus]),
-            "<",
-            color="black",
-            linewidth=2,
-            markersize=10,
-            label="flux toward unfolded",
-        )
-        ax.plot(
-            q_av[indPlus],
-            np.squeeze(Jq_av[indPlus]),
-            ">",
-            color="black",
-            linewidth=2,
-            markersize=10,
-            label="flux toward folded",
-        )
-        plt.yscale("log")
-        plt.xscale("log")
-        plt.xlabel("Committor")
-        plt.ylabel("Flux (weight/second")
-        fig.savefig(self.modelName + "flux_committor.pdf")
-        plt.pause(1)
+        _models = [self]
+        _models.extend(self.validation_models)
 
-    def plot_flux(self, custom_name=None):
+        _model_labels = ["main_model"]
+        _model_labels.extend(
+            [f"validation_model_{n}" for n in range(len(self.validation_models))]
+        )
+
+        cross_validation_done = (
+            self.validation_models is not None and len(self.validation_models) > 1
+        )
+        if not cross_validation_done:
+            log.critical(
+                "No cross-validation models have been generated! Do this before making plots."
+            )
+            if not suppress_validation:
+                raise Exception("Perform cross-validation before plotting results.")
+
+        own_ax = False
+        if ax is None:
+            own_ax = True
+            fig = plt.figure(figsize=(10, 4))
+            ax = fig.add_subplot(111)
+
+        plot_args = {"linewidth": 2, "markersize": 10}
+        plot_args.update(_plot_args)
+
+        n_models = len(_models)
+        from_colors = [
+            plt.get_cmap("cool")(0.25 + (0.75 * i / n_models)) for i in range(n_models)
+        ]
+        to_colors = [
+            plt.get_cmap("hot")(0.25 + (0.5 * i / n_models)) for i in range(n_models)
+        ]
+
+        for i, (_model, _label) in enumerate(zip(_models, _model_labels)):
+
+            if not hasattr(_model, "q"):
+                log.warning(
+                    f"Committors have not yet been generated for {_label}, generating now."
+                )
+                _model.get_committor()
+
+            if not hasattr(_model, "Jq"):
+                log.warning(
+                    f"Committor-fluxes have not yet been generated for {_label}, generating now."
+                )
+                _model.get_flux_committor()
+
+            n_bins = _model.targetRMSD_centers.shape[0]
+            Jq_avg = _model.Jq.copy()
+            Jq_std = np.zeros_like(Jq_avg)
+
+            q_avg = np.zeros_like(Jq_avg)
+
+            indq = np.argsort(np.squeeze(1.0 - _model.q))
+            for _i in range(n_bins - 1, nwin - 1, -1):
+                iav = _i - nwin
+                ind = range(_i - nwin, _i)
+                Jq_avg[iav] = np.mean(_model.Jq[ind])
+                Jq_std[iav] = np.std(_model.Jq[ind])
+                q_avg[iav] = np.mean(_model.q[indq[ind]])
+
+            indPlus = np.where(Jq_avg > 0.0)
+            indMinus = np.where(Jq_avg < 0.0)
+
+            if _from_colors is not None:
+                plot_args["color"] = _from_colors[i]
+            else:
+                plot_args["color"] = from_colors[i]
+
+            ax.plot(
+                q_avg[indMinus],
+                -np.squeeze(Jq_avg[indMinus]),
+                "<",
+                # color=to_target_colors[i%len(to_target_colors)],
+                label=f"{_label} flux toward basis",
+                **plot_args,
+            )
+
+            if _to_colors is not None:
+                plot_args["color"] = _to_colors[i]
+            else:
+                plot_args["color"] = to_colors[i]
+
+            ax.plot(
+                q_avg[indPlus],
+                np.squeeze(Jq_avg[indPlus]),
+                ">",
+                # color=from_target_colors[i%len(from_target_colors)],
+                label=f"{_label} flux toward target",
+                **plot_args,
+            )
+
+        ax.set_yscale("log")
+        ax.set_xscale("log")
+        ax.set_xlabel("Committor")
+        ax.set_ylabel("Flux (weight/second")
+
+        if own_ax:
+            ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
+            fig.tight_layout()
+
+        if save:
+            plot_filename = f"{self.modelName}_flux_committor.pdf"
+            log.info(f"Saving flux-committor plot to {plot_filename}")
+            plt.savefig(plot_filename)
+
+        return ax
+
+    def plot_flux(
+        self,
+        custom_name=None,
+        ax=None,
+        save=False,
+        suppress_validation=False,
+        _from_colors=None,
+        _to_colors=None,
+        pcoord_to_use=0,
+        **_plot_args,
+    ):
         """
         Make, and save, a plot of the fluxes along the RMSD.  get_flux() must be run before this.
 
@@ -5673,48 +5779,108 @@ class modelWE:
 
         """
 
-        try:
-            J = self.J / self.tau
-        except AttributeError:
-            log.error("Fluxes not yet calculated -- run get_flux() before plot_flux().")
-            return
+        _models = [self]
+        _models.extend(self.validation_models)
 
-        binCenters = self.binCenters
-        fig = plt.figure(figsize=(8, 6))
-        ax = fig.add_subplot(111)
-        indPlus = np.where(J > 0.0)
-        indMinus = np.where(J < 0.0)
-        ax.plot(
-            binCenters[indPlus],
-            np.squeeze(J[indPlus]),
-            "ko",
-            linewidth=2,
-            markersize=10,
-            label="flux toward folded",
-        )  # ,color=plt.cm.Greys(float(iStep)/float(nStepFrames)))
-        ax.plot(
-            binCenters[indMinus],
-            -np.squeeze(J[indMinus]),
-            "ro",
-            linewidth=2,
-            markersize=10,
-            label="flux toward unfolded",
-        )  # ,color=plt.cm.Reds(float(iStep)/float(nStepFrames)))
-        plt.yscale("log")
-        plt.ylabel("flux (weight/second)", fontsize=12)
-        plt.xlabel("Pcoord 1", fontsize=12)
-        plt.title(
-            "Flux Run 1-30 Iter " + str(self.first_iter) + "-" + str(self.last_iter)
+        _model_labels = ["main_model"]
+        _model_labels.extend(
+            [f"validation_model_{n}" for n in range(len(self.validation_models))]
         )
-        plt.legend(loc="lower right")
-        plt.pause(1)
 
-        if custom_name is None:
-            name = "flux_s" + str(self.first_iter) + "_e" + str(self.last_iter) + ".png"
-        else:
-            name = custom_name
+        cross_validation_done = (
+            self.validation_models is not None and len(self.validation_models) > 1
+        )
+        if not cross_validation_done:
+            log.critical(
+                "No cross-validation models have been generated! Do this before making plots."
+            )
+            if not suppress_validation:
+                raise Exception("Perform cross-validation before plotting results.")
 
-        fig.savefig(name)
+        own_ax = False
+        if ax is None:
+            own_ax = True
+            fig = plt.figure(figsize=(10, 4))
+            ax = fig.add_subplot(111)
+
+        plot_args = {"linewidth": 2, "markersize": 10}
+        plot_args.update(_plot_args)
+
+        n_models = len(_models)
+        from_colors = [
+            plt.get_cmap("cool")(0.25 + (0.75 * i / n_models)) for i in range(n_models)
+        ]
+        to_colors = [
+            plt.get_cmap("hot")(0.25 + (0.5 * i / n_models)) for i in range(n_models)
+        ]
+
+        # Draw the basis/target boundaries in this pcoord
+        [
+            ax.axvline(bound, color="k", linestyle="--")
+            for bound in self.target_pcoord_bounds[pcoord_to_use, :]
+        ]
+        [
+            ax.axvline(bound, color="k", linestyle="--")
+            for bound in self.basis_pcoord_bounds[pcoord_to_use, :]
+        ]
+
+        for i, (_model, _label) in enumerate(zip(_models, _model_labels)):
+
+            if not hasattr(_model, "J"):
+                log.warning(
+                    f"Fluxes have not yet been generated for {_label}, generating now."
+                )
+                _model.get_flux()
+
+            J = _model.J / _model.tau
+
+            binCenters = _model.targetRMSD_centers[:, pcoord_to_use]
+            indPlus = np.where(J > 0.0)
+            indMinus = np.where(J < 0.0)
+
+            if _from_colors is not None:
+                plot_args["color"] = _from_colors[i]
+            else:
+                plot_args["color"] = from_colors[i]
+
+            ax.plot(
+                binCenters[indPlus],
+                np.squeeze(J[indPlus]),
+                ">",
+                label=f"{_label} flux toward target",
+                **plot_args,
+            )
+
+            if _to_colors is not None:
+                plot_args["color"] = _to_colors[i]
+            else:
+                plot_args["color"] = to_colors[i]
+
+            ax.plot(
+                binCenters[indMinus],
+                -np.squeeze(J[indMinus]),
+                "<",
+                label=f"{_label} flux toward basis",
+                **plot_args,
+            )
+
+        ax.set_yscale("log")
+        ax.set_xlabel(f"Pcoord {pcoord_to_use}")
+        ax.set_ylabel("Flux (weight/second")
+
+        if own_ax:
+            ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
+            fig.tight_layout()
+
+        if save:
+            if custom_name is not None:
+                plot_filename = custom_name
+            else:
+                plot_filename = f"{self.modelName}_flux.pdf"
+            log.info(f"Saving flux-committor plot to {plot_filename}")
+            plt.savefig(plot_filename)
+
+        return ax
 
     def evolve_target_flux(self):
         Mss = self.Tmatrix
@@ -6313,7 +6479,7 @@ class modelWE:
                     + "\n"
                 )
 
-    def get_committor(self, conv):
+    def get_committor(self, conv=1e-5):
         """
         Iteratively obtain an estimate of the committor.
 
@@ -6425,9 +6591,9 @@ class modelWE:
 
     def plot_committor(self):
         fig = plt.figure(figsize=(8, 6))
-        plt.scatter(self.binCenters, self.q, s=15, c="black")
+        plt.scatter(self.targetRMSD_centers[:, 0], self.q, s=15, c="black")
         plt.yscale("log")
-        plt.ylabel("Folding Committor", fontsize=12)
+        plt.ylabel("Committor to target", fontsize=12)
         plt.xlabel("Average microstate pcoord", fontsize=12)
         plt.pause(1)
         fig.savefig(
