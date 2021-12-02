@@ -2891,6 +2891,12 @@ class modelWE:
 
         self.clustering_method = None
 
+        log.info(
+            "Be aware: Number of cluster centers is an important parameter, and can drastically affect model "
+            "quality. We recommend examining block-validation results with a range of numbers of clusters, to "
+            "check for overfitting."
+        )
+
         if stratified:
             log.info("Beginning stratified clustering.")
             self.clustering_method = "stratified"
@@ -5621,7 +5627,9 @@ class modelWE:
         fluxMatrix = fluxMatrix[indq, :]
         fluxMatrix = fluxMatrix[:, indq]
 
-        for i in tqdm.tqdm(range(0, nBins - 1), desc="Obtaining committor-fluxes"):
+        for i in tqdm.tqdm(
+            range(0, nBins - 1), desc="Obtaining pseudocommittor-fluxes"
+        ):
             indBack = range(i + 1)
             indForward = range(i + 1, nBins)
             JR = 0.0
@@ -5721,7 +5729,7 @@ class modelWE:
                 -np.squeeze(Jq_avg[indMinus]),
                 "<",
                 # color=to_target_colors[i%len(to_target_colors)],
-                label=f"{_label} flux toward basis",
+                label=f"{_label} flux toward source/basis",
                 **plot_args,
             )
 
@@ -5741,8 +5749,9 @@ class modelWE:
 
         ax.set_yscale("log")
         ax.set_xscale("log")
-        ax.set_xlabel("Committor")
+        ax.set_xlabel("Pseudocommittor")
         ax.set_ylabel("Flux (weight/second")
+        self.print_pseudocommittor_warning()
 
         if own_ax:
             ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
@@ -5860,7 +5869,7 @@ class modelWE:
                 binCenters[indMinus],
                 -np.squeeze(J[indMinus]),
                 "<",
-                label=f"{_label} flux toward basis",
+                label=f"{_label} flux toward source/basis",
                 **plot_args,
             )
 
@@ -6505,6 +6514,8 @@ class modelWE:
 
         """
 
+        self.print_pseudocommittor_warning()
+
         _fluxMatrix = self.fluxMatrix.copy()
 
         # Number of bins/states in the fluxmatrix
@@ -6593,8 +6604,11 @@ class modelWE:
         fig = plt.figure(figsize=(8, 6))
         plt.scatter(self.targetRMSD_centers[:, 0], self.q, s=15, c="black")
         plt.yscale("log")
-        plt.ylabel("Committor to target", fontsize=12)
+        plt.ylabel("Pseudocommittor to target", fontsize=12)
         plt.xlabel("Average microstate pcoord", fontsize=12)
+
+        self.print_pseudocommittor_warning()
+
         plt.pause(1)
         fig.savefig(
             self.modelName
@@ -6603,4 +6617,11 @@ class modelWE:
             + "_e"
             + str(self.last_iter)
             + "committor.png"
+        )
+
+    @staticmethod
+    def print_pseudocommittor_warning():
+        log.warning(
+            "Note that, if steady-state weighted ensemble data is being analyzed, this is a 'pseudocommittor' "
+            "and not a true committor as a result of being constructed from a one-way ensemble."
         )
