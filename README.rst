@@ -8,7 +8,6 @@ msm_we
 .. image:: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml/badge.svg
         :target: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml
 
-
 Code for Markov state modeling of weighted ensemble trajectories.
 
 * Authors: John Russo, Jeremy Copperman
