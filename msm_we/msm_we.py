@@ -139,7 +139,7 @@ def is_connected(matrix, source_states, target_states, directed=True):
     )
 
 
-def inverse_iteration(guess, matrix):
+def inverse_iteration(guess, matrix, mu=1):
     """
     Do one iteration of inverse iteration.
 
@@ -157,11 +157,27 @@ def inverse_iteration(guess, matrix):
     """
 
     # Looking for eigenvector corresponding to eigenvalue 1
-    mu = 1
     identity = sparse.eye(guess.shape[0])
 
     # Inverse
-    inverse = sparse.linalg.inv(matrix.T - mu * identity)
+    try:
+        inverse = sparse.linalg.inv(matrix.T - mu * identity)
+    except RuntimeError as e:
+        if not mu == 1:
+            filename = "bad_matrix.npy"
+            log.error(
+                f"Inverse iteration still failed with mu={mu} -- examine your transition matrix for why it could "
+                f"be unsolvable. Saving the transition matrix to {filename}."
+            )
+            np.save(filename, matrix)
+            raise e
+        elif mu == 1:
+            log.error(
+                f"When solving steady-state, failed to perform inverse iteration! "
+                f"Trying again with mu=0.999 instead of {mu}."
+            )
+            return inverse_iteration(guess, matrix, mu=0.999)
+
     result = inverse @ guess
     result = result.squeeze()
 
