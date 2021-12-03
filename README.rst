@@ -2,11 +2,11 @@
 msm_we
 ======
 
-.. image:: https://github.com/westpa/msm_we/actions/workflows/test.yml/badge.svg
-        :target: https://github.com/westpa/msm_we/actions/workflows/test.yml
+.. image:: https://github.com/westpa/msm_we/actions/workflows/run_tests.yml/badge.svg
+        :target: https://github.com/westpa/msm_we/actions/workflows/run_tests.yml
 
-.. image:: https://github.com/jdrusso/msm_we/actions/workflows/main.yml/badge.svg
-        :target: https://github.com/jdrusso/msm_we/actions/workflows/main.yml
+.. image:: https://github.com/westpa/msm_we/actions/workflows/build_docs.yml/badge.svg
+        :target: https://github.com/westpa/msm_we/actions/workflows/build_docs.yml
 
 
 Code for Markov state modeling of weighted ensemble trajectories.
