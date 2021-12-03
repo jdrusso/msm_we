@@ -544,6 +544,7 @@ class modelWE:
         """dict: Mapping of cluster indices to structures in that cluster"""
 
         self.clustering_method = None
+        self.validation_models = []
 
     def initialize(
         # self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
@@ -557,6 +558,7 @@ class modelWE:
         tau: float = None,
         pcoord_ndim: int = 1,
         auxpath: str = "coord",
+        _suppress_boundary_warning=False,
     ):
         """
         Initialize the model-builder.
@@ -617,19 +619,21 @@ class modelWE:
         self.pcoord_len = 2
 
         if basis_pcoord_bounds is None:
-            log.warning(
-                "No basis coord bounds provided to initialize(). "
-                "You can manually set this for now, but that will be deprecated eventually."
-            )
+            if not _suppress_boundary_warning:
+                log.warning(
+                    "No basis coord bounds provided to initialize(). "
+                    "You can manually set this for now, but that will be deprecated eventually."
+                )
         else:
             self.basis_pcoord_bounds = basis_pcoord_bounds
 
         self._target_pcoord_bounds = None
         if target_pcoord_bounds is None:
-            log.warning(
-                "No target coord bounds provided to initialize(). "
-                "You can manually set this for now, but that will be deprecated eventually."
-            )
+            if not _suppress_boundary_warning:
+                log.warning(
+                    "No target coord bounds provided to initialize(). "
+                    "You can manually set this for now, but that will be deprecated eventually."
+                )
         else:
             log.debug("Setting basis pcoord bounds")
             # self.WEtargetp1_bounds = target_pcoord_bounds
@@ -670,8 +674,6 @@ class modelWE:
             "adaptive"  # adaptive for dynamic allocation, uniform for equal allocation
         )
 
-        self.validation_models = None
-
         try:
             self.load_iter_data(1)
             self.load_iter_coordinates0()
@@ -679,7 +681,8 @@ class modelWE:
 
         # Nothing is raised here because this might be fine, depending on what you're doing.
         except KeyError:
-            log.info("Model initialized, but coordinates do not exist yet.")
+            if not _suppress_boundary_warning:
+                log.warning("Model initialized, but coordinates do not exist yet.")
             self.coordsExist = False
 
         log.debug("msm_we model successfully initialized")
@@ -860,13 +863,13 @@ class modelWE:
             "Ray cluster has not been initialized! "
             "Launch from the code calling this with ray.init()."
         )
-        resources = ray.available_resources()
+        resources = ray.cluster_resources()
 
         try:
             log.info(f"Using Ray cluster with {resources['CPU']} CPUs!")
         except KeyError as e:
-            log.error(f"Available resources were {resources}")
-            log.error(f"However, now they're {ray.available_resources()}")
+            log.error(f"Total cluster resources were {resources}")
+            log.error(f"However, available resources are {ray.available_resources()}")
             raise e
 
     def initialize_from_h5(self, refPDBfile, initPDBfile, modelName):
@@ -1257,58 +1260,72 @@ class modelWE:
             "block validation -- self.post_cluster_model is not set."
         )
 
-        # TODO: Best way to move around post_cluster_model? Copying it will get massive.
-        # TODO: copying AGAIN seems suboptimal...
-        validation_models = [
-            deepcopy(self.post_cluster_model) for _ in range(cross_validation_groups)
-        ]
+        # You're looking at this massive try block and judging me -- but don't worry.
+        #   The purpose of this is just to catch ANY error, and preface it with an explicit heads-up that it's coming
+        #   from the block validation. This is useful because errors may crop up only in the block-validation, and it
+        #   should be clear at a glance that it's not from the main model building, but only when the data is split up.
+        try:
+            # TODO: Best way to move around post_cluster_model? Copying it will get massive.
+            # TODO: copying AGAIN seems suboptimal...
+            validation_models = [
+                deepcopy(self.post_cluster_model)
+                for _ in range(cross_validation_groups)
+            ]
 
-        # Get the number of iterations in each block
-        iters_per_block = self.post_cluster_model.maxIter // cross_validation_blocks
-        block_iterations = [
-            [start_iter, start_iter + iters_per_block]
-            for start_iter in range(1, self.post_cluster_model.maxIter, iters_per_block)
-        ]
+            # Get the number of iterations in each block
+            iters_per_block = self.post_cluster_model.maxIter // cross_validation_blocks
+            block_iterations = [
+                [start_iter, start_iter + iters_per_block]
+                for start_iter in range(
+                    1, self.post_cluster_model.maxIter, iters_per_block
+                )
+            ]
 
-        # Otherwise, this may be maxIters + 1
-        block_iterations[-1][-1] = block_iterations[-1][-1] - 1
+            # Otherwise, this may be maxIters + 1
+            block_iterations[-1][-1] = block_iterations[-1][-1] - 1
 
-        # Get the iterations corresponding to each group
-        validation_iterations = [
-            range(
-                start_idx + 1,
-                cross_validation_blocks,
-                cross_validation_blocks // cross_validation_groups,
-            )
-            for start_idx in range(cross_validation_groups)
-        ]
+            # Get the iterations corresponding to each group
+            validation_iterations = [
+                range(
+                    start_idx + 1,
+                    cross_validation_blocks,
+                    cross_validation_blocks // cross_validation_groups,
+                )
+                for start_idx in range(cross_validation_groups)
+            ]
 
-        for group in range(cross_validation_groups):
-            log.info(
-                f"Beginning analysis of cross-validation group {group + 1}/{cross_validation_groups}."
-            )
+            for group in range(cross_validation_groups):
+                log.info(
+                    f"Beginning analysis of cross-validation group {group + 1}/{cross_validation_groups}."
+                )
 
-            _model = validation_models[group]
+                _model = validation_models[group]
 
-            # Get the flux matrix
-            _model.get_fluxMatrix(
-                0, iters_to_use=validation_iterations[group], use_ray=use_ray
-            )
+                # Get the flux matrix
+                _model.get_fluxMatrix(
+                    0, iters_to_use=validation_iterations[group], use_ray=use_ray
+                )
 
-            # Clean it
-            _model.organize_fluxMatrix(use_ray=use_ray)
+                # Clean it
+                _model.organize_fluxMatrix(use_ray=use_ray)
 
-            # Get tmatrix
-            _model.get_Tmatrix()
+                # Get tmatrix
+                _model.get_Tmatrix()
 
-            # Get steady-state
-            _model.get_steady_state()
+                # Get steady-state
+                _model.get_steady_state()
 
-            # Get target flux
-            _model.get_steady_state_target_flux()
+                # Get target flux
+                _model.get_steady_state_target_flux()
 
-            # Get FPT distribution?
-            pass
+                # Get FPT distribution?
+                pass
+
+        except Exception as e:
+
+            log.error("Error during block validation!")
+            log.exception(e)
+            raise e
 
         # Store the validation models, in case you want to analyze them.
         self.validation_models = validation_models
@@ -3487,6 +3504,11 @@ class modelWE:
         Note in the documentation that this can be overriden for finer control over empty bin mapping, if so desired.
         """
 
+        assert len(filled_bins) > 0, (
+            "Can't find nearest populated bin -- no WE bins are populated with clusters! "
+            "Try fewer clusters/bin."
+        )
+
         assert type(bin_mapper) in [
             VoronoiBinMapper,
             RectilinearBinMapper,
@@ -3806,6 +3828,10 @@ class modelWE:
         )
         self.n_clusters = self.n_clusters - len(states_to_remove)
         log.debug(f"n_clusters is now {self.n_clusters}")
+
+        assert (
+            self.n_clusters > 1
+        ), "All clusters would be cleaned! You probably need more data, fewer clusters, or both."
 
         # If a WE bin was completely emptied of cluster centers, map it to the nearest non-empty bin
         populated_we_bins = np.setdiff1d(
