@@ -5900,10 +5900,10 @@ class modelWE:
             indPlus = np.where(J > 0.0)
             indMinus = np.where(J < 0.0)
 
-            if _from_colors is not None:
-                plot_args["color"] = _from_colors[i]
+            if _to_colors is not None:
+                plot_args["color"] = _to_colors[i]
             else:
-                plot_args["color"] = from_colors[i]
+                plot_args["color"] = to_colors[i]
 
             ax.plot(
                 binCenters[indPlus],
@@ -5913,10 +5913,10 @@ class modelWE:
                 **plot_args,
             )
 
-            if _to_colors is not None:
-                plot_args["color"] = _to_colors[i]
+            if _from_colors is not None:
+                plot_args["color"] = _from_colors[i]
             else:
-                plot_args["color"] = to_colors[i]
+                plot_args["color"] = from_colors[i]
 
             ax.plot(
                 binCenters[indMinus],
