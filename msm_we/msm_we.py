@@ -1260,41 +1260,39 @@ class modelWE:
             "block validation -- self.post_cluster_model is not set."
         )
 
-        # You're looking at this massive try block and judging me -- but don't worry.
-        #   The purpose of this is just to catch ANY error, and preface it with an explicit heads-up that it's coming
-        #   from the block validation. This is useful because errors may crop up only in the block-validation, and it
-        #   should be clear at a glance that it's not from the main model building, but only when the data is split up.
-        try:
-            # TODO: Best way to move around post_cluster_model? Copying it will get massive.
-            # TODO: copying AGAIN seems suboptimal...
-            validation_models = [
-                deepcopy(self.post_cluster_model)
-                for _ in range(cross_validation_groups)
-            ]
+        # TODO: Best way to move around post_cluster_model? Copying it will get massive.
+        # TODO: copying AGAIN seems suboptimal...
+        validation_models = [
+            deepcopy(self.post_cluster_model) for _ in range(cross_validation_groups)
+        ]
 
-            # Get the number of iterations in each block
-            iters_per_block = self.post_cluster_model.maxIter // cross_validation_blocks
-            block_iterations = [
-                [start_iter, start_iter + iters_per_block]
-                for start_iter in range(
-                    1, self.post_cluster_model.maxIter, iters_per_block
-                )
-            ]
+        # Get the number of iterations in each block
+        iters_per_block = self.post_cluster_model.maxIter // cross_validation_blocks
+        block_iterations = [
+            [start_iter, start_iter + iters_per_block]
+            for start_iter in range(1, self.post_cluster_model.maxIter, iters_per_block)
+        ]
 
-            # Otherwise, this may be maxIters + 1
-            block_iterations[-1][-1] = block_iterations[-1][-1] - 1
+        # Otherwise, this may be maxIters + 1
+        block_iterations[-1][-1] = block_iterations[-1][-1] - 1
 
-            # Get the iterations corresponding to each group
-            validation_iterations = [
-                range(
-                    start_idx + 1,
-                    cross_validation_blocks,
-                    cross_validation_blocks // cross_validation_groups,
-                )
-                for start_idx in range(cross_validation_groups)
-            ]
+        # Get the iterations corresponding to each group
+        validation_iterations = [
+            range(
+                start_idx + 1,
+                cross_validation_blocks,
+                cross_validation_blocks // cross_validation_groups,
+            )
+            for start_idx in range(cross_validation_groups)
+        ]
 
-            for group in range(cross_validation_groups):
+        for group in range(cross_validation_groups):
+
+            # You're looking at this massive try block and judging me -- but don't worry.
+            #   The purpose of this is just to catch ANY error, and preface it with an explicit heads-up that it's coming
+            #   from the block validation. This is useful because errors may crop up only in the block-validation, and it
+            #   should be clear at a glance that it's not from the main model building, but only when the data is split up.
+            try:
                 log.info(
                     f"Beginning analysis of cross-validation group {group + 1}/{cross_validation_groups}."
                 )
@@ -1321,11 +1319,17 @@ class modelWE:
                 # Get FPT distribution?
                 pass
 
-        except Exception as e:
+            except Exception as e:
 
-            log.error("Error during block validation!")
-            log.exception(e)
-            raise e
+                log.error("Error during block validation!")
+                log.exception(e)
+
+                # TODO: Would be nice to gracefully handle this and move on to the next validation group.
+                #   However, validation models are used in a number of places, and leaving a model with uninitialized
+                #   parameters will cause problems there.
+                #   Maybe a solution is to only populate self.validation_models with successfully generated ones, though
+                #   make sure having the length possibly change there is handled well.
+                raise e
 
         # Store the validation models, in case you want to analyze them.
         self.validation_models = validation_models
@@ -5867,12 +5871,19 @@ class modelWE:
 
         # Draw the basis/target boundaries in this pcoord
         [
-            ax.axvline(bound, color="k", linestyle="--")
-            for bound in self.target_pcoord_bounds[pcoord_to_use, :]
+            ax.axvline(
+                bound, color="r", linestyle="--", label=["", "Target bound"][i == 0]
+            )
+            for i, bound in enumerate(self.target_pcoord_bounds[pcoord_to_use, :])
         ]
         [
-            ax.axvline(bound, color="k", linestyle="--")
-            for bound in self.basis_pcoord_bounds[pcoord_to_use, :]
+            ax.axvline(
+                bound,
+                color="b",
+                linestyle="--",
+                label=["", "Basis/Source bound"][i == 0],
+            )
+            for i, bound in enumerate(self.basis_pcoord_bounds[pcoord_to_use, :])
         ]
 
         for i, (_model, _label) in enumerate(zip(_models, _model_labels)):
@@ -5928,7 +5939,7 @@ class modelWE:
                 plot_filename = custom_name
             else:
                 plot_filename = f"{self.modelName}_flux.pdf"
-            log.info(f"Saving flux-committor plot to {plot_filename}")
+            log.info(f"Saving flux plot to {plot_filename}")
             plt.savefig(plot_filename)
 
         return ax
