@@ -2957,6 +2957,7 @@ class modelWE:
                 streaming=streaming,
                 first_cluster_iter=first_cluster_iter,
                 use_ray=use_ray,
+                iters_to_use=iters_to_use,
                 **_cluster_args,
             )
 
