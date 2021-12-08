@@ -1337,6 +1337,7 @@ class modelWE:
                 raise e
 
         # Store the validation models, in case you want to analyze them.
+        self.validation_iterations = validation_iterations
         self.validation_models = validation_models
 
     def load_iter_data(self, n_iter: int):
