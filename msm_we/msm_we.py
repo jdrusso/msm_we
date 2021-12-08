@@ -649,7 +649,7 @@ class modelWE:
             log.warning("No tau provided, defaulting to 1.")
             tau = 1.0
 
-        self.tau = tau
+        self.tau = float(tau)
 
         # This is really only used for nAtoms
         self.set_topology(refPDBfile)
