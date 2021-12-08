@@ -1278,11 +1278,7 @@ class modelWE:
 
         # Get the iterations corresponding to each group
         group_blocks = [
-            range(
-                start_idx + 1,
-                cross_validation_blocks,
-                cross_validation_blocks // cross_validation_groups,
-            )
+            range(start_idx, cross_validation_blocks, cross_validation_groups,)
             for start_idx in range(cross_validation_groups)
         ]
 
