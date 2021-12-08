@@ -1277,7 +1277,7 @@ class modelWE:
         block_iterations[-1][-1] = block_iterations[-1][-1] - 1
 
         # Get the iterations corresponding to each group
-        validation_iterations = [
+        group_blocks = [
             range(
                 start_idx + 1,
                 cross_validation_blocks,
@@ -1286,7 +1286,16 @@ class modelWE:
             for start_idx in range(cross_validation_groups)
         ]
 
+        validation_iterations = []
+
         for group in range(cross_validation_groups):
+
+            group_iterations = []
+
+            for block in group_blocks[group]:
+                group_iterations.extend(range(*block_iterations[block]))
+
+            validation_iterations.append(group_iterations)
 
             # You're looking at this massive try block and judging me -- but don't worry.
             #   The purpose of this is just to catch ANY error, and preface it with an explicit heads-up that it's coming
