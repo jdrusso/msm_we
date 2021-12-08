@@ -11,7 +11,7 @@ with open("HISTORY.rst") as history_file:
     history = history_file.read()
 
 # WESTPA-2.0 with westpa.analysis is not yet in Conda
-requirements = ["westpa>=v2.0b5"]
+requirements = ["westpa>=v2.0.dev1"]
 
 setup_requirements = [
     "pytest-runner",
