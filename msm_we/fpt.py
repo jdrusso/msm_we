@@ -4,6 +4,7 @@ https://github.com/ZuckermanLab/NMpathAnalysis
 """
 import numpy as np
 from copy import deepcopy
+import tqdm.auto as tqdm
 
 import msm_we.utils as utils
 from msm_we.utils import Interval
@@ -12,7 +13,13 @@ from msm_we.utils import Interval
 class DirectFPT:
     @classmethod
     def mean_fpts(
-        cls, trajectories, stateA=None, stateB=None, discrete=True, n_variables=None, lag_time=1,
+        cls,
+        trajectories,
+        stateA=None,
+        stateB=None,
+        discrete=True,
+        n_variables=None,
+        lag_time=1,
     ):
         """Empirical mean first passage times (MFPTs) calculation (no model
         involved) by tracing the trajectories. Notice the difference between
@@ -57,7 +64,9 @@ class DirectFPT:
         multiplied by the lag_time used (not the physical units).
         """
 
-        passage_timesAB, passage_timesBA, tb_values = cls.fpts(trajectories, stateA, stateB, discrete, n_variables, lag_time)
+        passage_timesAB, passage_timesBA, tb_values = cls.fpts(
+            trajectories, stateA, stateB, discrete, n_variables, lag_time
+        )
         n_AB = len(passage_timesAB)
         n_BA = len(passage_timesBA)
 
@@ -90,7 +99,13 @@ class DirectFPT:
 
     @classmethod
     def fpts(
-        cls, trajectories, stateA=None, stateB=None, discrete=True, n_variables=None, lag_time=1,
+        cls,
+        trajectories,
+        stateA=None,
+        stateB=None,
+        discrete=True,
+        n_variables=None,
+        lag_time=1,
     ):
         """Empirical first passage times (FPTs) calculation (no model involved)
         by tracing the trajectories. IMPORTANT: Notice the difference in notation
@@ -136,7 +151,9 @@ class DirectFPT:
         """
 
         if (stateA is None) or (stateB is None):
-            raise Exception("The final and initial states have " "to be defined to compute the MFPT")
+            raise Exception(
+                "The final and initial states have " "to be defined to compute the MFPT"
+            )
 
         if not discrete:
             """
@@ -144,7 +161,9 @@ class DirectFPT:
             is a set of continuous trajectories
             """
             if n_variables is None:
-                raise Exception("In continuous trajectories the number of " "variables is needed")
+                raise Exception(
+                    "In continuous trajectories the number of " "variables is needed"
+                )
 
             stateA = Interval(stateA, n_variables)
             stateB = Interval(stateB, n_variables)
@@ -207,7 +226,9 @@ class MatrixFPT:
         pass
 
     @classmethod
-    def directional_mfpt(cls, transition_matrix, stateA, stateB, ini_probs=None, lag_time=1):
+    def directional_mfpt(
+        cls, transition_matrix, stateA, stateB, ini_probs=None, lag_time=1
+    ):
         """Computes the mean-first passage time in a single direction using a recursive procedure
 
         This method is useful when there is no B->A ensemble but only A->B transitions,
@@ -333,7 +354,9 @@ class MatrixFPT:
         temp_values = []
 
         for i in range(size):
-            temp_values.append(cls.mfpts_to_target_microstate(transition_matrix, i, lag_time))
+            temp_values.append(
+                cls.mfpts_to_target_microstate(transition_matrix, i, lag_time)
+            )
 
         mfpt_m = np.array(temp_values).T  # to nummpy array and transposed
         return mfpt_m
@@ -420,9 +443,18 @@ class MatrixFPT:
 
     @classmethod
     def fpt_distribution(
-        cls, t_matrix, initial_state, final_state, initial_distrib,
-            min_power=1, max_power=12, max_n_lags=100, lag_time=1, dt=1.0,
-            clean_recycling=False, logscale=False
+        cls,
+        t_matrix,
+        initial_state,
+        final_state,
+        initial_distrib,
+        min_power=1,
+        max_power=12,
+        max_n_lags=100,
+        lag_time=1,
+        dt=1.0,
+        clean_recycling=False,
+        logscale=False,
     ):
         """Calculated distribution of first passage times from transition matrix
 
@@ -515,7 +547,14 @@ class MatrixFPT:
             list_of_pdfs[istateIndex, 0] = tmatrix[ini_state[istateIndex], f_state]
 
             cls.calc_fmatrix(
-                Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, lag_list, ini_state, istateIndex, f_state,
+                Fmatrix,
+                tmatrix,
+                prevFmatrix,
+                list_of_pdfs,
+                lag_list,
+                ini_state,
+                istateIndex,
+                f_state,
             )
 
         # Nomalize the FPT distribution and output
@@ -529,20 +568,222 @@ class MatrixFPT:
             # For logscale the dts at different t are different, we need to let FPT(t)
             # absorb them. Otherwise we have to use dt in variable size to calculate mean
             # value such as integration of t*dt*FPT(t).
-            dens_list = [[0, 0]] + [[lag_list[0]*dt2, density[0]*lag_list[0]/dt2]]
+            dens_list = [[0, 0]] + [[lag_list[0] * dt2, density[0] * lag_list[0] / dt2]]
             for i in range(1, len(lag_list)):
-                dens_list += [[lag_list[i]*dt2, density[i]*(lag_list[i]-lag_list[i-1])/dt2]]
+                dens_list += [
+                    [
+                        lag_list[i] * dt2,
+                        density[i] * (lag_list[i] - lag_list[i - 1]) / dt2,
+                    ]
+                ]
             density_vs_t = np.array(dens_list)
         else:
-            density_vs_t = np.array([[0, 0]] +
-                                   [[(i+1) * dt2, dens / dt2] for i, dens in zip(lag_list, density)])
+            density_vs_t = np.array(
+                [[0, 0]]
+                + [[(i + 1) * dt2, dens / dt2] for i, dens in zip(lag_list, density)]
+            )
         # normalized to 1
         density_vs_t[:, 1] /= sum(density_vs_t[:, 1])
         return density_vs_t
 
+    @staticmethod
+    def adaptive_fpt_distribution(
+        Tmatrix,
+        initial_states,
+        initial_state_probs,
+        target_states,
+        tau=1,
+        increment=5,
+        fine_increment=1.2,
+        relevant_thresh=1e-4,
+        max_steps=int(1e6),
+        max_time=np.inf,
+        explicit_renormalization=False,
+        verbose=False,
+    ):
+        """
+        Adaptively computes a first-passage time distribution.
+
+        Starting at t=tau, compute the probability flowing into the target at t.
+        Then, increment t by multiplying it by the coarse increment.
+        When relevant_thresh probability has entered the target state, step back to the previous coarse state, and
+        swap over to incrementing with the fine increment.
+        This allows you to efficiently sweep log-space.
+
+        Procedurally, this starts probability in specified `initial_states` according to `initial_state_probs`, and then
+        propagates that probability through the transition matrix.
+        The FPT distribution is measured by tracking new probability entering the target state at each time.
+
+        Note that absorbing boundary conditions are stripped from the transition matrix -- if this is not done, then
+        the result is like a probability CDF, not a probability distribution.
+
+        Parameters
+        ----------
+        Tmatrix: array-like
+            Transition matrix
+
+        initial_states: array-like of ints
+            List of initial states to start probability in
+
+        initial_state_probs: array-like
+            Probability distribution across the initial states.
+
+        target_states: array-like
+            Target states for MFPT.
+
+        tau
+        increment: float
+            Multiplicative increment for coarse steps
+        fine_increment: float
+            Multiplicative increment for fine steps, once the minimum probability in the target has been reached.
+        relevant_thresh: float
+            Amount of probability that must be in the target before switching to fine increments.
+        max_steps: int
+            Maximum number of steps to run
+        max_time: float
+            Maximum time to run to
+        explicit_renormalization: bool
+            Whether to explicitly renormalize the transition matrix. This should not be necessary -- if it is, there's
+            probably some numerical instability you should be careful of.
+        verbose: bool
+            Produce verbose text output.
+
+        Returns
+        -------
+        FPT distribution,
+        probability distribution at each time,
+        last step index,
+        times at which FPT distribution was evaluated
+        """
+
+        n_states = len(Tmatrix)
+
+        all_probabilities = np.full(shape=(max_steps + 1, n_states), fill_value=np.nan)
+
+        # The initial probability vector is zero except in the origin states,
+        #    which have their relative probabilities
+        initial_probability = np.zeros(n_states)
+        initial_probability[initial_states] = initial_state_probs
+        initial_probability /= sum(initial_probability)
+
+        all_probabilities[0] = initial_probability
+
+        # Make the target states absorbing
+        non_recycling_matrix = Tmatrix.copy()
+        non_recycling_matrix[target_states, :] = 0.0
+        for target in target_states:
+            non_recycling_matrix[target, target] = 1.0
+
+        # Track the probability that flowed into the target at each time
+        probs = np.zeros(shape=max_steps)
+        probs[0] = 0.0
+
+        # At each one of our timesteps, track the amount of flux that entered the target
+        last_step = 1
+
+        get_next_step = lambda x: x * increment
+        in_relevant_region = False
+
+        steps = [1]
+
+        with tqdm.tqdm(total=1) as pbar:
+
+            for i in range(max_steps - 1):
+
+                this_step = int(get_next_step(last_step))
+                if this_step <= last_step:
+                    this_step = int(last_step + 1)
+
+                matrix_next = np.linalg.matrix_power(non_recycling_matrix, this_step)
+
+                if explicit_renormalization:
+                    matrix_next = matrix_next / np.sum(matrix_next, axis=1)
+
+                probability = initial_probability @ matrix_next
+
+                if explicit_renormalization:
+                    probability /= sum(probability)
+
+                # Check if we're just starting to get any probability
+                if (
+                    i > 0
+                    and not in_relevant_region
+                    and (sum(probability[target_states]) - sum(probs[: i + 1]))
+                    > relevant_thresh
+                ):
+                    if verbose:
+                        print(
+                            f"*** Entered relevant region  at step {this_step}. "
+                            f"Swapping to fine-grained, and taking a step back to {this_step / increment}."
+                        )
+                    # If so, then change our increment to finer resolution
+                    # TODO: Would be cool to do something like as the probability increases,
+                    #    continue scaling down to some minimum increment
+                    in_relevant_region = True
+                    this_step /= increment
+
+                    steps.append(this_step)
+                    all_probabilities[i + 1] = all_probabilities[i]
+                    probs[i + 1] = probs[i]
+
+                    get_next_step = lambda x: x * fine_increment
+
+                    if verbose:
+                        print(
+                            f"Current time is {this_step}, time step will be {get_next_step(this_step)}"
+                        )
+
+                    continue
+
+                steps.append(this_step)
+
+                all_probabilities[i + 1] = probability
+
+                # The amount that flowed INTO the target is the probability that's flowed in since the last t
+                if i == 0:
+                    # In the first iteration,  all the probability into the target just got there
+                    probs[i + 1] = sum(probability[target_states])
+                else:
+                    # After the first, it's the amount that's there now minus the total amount that entered up until now
+                    probs[i + 1] = sum(probability[target_states]) - sum(probs[: i + 1])
+
+                pbar.update(probs[i + 1])
+
+                # Check if we're done (i.e., all our probability has flowed  into  the target, none left.)
+                if np.isclose(sum(probs), 1):
+                    #         if np.isclose(probs[i+1], 1):
+                    print(
+                        f"*** All probability  reached the target at time {this_step}"
+                    )
+                    break
+
+                if this_step > max_time:
+                    print(
+                        "*** Max steps reached, before all probability flowed into target."
+                    )
+                    break
+
+                last_step = this_step
+
+        print(f"Finished in {i} steps")
+        print(
+            f"By the last time, {sum(probs[:i])} probability has reached the target. (This should be 1!)"
+        )
+
+        times = np.array(steps, dtype=float) * float(tau)
+        return probs[: i + 2], all_probabilities[: i + 2], i, times
+
     @classmethod
     def calc_fmatrix(
-        cls, Fmatrix, tmatrix, prevFmatrix, list_of_pdfs, lag_list, ini_state, istateIndex, f_state,
+        cls,
+        Fmatrix,
+        tmatrix,
+        prevFmatrix,
+        list_of_pdfs,
+        lag_list,
+        ini_state,
+        istateIndex,
+        f_state,
     ):
         # Calculate FPT distribution from a the recursive formula, Eq. 3 in the paper below:
         # E. Suarez, A. J. Pratt, L. T. Chong, D. M. Zuckerman, Protein Science 26, 67-78 (2016).
@@ -551,9 +792,13 @@ class MatrixFPT:
             if time_index == 0:
                 tmatrix_new = np.linalg.matrix_power(tmatrix, time)
             else:
-                tmatrix_new = np.linalg.matrix_power(tmatrix, time-lag_list[time_index-1])
+                tmatrix_new = np.linalg.matrix_power(
+                    tmatrix, time - lag_list[time_index - 1]
+                )
             Fmatrix = np.dot(tmatrix_new, prevFmatrix - np.diag(np.diag(prevFmatrix)))
-            list_of_pdfs[istateIndex, time_index] = Fmatrix[ini_state[istateIndex], f_state]
+            list_of_pdfs[istateIndex, time_index] = Fmatrix[
+                ini_state[istateIndex], f_state
+            ]
             prevFmatrix = Fmatrix
 
 
