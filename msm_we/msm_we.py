@@ -5695,6 +5695,78 @@ class modelWE:
             self.Jq = J.squeeze() / self.tau
             # sys.stdout.write("%s " % i)
 
+    def plot_flux_committor_pcoordcolor(
+        self, nwin=1, ax=None, pcoord_to_use=0, **_plot_args,
+    ):
+
+        _models = [self]
+        _model_labels = ["main_model"]
+
+        plot_args = {
+            "linewidth": 2,
+            "s": 50,
+            "marker": ">",
+            "cmap": plt.cm.rainbow.reversed(),
+            "alpha": 0.7,
+        }
+
+        plot_args.update(_plot_args)
+
+        if ax is None:
+            fig = plt.figure(figsize=(10, 4))
+            ax = fig.add_subplot(111)
+
+        for i, (_model, _label) in enumerate(zip(_models[::-1], _model_labels[::-1])):
+
+            if not hasattr(_model, "q"):
+                log.warning(
+                    f"Committors have not yet been generated for {_label}, generating now."
+                )
+                _model.get_committor()
+
+            if not hasattr(_model, "Jq"):
+                log.warning(
+                    f"Committor-fluxes have not yet been generated for {_label}, generating now."
+                )
+                _model.get_flux_committor()
+
+            n_bins = _model.targetRMSD_centers.shape[0]
+            Jq_avg = _model.Jq.copy()
+            Jq_std = np.zeros_like(Jq_avg)
+
+            q_avg = np.zeros_like(Jq_avg)
+
+            indq = np.argsort(np.squeeze(1.0 - _model.q))
+            for _i in range(n_bins - 1, nwin - 1, -1):
+                iav = _i - nwin
+                ind = range(_i - nwin, _i)
+                Jq_avg[iav] = np.mean(_model.Jq[ind])
+                Jq_std[iav] = np.std(_model.Jq[ind])
+                q_avg[iav] = np.mean(_model.q[indq[ind]])
+
+            indPlus = np.where(Jq_avg > 0.0)
+
+            lines = ax.scatter(
+                q_avg[indPlus],
+                np.squeeze(Jq_avg[indPlus]),
+                c=_model.targetRMSD_centers[indPlus, pcoord_to_use],
+                label=f"{_label} flux toward target",
+                **plot_args,
+            )
+
+        print("Plotting committor")
+        ax.figure.colorbar(lines, label=f"Progress Coordinate {pcoord_to_use}")
+
+        ax.set_xlim([-0.1, 1.1])
+
+        ax.set_title("Full-data model")
+        ax.set_yscale("log")
+        ax.set_xlabel("Pseudocommittor")
+        ax.set_ylabel("Flux (weight/second)")
+        self.print_pseudocommittor_warning()
+
+        return ax, lines
+
     def plot_flux_committor(
         self,
         nwin=1,
@@ -5801,9 +5873,10 @@ class modelWE:
             )
 
         ax.set_yscale("log")
-        ax.set_xscale("log")
+        ax.set_xscale("linear")
+        ax.set_xlim([-0.1, 1.1])
         ax.set_xlabel("Pseudocommittor")
-        ax.set_ylabel("Flux (weight/second")
+        ax.set_ylabel("Flux (weight/second)")
         self.print_pseudocommittor_warning()
 
         if own_ax:
@@ -5879,7 +5952,7 @@ class modelWE:
         # Draw the basis/target boundaries in this pcoord
         [
             ax.axvline(
-                bound, color="r", linestyle="--", label=["", "Target bound"][i == 0]
+                bound, color="r", linestyle="--", label=["", "Target boundary"][i == 0]
             )
             for i, bound in enumerate(self.target_pcoord_bounds[pcoord_to_use, :])
         ]
@@ -5888,7 +5961,7 @@ class modelWE:
                 bound,
                 color="b",
                 linestyle="--",
-                label=["", "Basis/Source bound"][i == 0],
+                label=["", "Basis/Source boundary"][i == 0],
             )
             for i, bound in enumerate(self.basis_pcoord_bounds[pcoord_to_use, :])
         ]
@@ -5935,7 +6008,7 @@ class modelWE:
 
         ax.set_yscale("log")
         ax.set_xlabel(f"Pcoord {pcoord_to_use}")
-        ax.set_ylabel("Flux (weight/second")
+        ax.set_ylabel("Flux (weight/second)")
 
         if own_ax:
             ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
