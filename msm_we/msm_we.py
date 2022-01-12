@@ -5718,6 +5718,9 @@ class modelWE:
 
         for i, (_model, _label) in enumerate(zip(_models[::-1], _model_labels[::-1])):
 
+            if _model is None:
+                continue
+
             if not hasattr(_model, "q"):
                 log.warning(
                     f"Committors have not yet been generated for {_label}, generating now."
@@ -5814,6 +5817,9 @@ class modelWE:
         ]
 
         for i, (_model, _label) in enumerate(zip(_models, _model_labels)):
+
+            if _model is None:
+                continue
 
             if not hasattr(_model, "q"):
                 log.warning(
@@ -5967,6 +5973,9 @@ class modelWE:
         ]
 
         for i, (_model, _label) in enumerate(zip(_models, _model_labels)):
+
+            if _model is None:
+                continue
 
             if not hasattr(_model, "J"):
                 log.warning(
