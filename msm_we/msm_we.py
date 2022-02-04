@@ -5181,7 +5181,7 @@ class modelWE:
                 Mt[iR, iR] = 1.0
         self.Tmatrix = Mt
 
-    def get_steady_state(self, flux_fractional_convergence=1e-4, max_iters=1):
+    def get_steady_state(self, flux_fractional_convergence=1e-4, max_iters=10):
         """"
         Get the steady-state distribution for the transition matrix.
         Uses scipy eigensolver to obtain an initial guess, then refines that using inverse iteration.
