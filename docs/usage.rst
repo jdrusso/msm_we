@@ -10,8 +10,13 @@ To install :code:`msm_we`:
     cd </path/to/msm_we>
 
     conda env create -f environment.yml
-    conda activate hamsm_env
-    pip install .
+
+or, to install it into an existing conda environment:
+
+.. code-block:: bash
+    cd </path/to/msm_we>
+
+    conda env update --name <your WESTPA environment> --file environment.yml
 
 .. highlight:: python
 
