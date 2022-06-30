@@ -27,11 +27,12 @@ Features
 Known Issues
 ------------
 
-* Sometimes, on Python3.7 (and maybe below) the subprocess calls will fail. This may manifest as a silent failure,
+Sometimes, on Python3.7 (and maybe below) the subprocess calls will fail. This may manifest as a silent failure,
 followed by hanging (which is very fun to debug!) To fix this, upgrade to Python 3.8+.
 
+
 Code development TODOs
------
+----------------------
 *  Provide option for user to override :code:`dimReduce()` in case they want to do something other than PCA/VAMP
 *  Add TICA option to :code:`dimReduce()`
 
