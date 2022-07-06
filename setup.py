@@ -13,15 +13,16 @@ from setuptools import setup, find_packages
 # WESTPA-2.0 with westpa.analysis is not yet in Conda
 #requirements = ["westpa>=v2.0b5"]
 requirements = [
-    "scikit-learn>=0.24",
-    "scipy>=1.5.0",
-    "pyemma>=2.5",
-    "numpy>=1.16.0",
-    "mdtraj>=1.9.6",
+    "scikit-learn>=0.24,<1.1",
+    "scipy>=1.5",
+    "pyemma",
+    "numpy>=1.16.5",
+    "mdtraj>=1.9",
     "ray>=1.0",
-    "h5py>=3.1.0",
+    "h5py>=3.1",
     "tqdm",
-    "rich"
+    "rich",
+    "toml"
 ]
 
 setup_requirements = [
@@ -64,6 +65,6 @@ setup(
     tests_require=test_requirements,
     extras_require=EXTRAS_REQUIRE,
     url="https://github.com/jdrusso/msm_we",
-    version="0.1.3",
+    version="0.1.4",
     zip_safe=False,
 )
