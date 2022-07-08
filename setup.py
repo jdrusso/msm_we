@@ -15,7 +15,6 @@ from setuptools import setup, find_packages
 requirements = [
     "scikit-learn>=0.24,<1.1",
     "scipy>=1.5",
-    "pyemma",
     "numpy>=1.16.5",
     "mdtraj>=1.9",
     "ray>=1.0",
@@ -65,6 +64,6 @@ setup(
     tests_require=test_requirements,
     extras_require=EXTRAS_REQUIRE,
     url="https://github.com/jdrusso/msm_we",
-    version="0.1.4",
+    version="0.1.5",
     zip_safe=False,
 )

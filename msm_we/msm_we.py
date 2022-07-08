@@ -33,9 +33,9 @@ log.propagate = False
 import matplotlib.pyplot as plt
 
 import mdtraj as md
-import pyemma.coordinates as coor
-import pyemma.coordinates.clustering as clustering
-import pyemma
+# import pyemma.coordinates as coor
+# import pyemma.coordinates.clustering as clustering
+# import pyemma
 
 # used to check connectivity
 import scipy.sparse.csgraph as csgraph
