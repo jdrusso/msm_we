@@ -46,6 +46,9 @@ from rich.table import Table
 
 import ray
 
+# If you implement a custom bin mapper that should work with stratified clustering, you can add it to this set
+#   after importing msm_we
+SUPPORTED_MAPPERS = {RectilinearBinMapper, VoronoiBinMapper}
 
 def find_connected_sets(C, directed=True):
     r"""
@@ -3377,10 +3380,9 @@ class modelWE:
             # Ideally, the best approach here would be to go through your bin mapper, recursing as necessary, and replacing
             #   any of the above functional bin mapper types with static bin mappers.
 
-            supported_mappers = [RectilinearBinMapper, VoronoiBinMapper]
-            if type(bin_mapper) not in supported_mappers:
+            if type(bin_mapper) not in SUPPORTED_MAPPERS:
                 log.warning(
-                    f"{type(bin_mapper)} mapper loaded, but supported mappers are {supported_mappers} and others may"
+                    f"{type(bin_mapper)} mapper loaded, but supported mappers are {SUPPORTED_MAPPERS} and others may"
                     f"produce inconsistent bins between iterations. Please provide a supported user_bin_mapper."
                 )
                 raise Exception
