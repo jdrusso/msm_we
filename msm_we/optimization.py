@@ -54,3 +54,43 @@ def solve_discrepancy(tmatrix, pi, B):
     )
 
     return discrepancy, variance
+
+
+def get_mfpt_bins(variance, steady_state, n_bins):
+    """
+    Implements the MFPT-binning strategy described in [1], where bins are groups of microstates that are uniformly
+    spaced in the integral of pi * v
+
+    Parameters
+    ----------
+    variance, array-like: Variance function
+    steady_state, array-like: Steady-state distribution
+    n_bins int: Number of macrobins
+
+    Returns
+    -------
+
+    References
+    ----------
+    [1] Aristoff, D., Copperman, J., Simpson, G., Webber, R. J. & Zuckerman, D. M.
+    Weighted ensemble: Recent mathematical developments. Arxiv (2022).
+
+    """
+
+    pi_v = steady_state * variance
+
+    spacing = sum(pi_v) / n_bins
+
+    bin_states = {}
+    for i in range(n_bins):
+        lower, upper = spacing * i, spacing * i+1
+
+        states_in_bin = np.argwhere(
+            (lower < np.cumsum(pi_v)) &
+            (np.cumsum(pi_v) <= upper)
+        )
+
+        bin_states[i] = states_in_bin
+
+    return bin_states
+
