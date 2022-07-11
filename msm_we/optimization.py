@@ -26,9 +26,9 @@ def solve_discrepancy(tmatrix, pi, B):
 
     Parameters
     ----------
-    tmatrix: Transition matrix
-    pi: Steady-state distribution for the input transition matrix
-    B: Indices of target states B
+    tmatrix, 2D array-like: Transition matrix
+    pi, array-like: Steady-state distribution for the input transition matrix
+    B, array-like: Indices of target states B
 
     Returns
     --------
@@ -43,7 +43,7 @@ def solve_discrepancy(tmatrix, pi, B):
     b_indicator[B] = 1.0
 
     pi_b = np.ones_like(pi)
-    pi_b[:] = pi[B]
+    pi_b[:] = sum(pi[B])
 
     discrepancy = np.linalg.solve(np.identity(tmatrix.shape[0]) - tmatrix + pi_matrix,
                                   b_indicator - pi_b)
