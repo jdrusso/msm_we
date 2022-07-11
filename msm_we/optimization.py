@@ -8,16 +8,31 @@ log.setLevel(logging.INFO)
 log.addHandler(RichHandler())
 log.propagate = False
 
+
 def solve_discrepancy(tmatrix, pi, B):
     """
     Given a transition matrix, solves for the discrepancy function.
 
-    This follows TODO [ what does this follow? The screenshot in Harry's mathematica ]
+    The Poisson equation for the discrepancy function is
+    .. math::
+        (I - K)h = 1_B - \pi(B), \:\: h \cdot \pi = 0
 
-    :param tmatrix: Transition matrix
-    :param pi: Steady-state distribution for the input transition matrix
-    :param B: Indices of target states B
-    :return:
+    however, since :math:`I-K` is singular, we instead solve
+    .. math::
+        (I - K + \pi \pi^T / || \pi ||^2_2)h = 1_B - \pi(B), \:\: h \cdot \pi = 0
+    where :math:`h` is a volumn vector, `1_B` is an indicator function which is 1 in B and 0 everywhere
+    else, :math:`\pi` is the steady-state solution of :math:`K`, and `\pi(B)` is a column vector with
+    the steady-state value of :math:`\pi(B)` in every element.
+
+    Parameters
+    ----------
+    tmatrix: Transition matrix
+    pi: Steady-state distribution for the input transition matrix
+    B: Indices of target states B
+
+    Returns
+    --------
+    (discrepancy, variance)
     """
 
     log.info("Computing pi matrix")
