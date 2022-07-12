@@ -1029,6 +1029,7 @@ class modelWE:
         cross_validation_groups=2,
         cross_validation_blocks=4,
         show_live_display=True,
+        step_kwargs={}
     ):
         """
         One-shot function to build the model and analyze all at once. This provides a convenient interface for running
@@ -1134,6 +1135,7 @@ class modelWE:
                     "target_pcoord_bounds": target_pcoord_bounds,
                     "dim_reduce_method": dimreduce_method,
                     "tau": tau,
+                    **step_kwargs.get('initialize', {})
                 },
             )
             self.set_note(table, step_idx, "")
@@ -1173,6 +1175,7 @@ class modelWE:
                     "streaming": streaming,
                     "use_ray": use_ray,
                     "stratified": stratified,
+                    **step_kwargs.get('clustering', {})
                 },
             )
 
@@ -1191,6 +1194,7 @@ class modelWE:
                     "last_iter": _fluxmatrix_iters[1],
                     "iters_to_use": fluxmatrix_iters_to_use,
                     "use_ray": use_ray,
+                    **step_kwargs.get('fluxmatrix', {})
                 },
             )
             self.set_note(
@@ -1207,7 +1211,9 @@ class modelWE:
                 table,
                 step_idx,
                 step=model.organize_fluxMatrix,
-                kwargs={"use_ray": use_ray},
+                kwargs={"use_ray": use_ray,
+                        **step_kwargs.get('organize', {})
+                        },
             )
             final_clusters = model.fluxMatrix.shape[0]
             self.set_note(
@@ -1242,6 +1248,7 @@ class modelWE:
                     "cross_validation_groups": cross_validation_groups,
                     "cross_validation_blocks": cross_validation_blocks,
                     "use_ray": use_ray,
+                    **step_kwargs.get('block_validation', {})
                 },
             )
             flux_text = ""
