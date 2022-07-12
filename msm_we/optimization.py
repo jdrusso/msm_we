@@ -177,14 +177,13 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
             if hasattr(cluster_model, 'cluster_centers_'):
                 self.clusterer.model.n_clusters += len(cluster_model.cluster_centers_)
         log.info(f"Clusterer has {self.clusterer.model.n_clusters} total clusters")
+        log.info(f"Clusterer remap is {self.clusterer.we_remap}")
 
     def mapper(self, coords, mask=None, output=None):
 
         final_coords = coords[:,1]
 
-        log.info(f"Mapping pcoords {final_coords}")
-
-        we_bin_assignments = np.full(len(coords), fill_value=np.nan)
+        log.debug(f"Mapping pcoords {final_coords}")
 
         # To use stratified clustering, first load the ORIGINAL pcoords into stratified.pcoord1List, then call
         #   stratified.predict().
@@ -194,13 +193,14 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         #  set these arbitrarily.
         original_pcoords = final_coords[:, :self.n_original_pcoord_dims]
 
-        # basis_we_bin_idx, target_we_bin_idx = -2, -1
         basis_we_bin_idx, target_we_bin_idx = self.nbins, self.nbins + 1
-        log.info(f"Basis WE bin is {basis_we_bin_idx}, target WE bin is {target_we_bin_idx}")
 
-        log.info(f"Original pcoords dimensionality was {self.n_original_pcoord_dims}")
-        log.info(f"Original pcoords had shape {original_pcoords.shape}")
+        log.debug(f"Original pcoords dimensionality was {self.n_original_pcoord_dims}")
+        log.debug(f"Original pcoords had shape {original_pcoords.shape}")
         self.clusterer.model.pcoord1List = original_pcoords
+
+        base_bins = self.base_mapper.assign(original_pcoords)
+        log.info(f"Base bin mapper mapped to {base_bins}")
 
         # Now, do stratified clustering on the rest of the coordinates.
         # Each segment will be
@@ -215,13 +215,13 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         # I have a microstate for each segment now -- I need to refer to my mapping of microstates to WE bins, which
         #   just comes from my optimization step
         log.info(f"Mapping microstates to WE bins using {self.microstate_mapper}")
-        we_bin_assignments = np.full_like(stratified_cluster_assignments, fill_value=np.nan)
 
         we_bin_assignments = np.array([int(self.microstate_mapper[microstate])
                                        if microstate < len(self.microstate_mapper) else np.nan
                                        for microstate in stratified_cluster_assignments
                                       ])
 
+        log.info(f"Basis WE bin is labeled {basis_we_bin_idx}, target WE bin is labeled {target_we_bin_idx}")
         log.info(f"WE bin assignments before correcting basis/target are {we_bin_assignments}")
 
         we_bin_assignments[self.clusterer.model.is_WE_target(final_coords)] = target_we_bin_idx
