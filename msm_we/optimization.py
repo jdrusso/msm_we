@@ -136,7 +136,7 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
                  basis_pcoord_bounds,
                  previous_binmapper,
                  microstate_mapper: dict,
-                 stratified_clusterer
+                 stratified_clusterer: msm_we.StratifiedClusters
                  ):
         """
         Creates an OptimizedBinMapper, suitable for use with the optimization workflow
