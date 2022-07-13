@@ -61,7 +61,7 @@ def solve_discrepancy(tmatrix, pi, B):
     return discrepancy, variance
 
 
-def get_mfpt_bins(variance, steady_state, n_desired_we_bins):
+def get_uniform_mfpt_bins(variance, steady_state, n_desired_we_bins):
     """
     Implements the MFPT-binning strategy described in [1], where bins are groups of microstates that are uniformly
     spaced in the integral of pi * v
