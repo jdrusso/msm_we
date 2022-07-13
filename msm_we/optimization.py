@@ -87,7 +87,6 @@ def get_uniform_mfpt_bins(variance, steady_state, n_desired_we_bins):
 
     spacing = sum(pi_v) / n_desired_we_bins
 
-    # bin_states = {}
     bin_states = np.full_like(steady_state, fill_value=np.nan)
     for i in range(n_desired_we_bins):
         lower, upper = spacing * i, spacing * (i+1)
@@ -99,30 +98,45 @@ def get_uniform_mfpt_bins(variance, steady_state, n_desired_we_bins):
         )
 
         log.info(f"Found that bin {i} contains microstates {states_in_bin}")
-        # bin_states[i] = states_in_bin
         bin_states[states_in_bin] = i
 
     return bin_states
 
 
-# class MinimalModel:
-#     """
-#     Serializable model containing necessary data for stratified clustering
-#     """
-#
-#     n_clusters = None
-#
-#     # For is_WE_target/basis functions
-#     pcoord_ndim = None
-#     target_pcoord_bounds = None
-#     basis_pcoord_bounds = None
-#
-#     # These require self.target_pcoord_bounds and self.basis_pcoord_bounds to be set
-#     is_WE_target = msm_we.msm_we.modelWE.is_WE_target
-#     is_WE_basis = msm_we.msm_we.modelWE.is_WE_basis
-#
-#     # List of the pcoords for the data being clustered
-#     pcoord1List = None
+def get_clustered_mfpt_bins(variance, steady_state, n_desired_we_bins):
+    """
+    Implements the MFPT-binning strategy described in [1], where bins are groups of microstates that are uniformly
+    spaced in the integral of pi * v
+
+    Parameters
+    ----------
+    variance, array-like: Variance function
+    steady_state, array-like: Steady-state distribution
+    n_bins int: Number of macrobins
+
+    Returns
+    -------
+
+    References
+    ----------
+    [1] Aristoff, D., Copperman, J., Simpson, G., Webber, R. J. & Zuckerman, D. M.
+    Weighted ensemble: Recent mathematical developments. Arxiv (2022).
+
+    """
+
+    # The last two elements of this are the basis and target states respectively
+    pi_v = steady_state * variance
+
+    clusterer = KMeans(n_clusters=n_desired_we_bins)
+    we_bin_assignments = clusterer.fit_predict(pi_v.reshape(-1, 1))
+
+    bin_states = np.full_like(steady_state, fill_value=np.nan)
+    for i in range(n_desired_we_bins):
+        states_in_bin = np.argwhere(we_bin_assignments == i).squeeze()
+        bin_states[states_in_bin] = i
+        log.info(f"Found that bin {i} contains microstates {states_in_bin}")
+
+    return bin_states
 
 
 class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
@@ -156,16 +170,11 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
 
         super().__init__(func=self.mapper, nbins=nbins, args=args, kwargs=kwargs)
 
-        # self.func = self.mapper
-        # self.nbins = nbins
         self.microstate_mapper = microstate_mapper
         self.n_original_pcoord_dims = n_original_pcoord_dims
 
         self.base_mapper = previous_binmapper
 
-        # n_clusters_per_bin = len(cluster_centers[0])
-
-        # TODO: Create simple model
         self.simple_model = msm_we.modelWE()
         self.simple_model.pcoord_ndim = n_original_pcoord_dims
         self.simple_model.basis_pcoord_bounds = basis_pcoord_bounds
@@ -236,7 +245,7 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         we_bin_assignments[self.clusterer.model.is_WE_basis(final_coords)] = basis_we_bin_idx
 
         zipped_assignments = np.array(list(zip(original_pcoords.reshape(-1), we_bin_assignments)))
-        zip_sort = np.argsort(we_bin_assignments)
+        zip_sort = np.argsort(original_pcoords.reshape(-1))
 
         log.info(f"WE bin assignments are {zipped_assignments[zip_sort]}")
 
