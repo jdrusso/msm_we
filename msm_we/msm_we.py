@@ -417,6 +417,9 @@ class modelWE:
 
     """
 
+    class BlockValidationError(Exception):
+        pass
+
     def __init__(self):
         """
         Work-in-progress init function. For now, just start adding attribute definitions in here.
@@ -965,15 +968,22 @@ class modelWE:
         table.columns[0]._cells[row] = "[bold black][ [bold yellow]* [bold black]]"
         table.columns[1]._cells[row] = f"[bold black]{step_text}"
 
-        if not in_subprocess:
-            step(*args, **kwargs)
+        try:
+            if not in_subprocess:
+                step(*args, **kwargs)
 
-        else:
-            # print(f"Calling {step} with args={args} and kwargs={kwargs}")
-            with concurrent.futures.ProcessPoolExecutor(
-                max_workers=1, mp_context=mp.get_context("fork")
-            ) as executor:
-                executor.submit(step, *args, **kwargs).result()
+            else:
+                # print(f"Calling {step} with args={args} and kwargs={kwargs}")
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
+                    executor.submit(step, *args, **kwargs).result()
+
+        except Exception as e:
+            table.columns[0]._cells[row] = "[bold black] [[bold red]x[bold black]]"
+            table.columns[1]._cells[row] = f"[black]{step_text}"
+            table.columns[2]._cells[row] = f"{getattr(e, 'message', repr(e))}"
+            raise e
 
         table.columns[0]._cells[row] = "[bold black] [[bold green]✓[bold black]]"
         table.columns[1]._cells[row] = f"[black]{step_text}"
@@ -1339,12 +1349,13 @@ class modelWE:
                 log.error("Error during block validation!")
                 log.exception(e)
 
+
                 # TODO: Would be nice to gracefully handle this and move on to the next validation group.
                 #   However, validation models are used in a number of places, and leaving a model with uninitialized
                 #   parameters will cause problems there.
                 #   Maybe a solution is to only populate self.validation_models with successfully generated ones, though
                 #   make sure having the length possibly change there is handled well.
-                raise e
+                raise modelWE.BlockValidationError(e)
 
         # Store the validation models, in case you want to analyze them.
         self.validation_iterations = validation_iterations
