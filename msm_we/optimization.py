@@ -102,8 +102,6 @@ def get_mfpt_bins(variance, steady_state, n_desired_we_bins):
         # bin_states[i] = states_in_bin
         bin_states[states_in_bin] = i
 
-
-
     return bin_states
 
 
@@ -136,7 +134,9 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
                  basis_pcoord_bounds,
                  previous_binmapper,
                  microstate_mapper: dict,
-                 stratified_clusterer: msm_we.StratifiedClusters
+                 stratified_clusterer: msm_we.StratifiedClusters,
+                 *args,
+                 **kwargs
                  ):
         """
         Creates an OptimizedBinMapper, suitable for use with the optimization workflow
@@ -154,8 +154,10 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         -
         """
 
-        self.func = self.mapper
-        self.nbins = nbins
+        super().__init__(func=self.mapper, nbins=nbins, args=args, kwargs=kwargs)
+
+        # self.func = self.mapper
+        # self.nbins = nbins
         self.microstate_mapper = microstate_mapper
         self.n_original_pcoord_dims = n_original_pcoord_dims
 
@@ -179,9 +181,15 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         log.info(f"Clusterer has {self.clusterer.model.n_clusters} total clusters")
         log.info(f"Clusterer remap is {self.clusterer.we_remap}")
 
-    def mapper(self, coords, mask=None, output=None):
+    def mapper(self, coords, mask, output, *args, **kwargs):
 
-        final_coords = coords[:,1]
+        # TODO: When analyzing augmented coordinates, this needs to pull just the child pcoord -- but when analyzing
+        #   non-augmented, that won't exist
+        # final_coords = coords[:,-1]
+        if len(coords.shape) == 3:
+            final_coords = coords[:, -1]
+        else:
+            final_coords = coords
 
         log.debug(f"Mapping pcoords {final_coords}")
 
@@ -193,38 +201,46 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         #  set these arbitrarily.
         original_pcoords = final_coords[:, :self.n_original_pcoord_dims]
 
-        basis_we_bin_idx, target_we_bin_idx = self.nbins, self.nbins + 1
+        basis_we_bin_idx, target_we_bin_idx = self.nbins-2, self.nbins-1
 
         log.debug(f"Original pcoords dimensionality was {self.n_original_pcoord_dims}")
         log.debug(f"Original pcoords had shape {original_pcoords.shape}")
         self.clusterer.model.pcoord1List = original_pcoords
 
         base_bins = self.base_mapper.assign(original_pcoords)
-        log.info(f"Base bin mapper mapped to {base_bins}")
+        log.debug(f"Base bin mapper mapped to {base_bins}")
 
         # Now, do stratified clustering on the rest of the coordinates.
         # Each segment will be
         #   1. Assigned a WE bin, based on its pcoords and the provided bin mapper
         #   2. Discretized, according to the k-means model associated with that WE bin
-        log.info(f"About to cluster coords of shape {final_coords.shape}")
+        log.debug(f"About to cluster coords of shape {final_coords.shape}")
         stratified_cluster_assignments = self.clusterer.predict(final_coords)
 
-        log.info(f"Got microstate assignments {stratified_cluster_assignments}")
+        log.debug(f"Got microstate assignments {stratified_cluster_assignments}")
 
         # TODO: Map microstates to new WE bins, and populate we_bin_assignments
         # I have a microstate for each segment now -- I need to refer to my mapping of microstates to WE bins, which
         #   just comes from my optimization step
-        log.info(f"Mapping microstates to WE bins using {self.microstate_mapper}")
+        log.debug(f"Mapping microstates to WE bins using {self.microstate_mapper}")
 
         we_bin_assignments = np.array([int(self.microstate_mapper[microstate])
                                        if microstate < len(self.microstate_mapper) else np.nan
                                        for microstate in stratified_cluster_assignments
                                       ])
 
-        log.info(f"Basis WE bin is labeled {basis_we_bin_idx}, target WE bin is labeled {target_we_bin_idx}")
-        log.info(f"WE bin assignments before correcting basis/target are {we_bin_assignments}")
+        log.debug(f"Basis WE bin is labeled {basis_we_bin_idx}, target WE bin is labeled {target_we_bin_idx}")
+        log.debug(f"WE bin assignments before correcting basis/target are {we_bin_assignments}")
 
         we_bin_assignments[self.clusterer.model.is_WE_target(final_coords)] = target_we_bin_idx
         we_bin_assignments[self.clusterer.model.is_WE_basis(final_coords)] = basis_we_bin_idx
 
-        log.info(f"WE bin assignments are {we_bin_assignments}")
+        zipped_assignments = np.array(list(zip(original_pcoords.reshape(-1), we_bin_assignments)))
+        zip_sort = np.argsort(we_bin_assignments)
+
+        log.info(f"WE bin assignments are {zipped_assignments[zip_sort]}")
+
+        for i in range(len(output)):
+            output[i] = we_bin_assignments[i]
+
+        return output
