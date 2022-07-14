@@ -128,7 +128,11 @@ def get_clustered_mfpt_bins(variance, steady_state, n_desired_we_bins):
     pi_v = steady_state * variance
 
     clusterer = KMeans(n_clusters=n_desired_we_bins)
-    we_bin_assignments = clusterer.fit_predict(pi_v.reshape(-1, 1))
+
+    # -2 so you don't cluster the basis/target states
+    # TODO: Handle those in a more general way, though from msm_we you're guaranteed they'll be the last two states
+    # we_bin_assignments = clusterer.fit_predict(pi_v.reshape(-1, 1))
+    we_bin_assignments = clusterer.fit_predict(pi_v[:-2].reshape(-1, 1))
 
     bin_states = np.full_like(steady_state, fill_value=np.nan)
     for i in range(n_desired_we_bins):
@@ -247,7 +251,7 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         zipped_assignments = np.array(list(zip(original_pcoords.reshape(-1), we_bin_assignments)))
         zip_sort = np.argsort(original_pcoords.reshape(-1))
 
-        log.info(f"WE bin assignments are {zipped_assignments[zip_sort]}")
+        log.debug(f"WE bin assignments are {zipped_assignments[zip_sort]}")
 
         for i in range(len(output)):
             output[i] = we_bin_assignments[i]
