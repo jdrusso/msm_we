@@ -1583,9 +1583,12 @@ class modelWE:
 
         Parameters
         ----------
-        topology : str
-            Path to a file containing the PDB with the topology, OR, an mdtraj Trajectory object describing
-            the new basis structure.
+        topology : str, md.Trajectory, dict
+            Path to a file containing the PDB with the topology,
+            an mdtraj Trajectory object describing the new basis structure,
+            or a dictionary with keys
+                'basis_coords': the coordinates of the basis structure and
+                'nAtoms': the number of features in the coordinates
 
         Returns
         -------
@@ -1601,12 +1604,14 @@ class modelWE:
             if topology[-3:] == "dat":
                 self.reference_coord = np.loadtxt(topology)
                 self.nAtoms = 1
+                self.coord_ndim = 3
                 return
 
             elif topology[-6:] == "prmtop":
                 struct = md.load_prmtop(topology)
-                self.reference_structure = struct
+                # self.reference_structure = struct
                 self.nAtoms = struct.n_atoms
+                self.coord_ndim = 3
                 return
 
             elif not topology[-3:] == "pdb":
@@ -1615,20 +1620,31 @@ class modelWE:
                 )
 
             struct = md.load(topology)
-            self.reference_structure = struct
+            # self.reference_structure = struct
             self.reference_coord = np.squeeze(struct._xyz)
             self.nAtoms = struct.topology.n_atoms
+            self.coord_ndim = 3
             return
 
-        else:
+        elif type(topology) in [md.Trajectory, md.Topology]:
             log.debug(
                 "Input reference topology  was provided as an mdtraj structure, loading that"
             )
 
             struct = topology
-            self.reference_structure = struct
+            # self.reference_structure = struct
             self.reference_coord = np.squeeze(struct._xyz)
             self.nAtoms = struct.topology.n_atoms
+            self.coord_ndim = 3
+
+        elif type(topology) == dict:
+
+            self.reference_coord = topology['coords']
+            self.nAtoms = topology['nAtoms']
+            self.coord_ndim = topology['coord_ndim']
+
+        else:
+            raise NotImplementedError('Unsupported topology')
 
     def set_basis(self, basis):
         """
@@ -1636,9 +1652,10 @@ class modelWE:
 
         Parameters
         ----------
-        basis : str or mdtraj.Trajectory
-            Path to a file containing the PDB with the new basis state, OR, an mdtraj Trajectory object describing
-            the new basis structure.
+        basis : str, mdtraj.Trajectory, or dict
+            Path to a file containing the PDB with the new basis state,
+            an mdtraj Trajectory object describing the new basis structure,
+            or a dictionary with key 'basis_coords': the coordinates of the basis structure
 
         Returns
         -------
@@ -1655,7 +1672,7 @@ class modelWE:
                 self.basis_coords = np.loadtxt(basis)
             elif basis[-3:] == "pdb":
                 struct = md.load(basis)
-                self.basis_structure = struct
+                # self.basis_structure = struct
                 self.basis_coords = np.squeeze(struct._xyz)
             else:
                 log.critical(
@@ -1663,14 +1680,21 @@ class modelWE:
                 )
                 # raise NotImplementedError("Basis coordinates are not a recognized filetype")
 
-        else:
+        elif type(basis) in [md.Trajectory, md.Topology]:
             log.debug(
                 "Input reference topology  was provided as an mdtraj structure, loading that"
             )
 
             struct = basis
-            self.basis_structure = struct
+            # self.basis_structure = struct
             self.basis_coords = np.squeeze(struct._xyz)
+
+        elif type(basis) == dict:
+
+            self.basis_coords = basis['coords']
+
+        else:
+            raise NotImplementedError('Unsupported topology')
 
     def get_transition_data(self, n_lag):
         """
@@ -1721,9 +1745,9 @@ class modelWE:
         weightList = self.weightList
 
         # This will become a list of (lagged iter coord, current iter coord)
-        coordPairList = np.zeros((self.nSeg, self.nAtoms, 3, 2))
+        coordPairList = np.zeros((self.nSeg, self.nAtoms, self.coord_ndim, 2))
 
-        prewarpedStructures = np.zeros((self.nSeg, self.nAtoms, 3))
+        prewarpedStructures = np.zeros((self.nSeg, self.nAtoms, self.coord_ndim))
         nWarped = 0
 
         # Go through each segment, and get pairs of coordinates at current iter (n_iter) and
@@ -1839,7 +1863,7 @@ class modelWE:
 
             # The coord pair here is (pre-warped structure, reference topology) instead of
             #   (lagged struture, current structure)
-            coordPair = np.zeros((1, self.nAtoms, 3, 2))
+            coordPair = np.zeros((1, self.nAtoms, self.coord_ndim, 2))
             coordPair[0, :, :, 0] = prewarpedStructures[iW, :, :]
             coordPair[0, :, :, 1] = self.reference_coord
             coordPairList = np.append(coordPairList, coordPair, axis=0)
@@ -1889,7 +1913,7 @@ class modelWE:
         """
 
         weightList = self.weightList
-        coordPairList = np.zeros((self.nSeg, self.nAtoms, 3, 2))
+        coordPairList = np.zeros((self.nSeg, self.nAtoms, self.coord_ndim, 2))
 
         log.debug(
             f"Getting transition data for {self.nSeg} segs in iteration {self.n_iter}, at a lag of 0"
@@ -2176,7 +2200,7 @@ class modelWE:
         nS = self.nSeg
         westFile = self.fileList[self.westList[0]]
         dataIn = h5py.File(westFile, "a")
-        coords = np.zeros((0, 2, self.nAtoms, 3))
+        coords = np.zeros((0, 2, self.nAtoms, self.coord_ndim))
         for iS in range(self.nSeg):
             # FIXME: Replace strings with Pathlib paths
             westFile = self.fileList[self.westList[iS]]
@@ -2221,7 +2245,7 @@ class modelWE:
                             )
 
                         dataIn.close()
-                        coords = np.zeros((0, 2, self.nAtoms, 3))
+                        coords = np.zeros((0, 2, self.nAtoms, self.coord_ndim))
                         coords = np.append(coords, coordT, axis=0)
                         dataIn = h5py.File(westFile, "a")
 
@@ -2292,7 +2316,7 @@ class modelWE:
 
         """
 
-        cur_iter_coords = np.full((self.nSeg, self.nAtoms, 3), fill_value=np.nan)
+        cur_iter_coords = np.full((self.nSeg, self.nAtoms, self.coord_ndim), fill_value=np.nan)
 
         log.debug(
             f"Getting coordinates for {self.nSeg} segs in iteration {self.n_iter}, at a lag of 0"
@@ -2325,7 +2349,7 @@ class modelWE:
                     )
 
                     cur_iter_coords[segs_contained, :, :] = np.full(
-                        (self.nAtoms, 3), fill_value=np.nan
+                        (self.nAtoms, self.coord_ndim), fill_value=np.nan
                     )
                     self.coordsExist = False
 
@@ -2338,7 +2362,7 @@ class modelWE:
         self.cur_iter_coords = cur_iter_coords
 
     def load_iter_coordinates0(self):  # get iteration initial coordinates
-        coordList = np.full((self.nSeg, self.nAtoms, 3), fill_value=np.nan)
+        coordList = np.full((self.nSeg, self.nAtoms, self.coord_ndim), fill_value=np.nan)
         for iS in range(self.nSeg):
             if iS == 0:
                 westFile = self.fileList[self.westList[iS]]
@@ -2380,7 +2404,7 @@ class modelWE:
         self.first_iter = first_iter
         self.last_iter = last_iter
         iters = range(self.first_iter, self.last_iter + 1)
-        coordSet = np.zeros((0, self.nAtoms, 3))
+        coordSet = np.zeros((0, self.nAtoms, self.coord_ndim))
         for iter in iters:
             if iter % 50 == 0:
                 sys.stdout.write(
@@ -2421,7 +2445,7 @@ class modelWE:
         total_segments = int(sum(self.numSegments[:last_iter]))
 
         if not streaming:
-            coordSet = np.full((total_segments, self.nAtoms, 3), fill_value=np.nan)
+            coordSet = np.full((total_segments, self.nAtoms, self.coord_ndim), fill_value=np.nan)
         pcoordSet = np.full((total_segments, self.pcoord_ndim), fill_value=np.nan)
 
         last_seg_idx = total_segments
@@ -2476,7 +2500,7 @@ class modelWE:
             )
         self.load_iter_data(from_iter)
         self.get_seg_histories(traj_length)
-        traj_iters = np.zeros((traj_length, self.nSeg, self.nAtoms, 3))
+        traj_iters = np.zeros((traj_length, self.nSeg, self.nAtoms, self.coord_ndim))
         ic = traj_length - 1
         iH = 0
         nS = self.nSeg
@@ -3097,7 +3121,7 @@ class modelWE:
                 )
 
                 _data = [
-                    self.get_iter_coordinates(iteration).reshape(-1, 3 * self.nAtoms)
+                    self.get_iter_coordinates(iteration).reshape(-1, self.coord_ndim * self.nAtoms)
                     for iteration in iters_to_use
                 ]
                 stacked_data = np.vstack(_data)
