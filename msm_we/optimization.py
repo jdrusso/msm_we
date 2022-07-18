@@ -7,6 +7,7 @@ from rich.logging import RichHandler
 
 from . import msm_we
 from sklearn.cluster import KMeans
+import pickle
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -145,7 +146,27 @@ def get_clustered_mfpt_bins(variance, steady_state, n_desired_we_bins):
 
 class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
 
-    def __init__(self,
+    def __init__(self, *args, **kwargs):
+
+        if len(args) + len(kwargs) == 1:
+            log.info("Single argument provided to binmapper initializer, attempting to unpickle")
+            self.unpickle(args[0])
+
+        elif len(args) + len(kwargs) > 1:
+            log.info("Multiple arguments provided to binmapper initializer, creating new object")
+            self.create_new(*args, **kwargs)
+
+    def unpickle(self, bin_dict):
+
+        loaded = pickle.loads(bin_dict['bytestring'])
+
+        assert type(loaded) is type(self), "Invalid pickled object provided"
+
+        # TODO: Probably just update the attributes I explicitly care about, this seems a little insecure
+        for k, v in vars(loaded).items():
+            setattr(self, k, v)
+
+    def create_new(self,
                  nbins: int,
                  n_original_pcoord_dims: int,
                  target_pcoord_bounds,
@@ -161,15 +182,9 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
 
         Parameters
         ----------
-        nbins, int: Number of WE bins
-        n_original_pcoord_dims, int: Number of dimensions in the original user-supplied progress coordinate
-        cluster_centers, array-like: Array of microstate cluster centers
-        microstate_mapper, dict: Mapping of microstates to WE bins
-
-        TODO
-        ----
-        - Should we just have a separate dedicated target bin?
-        -
+        nbins: int, Number of WE bins
+        n_original_pcoord_dims: int, Number of dimensions in the original user-supplied progress coordinate
+        microstate_mapper: dict, Mapping of microstates to WE bins
         """
 
         super().__init__(func=self.mapper, nbins=nbins, args=args, kwargs=kwargs)
