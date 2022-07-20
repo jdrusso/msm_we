@@ -158,6 +158,10 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
 
     def unpickle(self, bin_dict):
 
+        # TODO: This may need to be provided as a b64-encoded bytestring, rather than plain bytes,
+        #  in which case we need to quickly encode it back to bytes. This can be done with
+        #   pickle.loads(base64.b64decode(collection.metadata['bin_mapper']))
+
         loaded = pickle.loads(bin_dict['bytestring'])
 
         assert type(loaded) is type(self), "Invalid pickled object provided"
