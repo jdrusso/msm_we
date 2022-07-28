@@ -8,6 +8,7 @@ from rich.logging import RichHandler
 from . import msm_we
 from sklearn.cluster import KMeans
 import pickle
+import base64
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -162,7 +163,7 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         #  in which case we need to quickly encode it back to bytes. This can be done with
         #   pickle.loads(base64.b64decode(collection.metadata['bin_mapper']))
 
-        loaded = pickle.loads(bytestring)
+        loaded = pickle.loads(base64.b64decode(bytestring))
 
         assert type(loaded) is type(self), "Invalid pickled object provided"
 
