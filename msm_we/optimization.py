@@ -150,19 +150,19 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
 
         if len(args) + len(kwargs) == 1:
             log.info("Single argument provided to binmapper initializer, attempting to unpickle")
-            self.unpickle(args[0])
+            self.unpickle(kwargs['bytestring'])
 
         elif len(args) + len(kwargs) > 1:
             log.info("Multiple arguments provided to binmapper initializer, creating new object")
             self.create_new(*args, **kwargs)
 
-    def unpickle(self, bin_dict):
+    def unpickle(self, bytestring):
 
         # TODO: This may need to be provided as a b64-encoded bytestring, rather than plain bytes,
         #  in which case we need to quickly encode it back to bytes. This can be done with
         #   pickle.loads(base64.b64decode(collection.metadata['bin_mapper']))
 
-        loaded = pickle.loads(bin_dict['bytestring'])
+        loaded = pickle.loads(bytestring)
 
         assert type(loaded) is type(self), "Invalid pickled object provided"
 
