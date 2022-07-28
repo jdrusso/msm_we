@@ -63,7 +63,7 @@ def solve_discrepancy(tmatrix, pi, B):
     return discrepancy, variance
 
 
-def get_uniform_mfpt_bins(variance, steady_state, n_desired_we_bins):
+def get_uniform_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bins):
     """
     Implements the MFPT-binning strategy described in [1], where bins are groups of microstates that are uniformly
     spaced in the integral of pi * v
@@ -86,6 +86,8 @@ def get_uniform_mfpt_bins(variance, steady_state, n_desired_we_bins):
 
     # The last two elements of this are the basis and target states respectively
     pi_v = steady_state * variance
+    pi_v_sort = np.argsort(discrepancy).squeeze()
+    cumsum = np.cumsum(pi_v[pi_v_sort])
 
     spacing = sum(pi_v) / n_desired_we_bins
 
@@ -94,10 +96,10 @@ def get_uniform_mfpt_bins(variance, steady_state, n_desired_we_bins):
         lower, upper = spacing * i, spacing * (i+1)
         log.debug(f"Checking for states with pi_v between {lower}, {upper}")
 
-        states_in_bin = np.argwhere(
-            (lower < np.cumsum(pi_v)) &
-            (np.cumsum(pi_v) <= upper)
+        indices_in_bin = np.argwhere(
+            (lower < cumsum) & (cumsum <= upper)
         )
+        states_in_bin = pi_v_sort[indices_in_bin]
 
         log.info(f"Found that bin {i} contains microstates {states_in_bin}")
         bin_states[states_in_bin] = i
