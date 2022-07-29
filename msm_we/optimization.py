@@ -259,8 +259,8 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         #   just comes from my optimization step
         log.debug(f"Mapping microstates to WE bins using {self.microstate_mapper}")
 
-        we_bin_assignments = np.array([int(self.microstate_mapper[microstate])
-                                       if microstate < len(self.microstate_mapper) else np.nan
+        we_bin_assignments = np.array([float(self.microstate_mapper[microstate])
+                                       if microstate < len(self.microstate_mapper) else -1
                                        for microstate in stratified_cluster_assignments
                                       ])
 
@@ -278,4 +278,6 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         for i in range(len(output)):
             output[i] = we_bin_assignments[i]
 
-        return output
+        assert not np.isnan(output).any()
+
+        return output.astype(int)
