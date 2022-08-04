@@ -89,15 +89,21 @@ def get_uniform_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bins
     pi_v_sort = np.argsort(discrepancy).squeeze()
     cumsum = np.cumsum(pi_v[pi_v_sort])
 
-    spacing = sum(pi_v) / n_desired_we_bins
+    n_active_bins = n_desired_we_bins-2
+
+    spacing = sum(pi_v) / n_active_bins
 
     bin_states = np.full_like(steady_state, fill_value=np.nan)
-    for i in range(n_desired_we_bins):
+    for i in range(n_active_bins):
+
+        # These are the upper and lower bounds of this bin in pi*v
+
         lower, upper = spacing * i, spacing * (i+1)
         log.debug(f"Checking for states with pi_v between {lower}, {upper}")
 
         indices_in_bin = np.argwhere(
-            (lower < cumsum) & (cumsum <= upper)
+            # TODO: Is an equality check on both sides safe?
+            (lower <= cumsum) & (cumsum <= upper)
         )
         states_in_bin = pi_v_sort[indices_in_bin]
 
@@ -213,8 +219,9 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         for cluster_model in self.clusterer.cluster_models:
             if hasattr(cluster_model, 'cluster_centers_'):
                 self.clusterer.model.n_clusters += len(cluster_model.cluster_centers_)
-        log.info(f"Clusterer has {self.clusterer.model.n_clusters} total clusters")
-        log.info(f"Clusterer remap is {self.clusterer.we_remap}")
+        log.info(f"Clusterer has {self.clusterer.model.n_clusters} total clusters (include 1 for basis and 1 for target)")
+        log.debug(f"Clusterer remap is {self.clusterer.we_remap} "
+                 f"(last two correspond to basis, target states and can be ignored)")
 
     def mapper(self, coords, mask, output, *args, **kwargs):
 
@@ -242,8 +249,10 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         log.debug(f"Original pcoords had shape {original_pcoords.shape}")
         self.clusterer.model.pcoord1List = original_pcoords
 
+        # TODO: Get the basis and target state from this, and then I don't need to use the bounds here
         base_bins = self.base_mapper.assign(original_pcoords)
         log.debug(f"Base bin mapper mapped to {base_bins}")
+
 
         # Now, do stratified clustering on the rest of the coordinates.
         # Each segment will be
@@ -252,20 +261,20 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         log.debug(f"About to cluster coords of shape {final_coords.shape}")
         stratified_cluster_assignments = self.clusterer.predict(final_coords)
 
-        log.debug(f"Got microstate assignments {stratified_cluster_assignments}")
+        log.info(f"Got microstate assignments {stratified_cluster_assignments}")
 
         # TODO: Map microstates to new WE bins, and populate we_bin_assignments
         # I have a microstate for each segment now -- I need to refer to my mapping of microstates to WE bins, which
         #   just comes from my optimization step
-        log.debug(f"Mapping microstates to WE bins using {self.microstate_mapper}")
+        log.info(f"Mapping microstates to WE bins using {self.microstate_mapper}")
 
         we_bin_assignments = np.array([float(self.microstate_mapper[microstate])
                                        if microstate < len(self.microstate_mapper) else -1
                                        for microstate in stratified_cluster_assignments
                                       ])
 
-        log.debug(f"Basis WE bin is labeled {basis_we_bin_idx}, target WE bin is labeled {target_we_bin_idx}")
-        log.debug(f"WE bin assignments before correcting basis/target are {we_bin_assignments}")
+        log.info(f"Basis WE bin is labeled {basis_we_bin_idx}, target WE bin is labeled {target_we_bin_idx}")
+        log.info(f"WE bin assignments before correcting basis/target are {we_bin_assignments}")
 
         we_bin_assignments[self.clusterer.model.is_WE_target(final_coords)] = target_we_bin_idx
         we_bin_assignments[self.clusterer.model.is_WE_basis(final_coords)] = basis_we_bin_idx
@@ -273,11 +282,12 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         zipped_assignments = np.array(list(zip(original_pcoords.reshape(-1), we_bin_assignments)))
         zip_sort = np.argsort(original_pcoords.reshape(-1))
 
-        log.debug(f"WE bin assignments are {zipped_assignments[zip_sort]}")
+        log.info(f"WE bin assignments are {zipped_assignments[zip_sort]}")
 
         for i in range(len(output)):
             output[i] = we_bin_assignments[i]
 
-        assert not np.isnan(output).any()
+        assert not np.isnan(output).any(), "Some segments couldn't get assigned WE bins"
+        assert all(output > 0), "Some target/basis microstates didn't get correctly remapped"
 
         return output.astype(int)
