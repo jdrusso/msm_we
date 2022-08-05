@@ -273,6 +273,6 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
             output[i] = we_bin_assignments[i]
 
         assert not np.isnan(output).any(), "Some segments couldn't get assigned WE bins"
-        assert all(output > 0), "Some target/basis microstates didn't get correctly remapped"
+        assert all(output >= 0), "Some target/basis microstates didn't get correctly remapped"
 
         return output.astype(int)
