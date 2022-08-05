@@ -91,24 +91,9 @@ def get_uniform_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bins
 
     n_active_bins = n_desired_we_bins-2
 
-    spacing = sum(pi_v) / n_active_bins
-
-    bin_states = np.full_like(steady_state, fill_value=np.nan)
-    for i in range(n_active_bins):
-
-        # These are the upper and lower bounds of this bin in pi*v
-
-        lower, upper = spacing * i, spacing * (i+1)
-        log.debug(f"Checking for states with pi_v between {lower}, {upper}")
-
-        indices_in_bin = np.argwhere(
-            # TODO: Is an equality check on both sides safe?
-            (lower <= cumsum) & (cumsum <= upper)
-        )
-        states_in_bin = pi_v_sort[indices_in_bin]
-
-        log.info(f"Found that bin {i} contains microstates {states_in_bin}")
-        bin_states[states_in_bin] = i
+    bin_bounds = np.linspace(0, cumsum[-1], n_active_bins + 1)[1:]
+    bin_assignments = np.digitize(cumsum, bin_bounds, right=True)
+    bin_states = bin_assignments[np.argsort(pi_v_sort)]
 
     return bin_states
 
