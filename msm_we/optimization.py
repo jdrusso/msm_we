@@ -71,8 +71,10 @@ def get_uniform_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bins
     Parameters
     ----------
     variance, array-like: Variance function
+    discrepancy, array-like: Discrepancy function
     steady_state, array-like: Steady-state distribution
-    n_bins int: Number of macrobins
+    n_desired_we_bins int: Number of WE macrobins to assign microstates to -- typically the total number of bins,
+        less any recycling or basis bins
 
     Returns
     -------
@@ -98,7 +100,7 @@ def get_uniform_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bins
     return bin_states
 
 
-def get_clustered_mfpt_bins(variance, steady_state, n_desired_we_bins):
+def get_clustered_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bins):
     """
     Implements the MFPT-binning strategy described in [1], where bins are groups of microstates that are uniformly
     spaced in the integral of pi * v
@@ -106,8 +108,10 @@ def get_clustered_mfpt_bins(variance, steady_state, n_desired_we_bins):
     Parameters
     ----------
     variance, array-like: Variance function
+    discrepancy, array-like: Discrepancy function
     steady_state, array-like: Steady-state distribution
-    n_bins int: Number of macrobins
+    n_desired_we_bins int: Number of WE macrobins to assign microstates to -- typically the total number of bins,
+        less any recycling or basis bins
 
     Returns
     -------
@@ -121,17 +125,19 @@ def get_clustered_mfpt_bins(variance, steady_state, n_desired_we_bins):
 
     # The last two elements of this are the basis and target states respectively
     pi_v = steady_state * variance
+    n_active_bins = n_desired_we_bins-2
+    pi_v_sort = np.argsort(discrepancy).squeeze()
+    cumsum = np.cumsum(pi_v[pi_v_sort])
 
-    clusterer = KMeans(n_clusters=n_desired_we_bins)
+    clusterer = KMeans(n_clusters=min(n_active_bins, len(cumsum)))
 
-    # -2 so you don't cluster the basis/target states
-    # TODO: Handle those in a more general way, though from msm_we you're guaranteed they'll be the last two states
     # we_bin_assignments = clusterer.fit_predict(pi_v.reshape(-1, 1))
-    we_bin_assignments = clusterer.fit_predict(pi_v[:-2].reshape(-1, 1))
+    we_bin_assignments = clusterer.fit_predict(cumsum.reshape(-1, 1))
 
-    bin_states = np.full_like(steady_state, fill_value=np.nan)
-    for i in range(n_desired_we_bins):
-        states_in_bin = np.argwhere(we_bin_assignments == i).squeeze()
+    bin_states = np.full_like(cumsum, fill_value=np.nan)
+    for i in range(n_active_bins):
+        indices = np.argwhere(we_bin_assignments == i).squeeze()
+        states_in_bin = pi_v_sort[indices]
         bin_states[states_in_bin] = i
         log.info(f"Found that bin {i} contains microstates {states_in_bin}")
 
