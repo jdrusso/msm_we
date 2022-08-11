@@ -139,7 +139,7 @@ def get_clustered_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bi
         indices = np.argwhere(we_bin_assignments == i).squeeze()
         states_in_bin = pi_v_sort[indices]
         bin_states[states_in_bin] = i
-        log.info(f"Found that bin {i} contains microstates {states_in_bin}")
+        log.debug(f"Found that bin {i} contains microstates {states_in_bin}")
 
     return bin_states
 
@@ -252,20 +252,20 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         log.debug(f"About to cluster coords of shape {final_coords.shape}")
         stratified_cluster_assignments = self.clusterer.predict(final_coords)
 
-        log.info(f"Got microstate assignments {stratified_cluster_assignments}")
+        log.debug(f"Got microstate assignments {stratified_cluster_assignments}")
 
         # TODO: Map microstates to new WE bins, and populate we_bin_assignments
         # I have a microstate for each segment now -- I need to refer to my mapping of microstates to WE bins, which
         #   just comes from my optimization step
-        log.info(f"Mapping microstates to WE bins using {self.microstate_mapper}")
+        log.debug(f"Mapping microstates to WE bins using {self.microstate_mapper}")
 
         we_bin_assignments = np.array([float(self.microstate_mapper[microstate])
                                        if microstate < len(self.microstate_mapper) else -1
                                        for microstate in stratified_cluster_assignments
                                       ])
 
-        log.info(f"Basis WE bin is labeled {basis_we_bin_idx}, target WE bin is labeled {target_we_bin_idx}")
-        log.info(f"WE bin assignments before correcting basis/target are {we_bin_assignments}")
+        log.debug(f"Basis WE bin is labeled {basis_we_bin_idx}, target WE bin is labeled {target_we_bin_idx}")
+        log.debug(f"WE bin assignments before correcting basis/target are {we_bin_assignments}")
 
         we_bin_assignments[self.clusterer.model.is_WE_target(final_coords)] = target_we_bin_idx
         we_bin_assignments[self.clusterer.model.is_WE_basis(final_coords)] = basis_we_bin_idx
@@ -273,7 +273,7 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         zipped_assignments = np.array(list(zip(original_pcoords.reshape(-1), we_bin_assignments)))
         zip_sort = np.argsort(original_pcoords.reshape(-1))
 
-        log.info(f"WE bin assignments are {zipped_assignments[zip_sort]}")
+        log.debug(f"WE bin assignments are {zipped_assignments[zip_sort]}")
 
         for i in range(len(output)):
             output[i] = we_bin_assignments[i]
