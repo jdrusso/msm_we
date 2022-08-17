@@ -64,6 +64,6 @@ setup(
     tests_require=test_requirements,
     extras_require=EXTRAS_REQUIRE,
     url="https://github.com/jdrusso/msm_we",
-    version="0.1.18",
+    version="0.1.20",
     zip_safe=False,
 )

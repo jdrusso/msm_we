@@ -60,6 +60,9 @@ def solve_discrepancy(tmatrix, pi, B):
         np.dot(tmatrix, discrepancy)**2
     )
 
+    if np.isnan(variance).any():
+        log.warning("NaN elements in variance!")
+
     return discrepancy, variance
 
 
