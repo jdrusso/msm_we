@@ -224,7 +224,9 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         else:
             final_coords = coords
 
-        log.debug(f"Mapping pcoords {final_coords}")
+        log.info(f"Mapping original coords of shape {coords.shape}")
+        log.info(f"Mapping pcoords {final_coords}")
+        log.info(f"Mapping pcoords of shape {final_coords.shape}")
 
         # To use stratified clustering, first load the ORIGINAL pcoords into stratified.pcoord1List, then call
         #   stratified.predict().
@@ -233,6 +235,7 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         #  This isn't actually used for anything else, and no clustering happens for these, so I can actually
         #  set these arbitrarily.
         original_pcoords = final_coords[:, :self.n_original_pcoord_dims]
+        extended_pcoords = final_coords[:, self.n_original_pcoord_dims:]
 
         basis_we_bin_idx, target_we_bin_idx = self.nbins-2, self.nbins-1
 
@@ -249,8 +252,11 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         # Each segment will be
         #   1. Assigned a WE bin, based on its pcoords and the provided bin mapper
         #   2. Discretized, according to the k-means model associated with that WE bin
-        log.debug(f"About to cluster coords of shape {final_coords.shape}")
-        stratified_cluster_assignments = self.clusterer.predict(final_coords)
+        log.debug(f"About to cluster coords of shape {extended_pcoords.shape}")
+
+        # TODO: Do I just want final_coords[:, self.n_original_pcoord_dims:]?
+
+        stratified_cluster_assignments = self.clusterer.predict(extended_pcoords)
 
         log.debug(f"Got microstate assignments {stratified_cluster_assignments}")
 
