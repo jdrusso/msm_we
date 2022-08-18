@@ -181,7 +181,7 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
                  previous_binmapper,
                  microstate_mapper: dict,
                  stratified_clusterer: msm_we.StratifiedClusters,
-                 cluster_on_pcoord: bool,
+                 cluster_on_pcoord: bool = False,
                  *args,
                  **kwargs
                  ):
