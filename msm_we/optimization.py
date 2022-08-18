@@ -181,6 +181,7 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
                  previous_binmapper,
                  microstate_mapper: dict,
                  stratified_clusterer: msm_we.StratifiedClusters,
+                 cluster_on_pcoord: bool,
                  *args,
                  **kwargs
                  ):
@@ -209,6 +210,8 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         self.clusterer = stratified_clusterer
         self.clusterer.model = self.simple_model
 
+        self.cluster_on_pcoord = cluster_on_pcoord
+
         self.clusterer.model.n_clusters = 2
         for cluster_model in self.clusterer.cluster_models:
             if hasattr(cluster_model, 'cluster_centers_'):
@@ -221,7 +224,7 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
 
         # TODO: When analyzing augmented coordinates, this needs to pull just the child pcoord -- but when analyzing
         #   non-augmented, that won't exist
-        # final_coords = coords[:,-1]
+        # TODO: ^ What does that mean? What exactly is happening here, and how can I check for it more gracefully?
         if len(coords.shape) == 3:
             final_coords = coords[:, -1]
         else:
@@ -238,7 +241,11 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         #  This isn't actually used for anything else, and no clustering happens for these, so I can actually
         #  set these arbitrarily.
         original_pcoords = final_coords[:, :self.n_original_pcoord_dims]
-        extended_pcoords = final_coords[:, self.n_original_pcoord_dims:]
+
+        if not self.cluster_on_pcoord:
+            extended_pcoords = final_coords[:, self.n_original_pcoord_dims:]
+        else:
+            extended_pcoords = final_coords[:, :self.n_original_pcoord_dims]
 
         basis_we_bin_idx, target_we_bin_idx = self.nbins-2, self.nbins-1
 
