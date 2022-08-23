@@ -1432,6 +1432,12 @@ class modelWE:
                     weights = dset["weight"]
                     seg_weights = np.append(seg_weights, weights)
 
+                    if not pcoord.shape[2] == self.pcoord_ndim:
+                        log.warning(f"Dimensions of pcoord in {fileName} ({pcoord.shape[2]}) do not match specified "
+                                    f"pcoord dimensionality self.pcoord_ndim ({self.pcoord_ndim}). "
+                                    f"This may be expected if you're changing your pcoord during your simulation -- "
+                                    f"MSM-WE will only load up to dimension {self.pcoord_ndim}.")
+
                     # Iterate over segments in this dataset
                     for seg_idx in range(n_segs_in_file):
                         # if np.sum(pcoord[seg_idx,self.pcoord_len-1,:])==0.0:
@@ -1443,12 +1449,12 @@ class modelWE:
                         weightList = np.append(weightList, newSet[seg_idx][0])
                         pcoord0List = np.append(
                             pcoord0List,
-                            np.expand_dims(pcoord[seg_idx, 0, :], 0),
+                            np.expand_dims(pcoord[seg_idx, 0, :self.pcoord_ndim], 0),
                             axis=0,
                         )
                         pcoord1List = np.append(
                             pcoord1List,
-                            np.expand_dims(pcoord[seg_idx, self.pcoord_len - 1, :], 0),
+                            np.expand_dims(pcoord[seg_idx, self.pcoord_len - 1, :self.pcoord_ndim], 0),
                             axis=0,
                         )
                         n_segs = n_segs + 1
@@ -3714,7 +3720,7 @@ class modelWE:
 
             # Map coords to WE bins
             pcoord_array = np.array(pcoords)
-            assert pcoord_array.shape[0] == iter_coords.shape[0]
+            assert pcoord_array.shape[0] == iter_coords.shape[0], f"{pcoord_array.shape}, {iter_coords.shape}"
 
             # Ignore any segments that are in the basis or target
             pcoord_is_target = self.is_WE_target(pcoord_array)
