@@ -242,6 +242,9 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         #  set these arbitrarily.
         original_pcoords = final_coords[:, :self.n_original_pcoord_dims]
 
+        if not hasattr(self, 'cluster_on_pcoord'):
+            self.cluster_on_pcoord = False
+
         if not self.cluster_on_pcoord:
             extended_pcoords = final_coords[:, self.n_original_pcoord_dims:]
         else:
