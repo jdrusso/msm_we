@@ -230,9 +230,9 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         else:
             final_coords = coords
 
-        log.info(f"Mapping original coords of shape {coords.shape}")
-        log.info(f"Mapping pcoords {final_coords}")
-        log.info(f"Mapping pcoords of shape {final_coords.shape}")
+        log.debug(f"Mapping original coords of shape {coords.shape}")
+        log.debug(f"Mapping pcoords {final_coords}")
+        log.debug(f"Mapping pcoords of shape {final_coords.shape}")
 
         # To use stratified clustering, first load the ORIGINAL pcoords into stratified.pcoord1List, then call
         #   stratified.predict().
