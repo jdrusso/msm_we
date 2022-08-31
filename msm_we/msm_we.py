@@ -452,7 +452,7 @@ class modelWE:
 
         self.WEtargetp1_min = None
         self.WEtargetp1_max = None
-        """float: Progress coordinate value at target state.
+        """float: Progress coordinate value at target state.optimization flow
         Used to check if a progress coord is in the target, and to set the RMSD of the target cluster when cleaning the
         fluxmatrix."""
         self.target_bin_center = None
@@ -551,6 +551,8 @@ class modelWE:
 
         self.clustering_method = None
         self.validation_models = []
+
+        self.pcoord_shape_warned = False
 
     def initialize(
         # self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
@@ -1432,11 +1434,13 @@ class modelWE:
                     weights = dset["weight"]
                     seg_weights = np.append(seg_weights, weights)
 
-                    if not pcoord.shape[2] == self.pcoord_ndim:
+                    if not pcoord.shape[2] == self.pcoord_ndim and not self.pcoord_shape_warned:
                         log.warning(f"Dimensions of pcoord in {fileName} ({pcoord.shape[2]}) do not match specified "
                                     f"pcoord dimensionality self.pcoord_ndim ({self.pcoord_ndim}). "
-                                    f"This may be expected if you're changing your pcoord during your simulation -- "
-                                    f"MSM-WE will only load up to dimension {self.pcoord_ndim}.")
+                                    f"MSM-WE will only load up to dimension {self.pcoord_ndim}. "
+                                    f"This pcoord is just used for stratification, and this is expected behavior if "
+                                    f"you're extending your pcoord (i.e. in an optimization flow). ")
+                        self.pcoord_shape_warned = True
 
                     # Iterate over segments in this dataset
                     for seg_idx in range(n_segs_in_file):
