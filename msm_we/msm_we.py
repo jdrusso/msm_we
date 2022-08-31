@@ -1174,6 +1174,7 @@ class modelWE:
             self.set_note(table, step_idx, f"Method: {model.dimReduceMethod}")
             self.do_step(
                 table, step_idx, step=model.dimReduce,
+                kwargs={**step_kwargs.get('dimReduce', {})}
             )
 
             # # Clustering
