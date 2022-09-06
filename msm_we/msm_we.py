@@ -2597,6 +2597,7 @@ class modelWE:
         last_iter=None,
         rough_stride=10,
         fine_stride=1,
+        variance_cutoff=0.95
     ):
         """
         Dimensionality reduction using the scheme specified in initialization.
@@ -2625,7 +2626,6 @@ class modelWE:
             # First, do a "rough" PCA on the last 10% of the data to get the number of components that explain the
             #   variance cutoff.
             # This is necessary because with incremental PCA, there's no way to do this ahead of time.
-            variance_cutoff = 0.95
 
             if last_iter is None:
                 last_iter = self.maxIter
