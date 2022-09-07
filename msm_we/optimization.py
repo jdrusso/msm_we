@@ -44,7 +44,8 @@ def solve_discrepancy(tmatrix, pi, B):
 
     log.info("Computing pi matrix")
     norm = np.dot(pi, pi.T)
-    pi_matrix = pi @ pi.T / norm
+
+    pi_matrix = pi * pi.T.reshape(-1,1) / norm
 
     b_indicator = np.zeros_like(pi)
     b_indicator[B] = 1.0
