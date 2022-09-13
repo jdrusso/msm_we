@@ -64,6 +64,9 @@ def solve_discrepancy(tmatrix, pi, B):
     if np.isnan(variance).any():
         log.warning("NaN elements in variance!")
 
+    # TODO: Verify this is the correct sanity check
+    assert np.isclose(discrepancy @ pi, 0), "Discrepancy solution failed normalization sanity check!"
+
     return discrepancy, variance
 
 
