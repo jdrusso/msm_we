@@ -2705,27 +2705,77 @@ class modelWE:
             self.coordinates = ipca
             self.ndim = components_for_var
 
-        elif self.dimReduceMethod == "vamp":
-            # TODO: I  don't think trajSet is initialized by itself -- you need to manually call get_traj_coordinates
-            log.warning(
-                "VAMP dimensionality reduction requires you to *manually* call get_traj_coordinates first, "
-                "or self.trajSet will be all None. Make sure you've done that!"
-            )
+        # elif self.dimReduceMethod == "vamp":
+        #     # TODO: I  don't think trajSet is initialized by itself -- you need to manually call get_traj_coordinates
+        #     log.warning(
+        #         "VAMP dimensionality reduction requires you to *manually* call get_traj_coordinates first, "
+        #         "or self.trajSet will be all None. Make sure you've done that!"
+        #     )
+        #     raise NotImplementedError
+        #
+        #     ntraj = len(self.trajSet)
+        #     data = [None] * ntraj
+        #     for itraj in range(ntraj):
+        #         data[itraj] = self.processCoordinates(self.trajSet[itraj])
+        #     self.coordinates = coor.vamp(
+        #         data,
+        #         lag=self.vamp_lag,
+        #         dim=self.vamp_dim,
+        #         scaling=None,
+        #         right=False,
+        #         stride=1,
+        #         skip=0,
+        #     )
+        #     self.ndim = self.coordinates.dimension()
 
-            ntraj = len(self.trajSet)
-            data = [None] * ntraj
-            for itraj in range(ntraj):
-                data[itraj] = self.processCoordinates(self.trajSet[itraj])
-            self.coordinates = coor.vamp(
-                data,
-                lag=self.vamp_lag,
-                dim=self.vamp_dim,
-                scaling=None,
-                right=False,
-                stride=1,
-                skip=0,
-            )
-            self.ndim = self.coordinates.dimension()
+        elif self.dimReduceMethod == "tica" or self.dimReduceMethod == "vamp":
+
+            # TODO: Streaming implementation, a la
+            #  https://deeptime-ml.github.io/latest/api/generated/deeptime.decomposition.TICA.html#deeptime.decomposition.TICA.partial_fit
+
+            # TODO: Pre-allocate these.. but how can I get their sizes? And, they're ragged
+            trajs_start = []
+            trajs_end = []
+            weights = []
+
+            if last_iter is None:
+                last_iter = self.maxIter
+
+            for iteration in range(first_iter, last_iter, fine_stride):
+
+                # iter_coords = self.get_iter_coordinates(iteration)
+                self.load_iter_data(iteration)
+                self.get_transition_data_lag0()
+
+                coords_from = self.coordPairList[:,0,:,0]
+                coords_to = self.coordPairList[:,0,:,1]
+
+                # If  no good coords in this iteration, skip it
+                # if iter_coords.shape[0] == 0:
+                #     continue
+
+                processed_start = self.processCoordinates(coords_from)
+                processed_end = self.processCoordinates(coords_to)
+                trajs_start.extend(processed_start)
+                trajs_end.extend(processed_end)
+                weights.extend(self.weightList)
+
+            weights = np.array(weights)
+
+            if self.dimReduceMethod == "tica":
+                self.coordinates = TICA(lagtime=1, var_cutoff=variance_cutoff, scaling="kinetic_map")
+            elif self.dimReduceMethod == "vamp":
+                self.coordinates = VAMP(lagtime=1, var_cutoff=variance_cutoff, scaling="kinetic_map")
+
+
+            # TODO: weights, using fit_from_timeseries
+            # self.coordinates.fit(trajs)
+            log.info(f"Performing weighted {self.dimReduceMethod}")
+            # print(f"Performing weighted TICA with weights {weights.shape} and trajs {trajs.shape}")
+
+            self.coordinates.fit_from_timeseries((np.array(trajs_start), np.array(trajs_end)), weights=weights)
+            self.ndim = self.coordinates.dim
+
 
         elif self.dimReduceMethod == "none":
             self.ndim = int(3 * self.nAtoms)
@@ -2734,6 +2784,9 @@ class modelWE:
             # data = self.all_coords.reshape(-1, self.ndim)
             self.coordinates = self.Coordinates()
             # self.coordinates.transform = self.processCoordinates
+
+        else:
+            raise NotImplementedError
 
     class Coordinates(object):
         """
@@ -2771,10 +2824,12 @@ class modelWE:
 
         log.debug("Reducing coordinates")
 
+        # TODO: This list should not be stored here, this should be a class attribute or something
         if (
             self.dimReduceMethod == "none"
             or self.dimReduceMethod == "pca"
             or self.dimReduceMethod == "vamp"
+            or self.dimReduceMethod == "tica"
         ):
             coords = self.processCoordinates(coords)
             coords = self.coordinates.transform(coords)
