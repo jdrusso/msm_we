@@ -560,6 +560,8 @@ class modelWE:
 
         self.use_weights_in_clustering = False
 
+        self.pre_discretization_model = None
+
     def initialize(
         # self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
         self,
@@ -1197,6 +1199,7 @@ class modelWE:
                     "streaming": streaming,
                     "use_ray": use_ray,
                     "stratified": stratified,
+                    "store_validation_model": cross_validation_groups > 0,
                     **step_kwargs.get('clustering', {})
                 },
             )
@@ -2456,7 +2459,7 @@ class modelWE:
 
         """
 
-        if streaming is None and self.dimReduceMethod == "vamp":
+        if streaming is None and False:# and self.dimReduceMethod == "vamp":
             streaming = False
         elif streaming is None:
             streaming = True
@@ -3059,6 +3062,7 @@ class modelWE:
         use_ray=False,
         stratified=True,
         iters_to_use=None,
+        store_validation_model=False,
         **_cluster_args,
     ):
 
@@ -3100,7 +3104,8 @@ class modelWE:
         # Do this so you can use it for building the validation models.
         #   We directly modify the clusters in cleaning, so this is the easiest way of recreating the original,
         #   "unclean" validation model.
-        self.post_cluster_model = deepcopy(self)
+        if store_validation_model:
+            self.post_cluster_model = deepcopy(self)
 
     def cluster_aggregated(
         self,
@@ -4104,7 +4109,13 @@ class modelWE:
         # Submit all the discretization tasks to the cluster
         task_ids = []
 
-        model_id = ray.put(self)
+        if self.pre_discretization_model is None:
+            self.pre_discretization_model = deepcopy(self)
+        else:
+            log.info("Using cached model for discretization")
+
+        model_id = ray.put(self.pre_discretization_model)
+
         cluster_model_id = ray.put(self.clusters)
         process_coordinates_id = ray.put(self.processCoordinates)
 
@@ -4121,6 +4132,7 @@ class modelWE:
 
         # As they're completed, add them to dtrajs
         dtrajs = [None] * (self.maxIter - 1)
+        pair_dtrajs = [None, None] * (self.maxIter - 1)
 
         # Do these in bigger batches, dtrajs aren't very big
 
@@ -4137,17 +4149,28 @@ class modelWE:
                 )
                 results = ray.get(finished)
 
-                for dtraj, _, iteration, target_bins, basis_bins in results:
+                for (parent_dtraj, child_dtraj), _, iteration, target_bins, basis_bins in results:
 
                     self.clusters.target_bins.update(target_bins)
                     self.clusters.basis_bins.update(basis_bins)
 
-                    dtrajs[iteration - 1] = dtraj
+                    dtrajs[iteration - 1] = child_dtraj
+
+                    pair_dtrajs[iteration - 1] = list(zip(parent_dtraj, child_dtraj))
+
                     pbar.update(1)
                     pbar.refresh()
 
+                del results
+                del finished
+        del model_id
+        del cluster_model_id
+
         # Remove all empty elements from dtrajs and assign to self.dtrajs
         self.dtrajs = [dtraj for dtraj in dtrajs if dtraj is not None]
+
+        self.pair_dtrajs = [dtraj for dtraj in pair_dtrajs if dtraj is not None]
+
 
         log.info("Discretization complete")
 
@@ -4256,24 +4279,45 @@ class modelWE:
         #     except AttributeError:
         #         print("No cluster centers!")
 
-        iter_coords = self.get_iter_coordinates(iteration)
+        # iter_coords = self.get_iter_coordinates(iteration)
+
+        kmeans_model.model.load_iter_data(iteration)
+        kmeans_model.model.get_transition_data_lag0()
+        # print(f"After loading coordPairList in iter {iteration}, shape is {kmeans_model.model.coordPairList.shape}")
+        parent_coords, child_coords = kmeans_model.model.coordPairList[..., 0], self.coordPairList[..., 1]
 
         # If there are no coords for this iteration, return None
-        if iter_coords.shape[0] == 0:
+        if child_coords.shape[0] == 0:
             return None, 0, iteration
 
         # Otherwise, apply the k-means model and discretize
-        transformed_coords = self.coordinates.transform(processCoordinates(iter_coords))
+        transformed_parent_coords = kmeans_model.model.coordinates.transform(processCoordinates(parent_coords))
+        transformed_child_coords = kmeans_model.model.coordinates.transform(processCoordinates(child_coords))
 
         try:
-            dtrajs = kmeans_model.predict(transformed_coords)
+            kmeans_model.processing_from = True
+            try:
+                parent_dtrajs = kmeans_model.predict(transformed_parent_coords)
+            except IndexError as e:
+
+                print("Problem ===== ")
+                print(f"Parent pcoords are shape {kmeans_model.model.pcoord0List.shape}")
+                print(f"Parent coords are shape {transformed_parent_coords.shape}")
+                print(f"Child pcoords are shape {kmeans_model.model.pcoord1List.shape}")
+                print(f"Child coords are shape {transformed_child_coords.shape}")
+                print("===== ")
+
+                raise e
+
+            kmeans_model.processing_from = False
+            child_dtrajs = kmeans_model.predict(transformed_child_coords)
         except AttributeError as e:
             log.error("Cluster center was not initialized and not remapped")
             log.error(kmeans_model.we_remap)
             raise e
             # TODO: Remap to nearest visited
 
-        return dtrajs, 1, iteration, kmeans_model.target_bins, kmeans_model.basis_bins
+        return (parent_dtrajs, child_dtrajs), 1, iteration, kmeans_model.target_bins, kmeans_model.basis_bins
 
     def load_clusters(self, clusterFile):
         """
@@ -4300,6 +4344,15 @@ class modelWE:
 
     @ray.remote
     def get_iter_fluxMatrix_ray(model, processCoordinates, n_iter):
+        """
+        TODO
+        ----
+        Refactor this so it doesn't need to take the ENTIRE model as an input. That serialization/deserialization is
+        painful and unnecessary.
+
+        Really, in the main loop, I can just pull out the data (pcoord lists + transition weights) for this iteration
+            and feed it directly in.
+        """
 
         # model_id, n_iter, processCoordinates_id = args
 
@@ -4307,10 +4360,10 @@ class modelWE:
         # processCoordinates = ray.get(processCoordinates_id)
         self = model
 
-        self.processCoordinates = processCoordinates
+        # self.processCoordinates = processCoordinates
 
-        self.clusters = deepcopy(self.clusters)
-        self.clusters.model = self
+        # self.clusters = deepcopy(self.clusters)
+        # self.clusters.model = self
 
         iter_fluxmatrix = self.get_iter_fluxMatrix(n_iter)
 
@@ -4319,92 +4372,19 @@ class modelWE:
         return iter_fluxmatrix, n_iter
 
     def get_iter_fluxMatrix(self, n_iter):
-        """
-        Get the flux matrix for an iteration.
 
-        1. Update state with data from the iteration you want to compute the flux matrix for
-        2. Load transition data at the requested lag
 
-        Parameters
-        ----------
-        n_iter
-
-        Returns
-        -------
-
-        TODO
-        ----
-        This function is slow because of the call to get_transition_data_lag0(). See that function for more info.
-        """
-
-        # 1. Update state with data from the iteration you want to compute the flux matrix for
-        # sys.stdout.write("iteration " + str(n_iter) + ": data \n")
         self.load_iter_data(n_iter)
+        parent_pcoords = self.pcoord0List.copy()
+        child_pcoords = self.pcoord1List.copy()
 
-        #  2. Load transition data at the requested lag
-        if self.n_lag > 0:
-            # If you're using more than 1 lag, obtain segment histories at that lag
-            #   This means you have to look back one or more iterations
+        self.get_transition_data_lag0()
+        transition_weights = self.transitionWeights.copy()
 
-            # sys.stdout.write("segment histories \n")
-            self.get_seg_histories(self.n_lag + 1)
-            # sys.stdout.write(" transition data...\n")
-            self.get_transition_data(self.n_lag)
-        elif self.n_lag == 0:
-            # If you're using a lag of 0, your coordinate pairs are just the beginning/end of the iteration.
-            #   In that, it's not possible to have warps/recycles, since those are done handled between iterations.
-            try:
-                self.get_transition_data_lag0()
-            except KeyError:
-                log.warning(
-                    f"No coordinates for iter {n_iter}, skipping this iter in fluxmatrix calculation"
-                )
-                return np.zeros(shape=(self.n_clusters + 2, self.n_clusters + 2))
-
-        log.debug(f"Getting flux matrix for iter {n_iter} with {self.nSeg} segments")
-        # If you used a lag of 0, transitions weights are just weightList
-        # If you used a lag > 0, these include the weight histories from previous iterations
-        # num_transitions = np.shape(self.transitionWeights)[0]
-
-        # Create dedicated clusters for the target and basis states,
-        # and reassign any points within the target or basis to those
-        target_cluster_index = self.n_clusters + 1
-        basis_cluster_index = self.n_clusters
-
-        # (Segment, Atom, [lagged, current coord])
-        log.debug(f"Coord pairlist shape is {self.coordPairList.shape}")
-
-        # Get which coords are not NaN
-        good_coords = ~np.isnan(self.coordPairList).any(axis=(1, 2, 3))
-
-        # Assign a cluster to the lagged and the current coords
-        reduced_initial = self.reduceCoordinates(
-            self.coordPairList[good_coords, :, :, 0]
-        )
-
-        reduced_final = self.reduceCoordinates(self.coordPairList[good_coords, :, :, 1])
-
-        # Wrap this in a try to make sure we unset the toggle
-        # Note: This toggle is only used for stratified clusteirng, but it's set either way.
-        self.clusters.toggle = True
-        self.clusters.processing_from = True
-        try:
-            start_cluster = self.clusters.predict(reduced_initial)
-            end_cluster = self.clusters.predict(reduced_final)
-        except Exception as e:
-            log.error(reduced_initial)
-            log.error(reduced_final)
-            self.clusters.processing_from = False
-            self.clusters.toggle = False
-            raise e
-        else:
-            self.clusters.processing_from = False
-            self.clusters.toggle = False
-
-        log.debug(f"Cluster 0 shape: {start_cluster.shape}")
+        index_pairs = np.array(self.pair_dtrajs[n_iter-1])
 
         # Record every point where you're in the target
-        ind_end_in_target = np.where(self.is_WE_target(self.pcoord1List))
+        ind_end_in_target = np.where(self.is_WE_target(child_pcoords))
 
         if ind_end_in_target[0].size > 0:
             log.debug(
@@ -4416,7 +4396,7 @@ class modelWE:
             log.debug(f"No target1 entries. {ind_end_in_target}")
 
         # Get the index of every point
-        ind_start_in_basis = np.where(self.is_WE_basis(self.pcoord0List[good_coords]))
+        ind_start_in_basis = np.where(self.is_WE_basis(parent_pcoords))
         if ind_start_in_basis[0].size > 0:
             log.debug(
                 "Number of pre-transition points in basis0: "
@@ -4424,13 +4404,134 @@ class modelWE:
                 + "\n"
             )
 
-        ind_end_in_basis = np.where(self.is_WE_basis(self.pcoord1List[good_coords]))
+        ind_end_in_basis = np.where(self.is_WE_basis(child_pcoords))
         if ind_end_in_basis[0].size > 0:
             log.debug(
                 "Number of post-transition points in basis1: "
                 + str(ind_end_in_basis[0].size)
                 + "\n"
             )
+
+
+
+        return modelWE.build_flux_matrix(self.n_clusters,
+                                  index_pairs,
+                                  ind_start_in_basis, ind_end_in_basis,
+                                  ind_end_in_target,
+                                  transition_weights).todense().A
+
+    @ray.remote
+    def build_flux_matrix_remote(n_clusters,
+                                  index_pairs,
+                                  ind_start_in_basis, ind_end_in_basis,
+                                  ind_end_in_target,
+                                  transition_weights,
+                                 n_iter):
+
+        return modelWE.build_flux_matrix(n_clusters,
+                                         index_pairs,
+                                         ind_start_in_basis,
+                                         ind_end_in_basis, ind_end_in_target,
+                                         transition_weights), n_iter
+
+    # def get_iter_fluxMatrix(self, n_iter):
+    @staticmethod
+    def build_flux_matrix(n_clusters, index_pairs, ind_start_in_basis, ind_end_in_basis,
+                          ind_end_in_target, transition_weights):
+        """
+        Build the flux matrix for an iteration.
+
+        Returns
+        -------
+
+        TODO
+        ----
+        This function is slow because of the call to get_transition_data_lag0(). See that function for more info.
+            Removed!
+
+        This can be refactored to be static
+        """
+
+        # 1. Update state with data from the iteration you want to compute the flux matrix for
+        # sys.stdout.write("iteration " + str(n_iter) + ": data \n")
+
+        # Need this to load pcoordXList
+        # self.load_iter_data(n_iter)
+        # parent_pcoords = self.pcoord0List.copy()
+        # child_pcoords = self.pcoord1List.copy()
+        #
+        # #  2. Load transition data at the requested lag
+        # if self.n_lag > 0:
+        #     raise NotImplementedError
+        #     # If you're using more than 1 lag, obtain segment histories at that lag
+        #     #   This means you have to look back one or more iterations
+        #
+        #     # sys.stdout.write("segment histories \n")
+        #     self.get_seg_histories(self.n_lag + 1)
+        #     # sys.stdout.write(" transition data...\n")
+        #     self.get_transition_data(self.n_lag)
+        # elif self.n_lag == 0:
+        #     # If you're using a lag of 0, your coordinate pairs are just the beginning/end of the iteration.
+        #     #   In that, it's not possible to have warps/recycles, since those are done handled between iterations.
+        #     try:
+        #         self.get_transition_data_lag0()
+        #         transition_weights = self.transitionWeights.copy()
+        #         pass
+        #     except KeyError:
+        #         log.warning(
+        #             f"No coordinates for iter {n_iter}, skipping this iter in fluxmatrix calculation"
+        #         )
+        #         return np.zeros(shape=(self.n_clusters + 2, self.n_clusters + 2))
+
+        # log.debug(f"Getting flux matrix for iter {n_iter}")# with {self.nSeg} segments")
+        # If you used a lag of 0, transitions weights are just weightList
+        # If you used a lag > 0, these include the weight histories from previous iterations
+        # num_transitions = np.shape(self.transitionWeights)[0]
+
+        # Create dedicated clusters for the target and basis states,
+        # and reassign any points within the target or basis to those
+        target_cluster_index = n_clusters + 1
+        basis_cluster_index = n_clusters
+
+        # (Segment, Atom, [lagged, current coord])
+        # log.debug(f"Coord pairlist shape is {self.coordPairList.shape}")
+
+        # Get which coords are not NaN
+        # good_coords = ~np.isnan(self.coordPairList).any(axis=(1, 2, 3))
+
+        # Assign a cluster to the lagged and the current coords
+
+        # reduced_initial, reduced_final = None, None
+        # reduced_initial = self.reduceCoordinates(
+        #     self.coordPairList[good_coords, :, :, 0]
+        # )
+
+        # reduced_final = self.reduceCoordinates(self.coordPairList[good_coords, :, :, 1])
+
+        # Wrap this in a try to make sure we unset the toggle
+        # Note: This toggle is only used for stratified clusteirng, but it's set either way.
+        # self.clusters.toggle = True
+        # self.clusters.processing_from = True
+        try:
+            # start_cluster = self.clusters.predict(reduced_initial)
+            # end_cluster = self.clusters.predict(reduced_final)
+            # start_cluster = np.array([x[0] for x in self.pair_dtrajs[n_iter-1]])
+            # end_cluster = np.array([x[1] for x in self.pair_dtrajs[n_iter-1]])
+            start_cluster, end_cluster = index_pairs.T.copy()
+        except Exception as e:
+            log.error(index_pairs)
+            # log.error(reduced_final)
+            # self.clusters.processing_from = False
+            # self.clusters.toggle = False
+            raise e
+        else:
+            pass
+            # self.clusters.processing_from = False
+            # self.clusters.toggle = False
+
+        # good_coords = np.arange(0, parent_pcoords.shape[0]).astype(int)
+
+        log.debug(f"Cluster 0 shape: {start_cluster.shape}")
 
         log.debug(
             f"Target cluster index is: {target_cluster_index},  basis cluster index is: {basis_cluster_index}"
@@ -4446,20 +4547,25 @@ class modelWE:
         # Data here is just the number of segments since each segment is associated with 1 transition
         try:
             fluxMatrix = coo_matrix(
-                (self.transitionWeights[good_coords], (start_cluster, end_cluster)),
-                shape=(self.n_clusters + 2, self.n_clusters + 2),
-            ).todense()
+                (transition_weights, (start_cluster, end_cluster)),
+                shape=(n_clusters + 2, n_clusters + 2),
+            )#.todense()
         except ValueError as e:
             log.error(
                 f"Iter_fluxmatrix failed. Transition was from {start_cluster} -> {end_cluster} "
-                f"\n\t(Total {self.n_clusters + 2} clusters)"
+                f"\n\t(Total {n_clusters + 2} clusters)"
                 f"\n\t(End in target: {ind_end_in_target})"
+                f"\n\t(Weights len: {len(transition_weights)})"
+                f"\n\t(Good Weights len: {len(transition_weights)})"
+                # f"\n\t(Good Coords len: {len(good_coords)})"
+                f"\n\t(start cluster len: {len(start_cluster)})"
+                f"\n\t(end_cluster len: {len(end_cluster)})"
             )
             raise e
 
         # While the sparse matrix implementation is nice and efficient, using the np.matrix type is a little weird
         #   and fragile, and it's possible it'll be deprecated in the future.
-        fluxMatrix = fluxMatrix.A
+        # fluxMatrix = fluxMatrix.A
 
         return fluxMatrix
 
@@ -4634,7 +4740,7 @@ class modelWE:
 
             if last_iter is None:
                 last_iter = self.maxIter
-            iters_to_use = range(first_iter + 1, last_iter + 1)
+            iters_to_use = range(first_iter + 1, last_iter)
 
         # Else, if iters_to_use is Not none, and Not (first_iter is None and last_iter is None)
         else:
@@ -4725,8 +4831,8 @@ class modelWE:
                 # Submit all the tasks for iteration fluxmatrix calculations
                 task_ids = []
 
-                model_id = ray.put(self)
-                processCoordinates_id = ray.put(self.processCoordinates)
+                # model_id = ray.put(self)
+                # processCoordinates_id = ray.put(self.processCoordinates)
 
                 # max_inflight = 70
                 for iteration in tqdm.tqdm(
@@ -4748,9 +4854,35 @@ class modelWE:
                     #     log.info(f"At iteration {iteration}, {len(ready)} jobs are ready {len(notready)} not, submitting more.")
 
                     # log.debug(f"Submitted fluxmatrix task iteration {iteration}")
-                    _id = self.get_iter_fluxMatrix_ray.remote(
-                        model_id, processCoordinates_id, iteration
+
+                    self.load_iter_data(iteration)
+                    parent_pcoords = self.pcoord0List.copy()
+                    child_pcoords = self.pcoord1List.copy()
+
+                    ind_end_in_target = np.where(self.is_WE_target(child_pcoords))
+                    ind_start_in_basis = np.where(self.is_WE_basis(parent_pcoords))
+                    ind_end_in_basis = np.where(self.is_WE_basis(child_pcoords))
+
+                    self.get_transition_data_lag0()
+                    transition_weights = self.transitionWeights.copy()
+
+                    index_pairs = np.array(self.pair_dtrajs[iteration-1])
+
+                    # _id = self.get_iter_fluxMatrix_ray.remote(
+                    #     # model_id, processCoordinates_id, iteration
+                    #     parent_pcoords, child_pcoords, transition_weights
+                    # )
+
+                    _id = self.build_flux_matrix_remote.remote(
+                        self.n_clusters,
+                        index_pairs,
+                        ind_start_in_basis, ind_end_in_basis,
+                        ind_end_in_target,
+                        transition_weights,
+                        iteration
                     )
+
+
 
                     task_ids.append(_id)
 
@@ -4777,7 +4909,7 @@ class modelWE:
 
                         # Add each matrix to the total fluxmatrix
                         for _fmatrix, _iter in results:
-                            fluxMatrix = fluxMatrix + _fmatrix
+                            fluxMatrix = fluxMatrix + _fmatrix.todense().A
                             pbar.update(1)
                             pbar.refresh()
 
@@ -4790,7 +4922,7 @@ class modelWE:
                         del results
 
                 log.info("Fluxmatrices all obtained")
-                del model_id
+                # del model_id
                 del task_ids
 
                 # Write the H5. Can't do this per-iteration, because we're not guaranteed to be going sequentially now
