@@ -2606,7 +2606,8 @@ class modelWE:
         last_iter=None,
         rough_stride=10,
         fine_stride=1,
-        variance_cutoff=0.95
+        variance_cutoff=0.95,
+        use_weights=True
     ):
         """
         Dimensionality reduction using the scheme specified in initialization.
@@ -2775,14 +2776,23 @@ class modelWE:
             elif self.dimReduceMethod == "vamp":
                 self.coordinates = VAMP(lagtime=1, var_cutoff=variance_cutoff, scaling="kinetic_map")
 
-
-            # TODO: weights, using fit_from_timeseries
             # self.coordinates.fit(trajs)
             log.info(f"Performing weighted {self.dimReduceMethod}")
             # print(f"Performing weighted TICA with weights {weights.shape} and trajs {trajs.shape}")
 
+            # Weights are not currently supported in VAMP
+            #   See: https://github.com/deeptime-ml/deeptime/blob/main/deeptime/covariance/util/_running_moments.py#L247
+            if not use_weights or self.dimReduceMethod == "vamp":
+                weights = None
+
             self.coordinates.fit_from_timeseries((np.array(trajs_start), np.array(trajs_end)), weights=weights)
-            self.ndim = self.coordinates.dim
+
+            # Note: ndim is only used in one place, and it's a deprecated obsolete function
+            self.ndim = self.coordinates.model.output_dimension
+
+            log.info(f"Weighted {self.dimReduceMethod} will reduce "
+                     f"{self.coordinates._model._instantaneous_coefficients.shape[0]} to {self.ndim} components.")
+
 
 
         elif self.dimReduceMethod == "none":
