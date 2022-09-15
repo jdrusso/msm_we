@@ -4304,6 +4304,8 @@ class modelWE:
 
         iter_fluxmatrix = self.get_iter_fluxMatrix(n_iter)
 
+        del self
+
         return iter_fluxmatrix, n_iter
 
     def get_iter_fluxMatrix(self, n_iter):
@@ -4581,7 +4583,7 @@ class modelWE:
         return fluxMatrix
 
     def get_fluxMatrix(
-        self, n_lag, first_iter=1, last_iter=None, iters_to_use=None, use_ray=False
+        self, n_lag, first_iter=1, last_iter=None, iters_to_use=None, use_ray=False, result_batch_size=5
     ):
         """
         Compute the matrix of fluxes at a given lag time, for a range of iterations.
@@ -4751,7 +4753,6 @@ class modelWE:
                     total=len(iters_to_use), desc="Retrieving flux matrices"
                 ) as pbar:
                     while task_ids:
-                        result_batch_size = 50
                         result_batch_size = min(result_batch_size, len(task_ids))
                         log.debug(
                             f"Waiting for {result_batch_size} results ({len(task_ids)} total remain)"
@@ -4770,7 +4771,17 @@ class modelWE:
                             pbar.update(1)
                             pbar.refresh()
 
+                        # Try to free up some memory used by Ray for these objects
+                        # See: https://github.com/ray-project/ray/issues/15058
+                        # I was running into issues with objects spilling from the object store during fluxmatrix
+                        #   calculation. None of the individual calculations should really get that big, so maybe
+                        #   something wasn't getting freed from memory when it should've.
+                        del finished
+                        del results
+
                 log.info("Fluxmatrices all obtained")
+                del model_id
+                del task_ids
 
                 # Write the H5. Can't do this per-iteration, because we're not guaranteed to be going sequentially now
 
