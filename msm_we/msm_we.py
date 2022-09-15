@@ -362,6 +362,9 @@ class StratifiedClusters:
                     self.cluster_models[we_bins[i]], "cluster_centers_"
                 ), f"Not initialized in seg {i}, bin {we_bins[i]}. Coord was {coord}, coords were {coords}"
                 try:
+
+                    # log.info(f"Doing prediction with n threads {self.cluster_models[we_bins[i]]._n_threads}")
+
                     _discrete = [
                         self.cluster_models[we_bins[i]].predict([coord])[0] + offset
                     ]
@@ -555,6 +558,8 @@ class modelWE:
 
         self.pcoord_shape_warned = False
 
+        self.use_weights_in_clustering = False
+
     def initialize(
         # self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
         self,
@@ -568,6 +573,7 @@ class modelWE:
         pcoord_ndim: int = 1,
         auxpath: str = "coord",
         _suppress_boundary_warning=False,
+        use_weights_in_clustering=False,
     ):
         """
         Initialize the model-builder.
@@ -693,6 +699,8 @@ class modelWE:
             if not _suppress_boundary_warning:
                 log.warning("Model initialized, but coordinates do not exist yet.")
             self.coordsExist = False
+
+        self.use_weights_in_clustering = use_weights_in_clustering
 
         log.debug("msm_we model successfully initialized")
 
@@ -3603,6 +3611,7 @@ class modelWE:
         self.n_clusters = n_clusters * (bin_mapper.nbins)
 
         self.clusters.toggle = False
+
         self.launch_ray_discretization()
 
     @staticmethod
@@ -3769,19 +3778,28 @@ class modelWE:
 
             used_iters += 1
             _iter_coords = self.get_iter_coordinates(iteration)
+            _seg_weights = self.seg_weights[iteration]
+
             if used_iters == 0:
                 iter_coords = _iter_coords
+                seg_weights = _seg_weights
                 pcoords = [x for x in self.pcoord0List]
             else:
                 iter_coords = np.append(iter_coords, _iter_coords, axis=0)
                 pcoords.extend(self.pcoord0List)
+                if self.use_weights_in_clustering:
+                    seg_weights = np.append(seg_weights, _seg_weights, axis=0)
                 log.debug(
                     f"After extension, pcoords: {len(pcoords)}, iter_coords: {iter_coords.shape}. Ignored: {ignored_bins}. Mapper: {bin_mapper}"
                 )
 
             # Map coords to WE bins
             pcoord_array = np.array(pcoords)
+            # seg_weight_array = np.array(seg_weights)
             assert pcoord_array.shape[0] == iter_coords.shape[0], f"{pcoord_array.shape}, {iter_coords.shape}"
+
+            if self.use_weights_in_clustering:
+                assert seg_weights.shape[0] == seg_weights.shape[0], f"{seg_weights.shape}, {iter_coords.shape}"
 
             # Ignore any segments that are in the basis or target
             pcoord_is_target = self.is_WE_target(pcoord_array)
@@ -3812,8 +3830,30 @@ class modelWE:
                 processCoordinates(np.squeeze(iter_coords[segs_in_bin]))
             )
 
+
+            if self.use_weights_in_clustering:
+                weights = seg_weights[segs_in_bin].squeeze()
+            else:
+                weights = None
+
             try:
-                kmeans_models.cluster_models[_bin].partial_fit(transformed_coords)
+
+                kmeans_models.cluster_models[_bin].partial_fit(
+                    transformed_coords,
+                    sample_weight=weights
+                )
+                # HACK: I wish I understood better what happened here. Frankly, I woke up one day and the cluster prediction
+                # was consistently running ~30x slower in Ray vs serial.
+                # After lots of troubleshooting (a day of my life I'll never get back), I found that the models for each
+                # stratum were oversubscribed on threads. I.e., I have 16 cores, I was running 4 Ray workers, but each worker
+                # was trying to do prediction with 16 threads. This led to agonizingly slow prediction.
+                # Is there a way to use multiple threads, AND ray? Almost certainly, but let's make it simple and just enforce
+                # 1 thread for now..
+                # Note that as far as I'm aware I didn't update any libraries or anything, and this behavior wasn't present
+                # before. So I have no idea what changed that caused this massive oversubscription. But, this fixes it.
+                kmeans_models.cluster_models[_bin]._n_threads = 1
+
+
             except ValueError as e:
                 log.info(f"Was on bin {_bin}")
                 log.error(f"Error fitting k-means to bin {_bin}")
@@ -4065,6 +4105,7 @@ class modelWE:
 
             _id = self.do_stratified_ray_discretization.remote(
                 model_id, cluster_model_id, iteration, process_coordinates_id
+                # self, self.clusters, iteration, self.processCoordinates
             )
             task_ids.append(_id)
 
