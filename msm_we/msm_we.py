@@ -18,6 +18,7 @@ import scipy.sparse as sparse
 from sklearn.decomposition import IncrementalPCA as iPCA
 from sklearn.cluster import KMeans as kmeans
 from sklearn.cluster import MiniBatchKMeans as mini_kmeans
+from deeptime.decomposition import TICA, VAMP
 
 import logging
 from rich.logging import RichHandler
