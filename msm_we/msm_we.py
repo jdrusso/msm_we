@@ -1265,21 +1265,22 @@ class modelWE:
             # use `post_cluster_model`, which is the discretized model right before the fluxmatrix was calculated
             # for now just do something useless w/ the post_cluster_model so linter doesn't complain
             step_idx += 1
-            self.do_step(
-                table,
-                step_idx,
-                step=model.do_block_validation,
-                kwargs={
-                    "cross_validation_groups": cross_validation_groups,
-                    "cross_validation_blocks": cross_validation_blocks,
-                    "use_ray": use_ray,
-                    **step_kwargs.get('block_validation', {})
-                },
-            )
-            flux_text = ""
-            for group, _validation_model in enumerate(self.validation_models):
-                flux_text += f"Group {group} flux: {_validation_model.JtargetSS:.2e}\n"
-            self.set_note(table, step_idx, flux_text)
+            if cross_validation_groups > 0:
+                self.do_step(
+                    table,
+                    step_idx,
+                    step=model.do_block_validation,
+                    kwargs={
+                        "cross_validation_groups": cross_validation_groups,
+                        "cross_validation_blocks": cross_validation_blocks,
+                        "use_ray": use_ray,
+                        **step_kwargs.get('block_validation', {})
+                    },
+                )
+                flux_text = ""
+                for group, _validation_model in enumerate(self.validation_models):
+                    flux_text += f"Group {group} flux: {_validation_model.JtargetSS:.2e}\n"
+                self.set_note(table, step_idx, flux_text)
 
             # If live updating was disabled, write to the table once now. (Doesn't do anything if it was enabled)
             live.refresh()
@@ -3036,20 +3037,20 @@ class modelWE:
         # self = ray.get(model_id)
         # kmeans_model = ray.get(kmeans_model_id)
         # processCoordinates = ray.get(processCoordinates_id)
-        self = model
+        # self = model
 
         # Need to do this so the model's transformation array is writable -- otherwise predict chokes
         #   with 'buffer source array is read-only'.
         kmeans_model = deepcopy(kmeans_model)
 
-        iter_coords = self.get_iter_coordinates(iteration)
+        iter_coords = model.get_iter_coordinates(iteration)
 
         # If there are no coords for this iteration, return None
         if iter_coords.shape[0] == 0:
             return None, 0, iteration
 
         # Otherwise, apply the k-means model and discretize
-        transformed_coords = self.coordinates.transform(processCoordinates(iter_coords))
+        transformed_coords = model.coordinates.transform(processCoordinates(iter_coords))
         dtrajs = kmeans_model.predict(transformed_coords)
 
         return dtrajs, 1, iteration
@@ -4116,7 +4117,11 @@ class modelWE:
 
         model_id = ray.put(self.pre_discretization_model)
 
-        cluster_model_id = ray.put(self.clusters)
+        clusters = deepcopy(self.clusters)
+        # It's set inside do_stratified_ray_discretization, though I could do it in either place.
+        clusters.model = None #self.pre_discretization_model
+        cluster_model_id = ray.put(clusters)
+
         process_coordinates_id = ray.put(self.processCoordinates)
 
         # max_inflight = 50
