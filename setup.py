@@ -21,7 +21,8 @@ requirements = [
     "h5py>=3.1",
     "tqdm",
     "rich",
-    "toml"
+    "toml",
+    "matplotlib"
 ]
 
 setup_requirements = [
