@@ -14,7 +14,7 @@ Documentation
    msm_we.utils
 
 haMSM model building and analysis (msm_we.msm_we.modelWE)
---------------------
+---------------------------------------------------------
 .. autoclass:: msm_we.msm_we.modelWE
 
 Construction
@@ -46,19 +46,24 @@ ________
 
 Full API
 ________
-.. automodule:: msm_we.msm_we
-   :members:
+.. include:: modelwe.api.rst
+
+.. toctree::
+   :maxdepth: 3
+   :caption: Full APIZ:
+
+   modelwe.api
 
 
 Optimization (msm_we.optimization)
-------------
+----------------------------------
 
 .. automodule:: msm_we.optimization
    :members:
 
 
 FPT Calculations
------------------------------
+----------------
 
 msm_we.fpt
 __________
@@ -66,7 +71,7 @@ __________
    :members:
 
 msm_we.ensembles
-__________
+________________
 .. automodule:: msm_we.ensembles
    :members:
 
@@ -76,11 +81,6 @@ __________
    :members:
 
 msm_we.utils
-__________
+____________
 .. automodule:: msm_we.utils
-   :members:
-
-Full API
---------
-.. automodule:: msm_we
    :members:
