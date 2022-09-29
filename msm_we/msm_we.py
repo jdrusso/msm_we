@@ -390,30 +390,11 @@ class modelWE:
     """
     History-augmented Markov state model estimation from WE data
 
-    Implementation of haMSM model building, particularly for steady-state estimation (but there are lots of extras),
-    from WE sampling with basis (source) and target (sink) states with recycling.
+    Implementation of haMSM model building, particularly for steady-state estimation
+    from recycling WE sampling with basis (source) and target (sink) states.
 
     Set up for typical west.h5 file structure, with coordinates to be stored in west.h5 /iterations/auxdata/coord and
-    basis and target definitions from progress coordinates.
-
-    Check out run_msmWE.slurm and run_msmWE_flux.py in scripts folder for an implementation example.
-
-    Danger
-    -------
-    This code currently, in general, appears to assume a 1-D progress coordinate.
-
-    Todo
-    ----
-    Refactor
-        In general, this class's methods generally handle data by holding state in the object.
-        The functions that update state with the result of a calculation, though, tend to update a lot of state on the way.
-        The state being updated along the way is usually "helper" quantities (an example would be the number of bins
-        or number of walkers, which is computed "along the way" in a number of functions, and the object state updated.)
-
-        I think it would be prudent to refactor these in such a way that these are updated in as few places as possible --
-        one example of this might be setting them as properties, and then updating the value in state as part of that
-        accessor if necessary.
-
+    basis and target definitions in progress coordinate space.
 
     References
     --------
