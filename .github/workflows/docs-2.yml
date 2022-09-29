@@ -76,7 +76,7 @@ jobs:
         cp -r docs/build/* gh-pages/build
         cd gh-pages
         mkdir msm_we
-        mv * msm_we/
+        mv `ls -I msm_we` msm_we/
         cd msm_we
         touch .nojekyll
         mkdir -p build
