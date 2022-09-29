@@ -1,34 +1,86 @@
 =============
-API Reference
+Documentation
 =============
 
 
 .. autosummary::
    :nosignatures:
-   :toctree: stubs
 
-   msm_we.msm_we.modelWE
+   msm_we.msm_we
    msm_we.optimization
    msm_we.fpt
    msm_we.ensembles
    msm_we.nmm
    msm_we.utils
 
+haMSM model building and analysis (msm_we.msm_we.modelWE)
+--------------------
+.. autoclass:: msm_we.msm_we.modelWE
 
+Construction
+______________
+
+.. autofunction:: msm_we.msm_we.modelWE.build_analyze_model
+.. autofunction:: msm_we.msm_we.modelWE.initialize
+.. autofunction:: msm_we.msm_we.modelWE.get_coordSet
+.. autofunction:: msm_we.msm_we.modelWE.dimReduce
+.. autofunction:: msm_we.msm_we.modelWE.cluster_coordinates
+.. autofunction:: msm_we.msm_we.modelWE.get_fluxMatrix
+.. autofunction:: msm_we.msm_we.modelWE.organize_fluxMatrix
+
+Analysis
+________
+.. autofunction:: msm_we.msm_we.modelWE.get_Tmatrix
+.. autofunction:: msm_we.msm_we.modelWE.get_steady_state
+.. autofunction:: msm_we.msm_we.modelWE.get_steady_state_target_flux
+.. autofunction:: msm_we.msm_we.modelWE.get_committor
+.. autofunction:: msm_we.msm_we.modelWE.get_flux
+.. autofunction:: msm_we.msm_we.modelWE.get_model_clusters
+.. autofunction:: msm_we.msm_we.modelWE.get_cluster_centers
+
+Plotting
+________
+.. autofunction:: msm_we.msm_we.modelWE.plot_flux
+.. autofunction:: msm_we.msm_we.modelWE.plot_flux_committor
+.. autofunction:: msm_we.msm_we.modelWE.plot_flux_committor_pcoordcolor
+
+Full API
+________
 .. automodule:: msm_we.msm_we
    :members:
+
+
+Optimization (msm_we.optimization)
+------------
 
 .. automodule:: msm_we.optimization
    :members:
 
+
+FPT Calculations
+-----------------------------
+
+msm_we.fpt
+__________
 .. automodule:: msm_we.fpt
    :members:
 
+msm_we.ensembles
+__________
 .. automodule:: msm_we.ensembles
    :members:
 
+msm_we.nmm
+__________
 .. automodule:: msm_we.nmm
    :members:
 
+msm_we.utils
+__________
 .. automodule:: msm_we.utils
+   :members:
+
+Full API
+--------
+.. automodule:: msm_we
    :members:
