@@ -55,8 +55,8 @@ Model building and preparation
         msm_we.modelWE.processCoordinates = processCoordinates
 
 
-    It's important to do this monkey-patching at the module level, i.e. on :code:`msm_we.modelWE`, rather
-    than on an instance of a :code:`msm_we.modelWE` object.
+    It's important to do this monkey-patching at the module level, i.e. on the :class:`msm_we.msm_we.modelWE`
+    class itself, rather than on an instance of the class.
 
 4. Create the model object.
 
@@ -158,9 +158,6 @@ Model building and preparation
         model.organize_fluxMatrix(use_ray)
 
 
-    :code:`use_ray` enables parallelization with the Ray work manager. If enabled, a Ray cluster must be initialized by
-    the user *before calling this*.
-
 Analysis
 --------
 
@@ -181,7 +178,7 @@ Analysis
     This is because it uses the flux estimate as a convergence criterion.
     If the flux is 0, then it's not meaningful to  look at convergence of 0, so it'll just run
     for the maximum number of iterations. You can specify :code:`max_iters=1` to avoid unnecessary
-    iteration, or you can use :code:`model.get_steady_state_algebraic`.
+    iteration, or you can use :meth:`~msm_we.msm_we.modelWE.get_steady_state_algebraic`.
 
 12. Update cluster structures
 
@@ -224,3 +221,78 @@ the analysis. In the simplest case, this can just be
 :code:`msm_we` will connect to whatever Ray instance is running on the machine the analysis is being performed on.
 However, this can be used on a cluster to initialize a Ray cluster with workers on a number of nodes, and the :code:`msm_we`
 running on the same node as the Ray head.
+
+Model-building, in one command
+------------------------------------
+
+The above steps are all wrapped in a single call by :meth:`~msm_we.msm_we.modelWE.build_analyze_model`,
+which can be called like
+
+.. code-block:: python
+
+    from msm_we.msm_we import modelWE
+
+    model = modelWE()
+
+    model.build_analyze_model(
+        file_paths=we_h5filenames,
+        ref_struct=basis_ref_dict,
+        modelName=msm_we_modelname,
+        basis_pcoord_bounds=pcoord_bounds["basis"],
+        target_pcoord_bounds=pcoord_bounds["target"],
+        dimreduce_method="pca",
+        n_clusters=msm_we_n_clusters
+    )
+
+This performs all the steps manually outlined above, up to flux calculation.
+Additionally, this can split up your data to do block validation.
+
+Most arguments to :meth:`~msm_we.msm_we.modelWE.initialize` can also be passed to
+:meth:`~msm_we.msm_we.modelWE.build_analyze_model`.
+
+See the documentation for additional arguments that can be passed.
+
+Optimization
+------------
+
+To use :mod:`msm_we.optimization`, first construct an haMSM as outlined above.
+
+The goal of the optimization algorithm is to group haMSM microbins into WE bins, in "some optimal" way.
+In this case, we optimize for minimizing flux variance.
+
+.. code-block:: python
+
+    import msm_we.optimization as mo
+
+    discrepancy, variance = mo.solve_discrepancy(
+        tmatrix = transition_matrix,
+        pi = steady_state_distribution,
+        B = target_state_indices
+    )
+
+    # This is a list with an element for each MSM microbin, which is the integer index of the
+    #   WE bin it's assigned to.
+    # In other words, microstate_assignments[microbin_index] == WE bin index of that microbin
+    microstate_assignments = mo.get_uniform_mfpt_bins(
+        variance, discrepancy, steady_state_distribution, n_active_we_bins
+    )
+
+    # Add entries for the basis/target states, since MSM-WE sets those as the last two clusters
+    microstate_assignments = np.concatenate(
+        [microstate_assignments, [n_active_bins - 2, n_active_bins - 1]]
+    )
+
+    # Create the new bin mapper for WESTPA
+    we_bin_mapper = mo.OptimizedBinMapper(
+        n_active_we_bins,
+        # In case the pcoord is extended, this is the original pcoord dimensionality
+        n_pcoord_dims,
+        # The original, non-Optimized BinMapper that WESTPA was run with.
+        #   Used for stratified clustering
+        base_mapper,
+        microstate_assignments,
+        # If the pcoord was extended, pcoord boundaries are in the original pcoord space
+        basis_pcoord_bounds,
+        target_pcoord_bounds,
+        stratified_clusterer
+    )
