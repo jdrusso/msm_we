@@ -553,7 +553,7 @@ class modelWE:
         modelName: str,
         basis_pcoord_bounds: list = None,
         target_pcoord_bounds: list = None,
-        dim_reduce_method: str = "pca",
+        dim_reduce_method: str = "none",
         tau: float = None,
         pcoord_ndim: int = 1,
         auxpath: str = "coord",
@@ -588,8 +588,11 @@ class modelWE:
         tau: float
             Resampling time (i.e. time of 1 WE iteration). Used to map fluxes to physical times.
 
-        pcoord_ndim: int
+        pcoord_ndim: int, default=1
             Defaults to 1. Dimensionality of progress coordinates.
+
+        auxpath: str, default="coord"
+            Augmented coordinates used for MSM construction are stored in west.h5 under auxdata/auxpath
 
         Returns
         -------
