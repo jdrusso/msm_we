@@ -1,3 +1,7 @@
+"""
+Discrepancy calculations and WE binning/allocation optimization
+"""
+
 import numpy as np
 
 import logging

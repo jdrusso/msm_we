@@ -1,4 +1,6 @@
 """
+"Non-Markovian" trajectory analysis
+
 Adapted from the original NMpathAnalysis package,
 https://github.com/ZuckermanLab/NMpathAnalysis
 """

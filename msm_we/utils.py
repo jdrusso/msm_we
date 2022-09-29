@@ -1,4 +1,6 @@
 """
+Miscellaneous convenience functions
+
 Adapted from the original NMpathAnalysis package,
 https://github.com/ZuckermanLab/NMpathAnalysis
 """

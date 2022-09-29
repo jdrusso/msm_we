@@ -1,4 +1,6 @@
 """
+First-passage time (FPT) calculations from trajectories or matrices
+
 Adapted from the original NMpathAnalysis package,
 https://github.com/ZuckermanLab/NMpathAnalysis
 """

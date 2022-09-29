@@ -1,4 +1,4 @@
-"""Main module."""
+"""haMSM estimation and analysis"""
 from __future__ import division, print_function
 
 __metaclass__ = type
@@ -388,6 +388,8 @@ class StratifiedClusters:
 
 class modelWE:
     """
+    History-augmented Markov state model estimation from WE data
+
     Implementation of haMSM model building, particularly for steady-state estimation (but there are lots of extras),
     from WE sampling with basis (source) and target (sink) states with recycling.
 
