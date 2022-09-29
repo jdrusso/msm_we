@@ -582,7 +582,7 @@ class modelWE:
             List of [[pcoord0 lower bound, pcoord1 upper bound], [pcoord1 lower bound, pcoord1 upper bound], ...]
             in pcoord-space for the target state
 
-        dim_reduce_method: str
+        dim_reduce_method: str, default="none"
             Dimensionality reduction method. "pca", "vamp", or "none".
 
         tau: float
@@ -601,8 +601,7 @@ class modelWE:
 
         Todo
         ----
-        Some of this logic should be broken into a constructor, and default arguments handled in the constructor's
-        function signature.
+        This should probably just be merged into the constructor.
         """
 
         log.debug("Initializing msm_we model")
