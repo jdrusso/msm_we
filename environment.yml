@@ -19,6 +19,7 @@ dependencies:
  - scipy
  - westpa
  - pip
+ - nbsphinx
  - pip:
    - ray
    - .

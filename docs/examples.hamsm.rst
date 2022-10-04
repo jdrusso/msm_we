@@ -1,4 +1,8 @@
 haMSM Construction Examples
 ===========================
 
-Coming soon...
+
+.. toctree::
+   :maxdepth: 1
+
+   _examples/hamsm
