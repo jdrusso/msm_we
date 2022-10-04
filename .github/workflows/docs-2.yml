@@ -1,0 +1,95 @@
+# This is a basic workflow to help you get started with Actions
+# This workflow tries to put  stuff in a subdirectory
+
+name: Build documentation2
+
+# Controls when the action will run.
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches: [ main ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+
+    - uses: actions/checkout@v1
+
+    - name: "Prep anaconda"
+      run: echo "ACTIONS_ALLOW_UNSECURE_COMMANDS=true" >> $GITHUB_ENV
+
+    - name: Cache conda
+      uses: actions/cache@v2
+      env:
+          # Increase this value to reset cache if etc/example-environment.yml has not changed
+          CACHE_NUMBER: 1
+      with:
+          path: ~/conda_pkgs_dir
+          key:
+            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{
+            hashFiles('environment.yml') }}
+
+# Dependencies may need to be installed via conda instead, since pyemma at least doesn't like pip
+#     - uses: goanpeca/setup-miniconda@v1
+    - uses: conda-incubator/setup-miniconda@v2
+      with:
+          miniconda-version: "latest"
+          activate-environment: test_env
+          environment-file: environment.yml
+          python-version: 3.7
+          channel-priority: strict
+          auto-activate-base: false
+          use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
+
+    - name: "Finish prepping anaconda"
+      run: echo "ACTIONS_ALLOW_UNSECURE_COMMANDS=false" >> $GITHUB_ENV
+
+    - name: "Install sphinx"
+      run: "sudo apt-get update -y && sudo apt-get install python3-sphinx"
+
+    - name: "Render with sphinx"
+      run: "cd docs && sphinx-build -b html . build && cd .. "
+
+
+
+    # Publish built docs to gh-pages branch.
+    # ===============================
+    - name: Commit documentation changes
+      run: |
+        git clone https://github.com/jdrusso/msm_we.git --branch gh-pages --single-branch gh-pages
+        cp -r docs/build/* gh-pages/
+        mkdir -p gh-pages/build
+        ls docs
+        ls docs/build
+        cp -r docs/build/* gh-pages/build
+        cd gh-pages
+        mkdir msm_we
+        mv `ls -I msm_we` msm_we/
+        cd msm_we
+        touch .nojekyll
+        mkdir -p build
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git add -f build
+        git commit -m "Update documentation" -a || true
+        # The above command will fail if no changes were present, so we ignore
+        # that
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        branch: gh-pages
+        directory: gh-pages
+        github_token: ${{ secrets.GITHUB_TOKEN }}
