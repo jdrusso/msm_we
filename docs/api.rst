@@ -27,6 +27,7 @@ ______________
 .. autofunction:: msm_we.msm_we.modelWE.cluster_coordinates
 .. autofunction:: msm_we.msm_we.modelWE.get_fluxMatrix
 .. autofunction:: msm_we.msm_we.modelWE.organize_fluxMatrix
+.. autofunction:: msm_we.msm_we.modelWE.do_block_validation
 
 Analysis
 ________

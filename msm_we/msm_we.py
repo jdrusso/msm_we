@@ -1273,6 +1273,23 @@ class modelWE:
     def do_block_validation(
         self, cross_validation_groups, cross_validation_blocks, use_ray=True
     ):
+        """
+        One way to estimate the uncertainty of your model is to split your data into blocks, compute models over
+        groups of the blocks, and assess consistency between the groups.
+
+        The procedure here chops your data up into uniform blocks, by iteration. For example, with 100 iterations and 4
+        blocks, the blocks consist of iterations `[0-25), [25-50), [50-75), [75-100)`.
+        If the above blocks were assigned to 2 groups, the groups would consist of iterations `( [0-25), [50-75) )` and
+        `(  [25-50), [75-100) )`
+
+        Parameters
+        ----------
+        cross_validation_groups: int
+            Number of groups to assign blocks over
+
+        cross_validation_blocks: int
+            Number of blocks to split data into
+        """
 
         assert (
             hasattr(self, "post_cluster_model") and self.post_cluster_model is not None
@@ -4980,6 +4997,10 @@ class modelWE:
         self.fluxMatrixRaw = fluxMatrix
 
     def organize_fluxMatrix(self, use_ray=False, **args):
+        """
+        This cleaning step removes all clusters that aren't in the largest connected set, then rediscretizes all the
+        trajectories according to the new reduced set of clusters.
+        """
 
         if not hasattr(self, "clustering_method"):
             log.warning(
