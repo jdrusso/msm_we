@@ -25,11 +25,13 @@ def solve_discrepancy(tmatrix, pi, B):
     Given a transition matrix, solves for the discrepancy function.
 
     The Poisson equation for the discrepancy function is
+
     .. math::
 
         (I - K)h = 1_B - \pi(B), \:\: h \cdot \pi = 0
 
     however, since :math:`I-K` is singular, we instead solve
+
     .. math::
 
         (I - K + \pi \pi^T / || \pi ||^2_2)h = 1_B - \pi(B), \:\: h \cdot \pi = 0
@@ -40,9 +42,12 @@ def solve_discrepancy(tmatrix, pi, B):
 
     Parameters
     ----------
-    tmatrix, 2D array-like: Transition matrix
-    pi, array-like: Steady-state distribution for the input transition matrix
-    B, array-like: Indices of target states B
+    tmatrix: 2D array-like,
+        Transition matrix
+    pi: array-like,
+        Steady-state distribution for the input transition matrix
+    B: array-like,
+        Indices of target states B
 
     Returns
     --------
