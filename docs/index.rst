@@ -14,8 +14,8 @@ This means that a history label can be assigned to every trajectory.
 
    readme
    usage
-   api
    examples
+   api
    code_todos
    authors
    history
