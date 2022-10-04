@@ -8,12 +8,18 @@ msm_we
 .. image:: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml/badge.svg
         :target: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml
 
-Code for Markov state modeling of weighted ensemble trajectories.
-
 * Authors: John Russo, Jeremy Copperman
 * Free software: MIT license
-* Documentation: https://jdrusso.github.io/msm_we/ .
+* Documentation: https://docs.jdrusso.dev/msm_we/ .
 
+Background
+----------
+
+This is a package for doing history-augmented MSM (haMSM) analysis on weighted ensemble trajectories.
+
+Weighted ensemble data produced from simulations with recycling boundary conditions are naturally in a directional
+ensemble.
+This means that a history label can be assigned to every trajectory, and an haMSM can be constructed.
 
 Features
 --------
