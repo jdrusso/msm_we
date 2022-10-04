@@ -2745,8 +2745,8 @@ class modelWE:
                 self.load_iter_data(iteration)
                 self.get_transition_data_lag0()
 
-                coords_from = self.coordPairList[:,0,:,0]
-                coords_to = self.coordPairList[:,0,:,1]
+                coords_from = self.coordPairList[:,:,:,0]
+                coords_to = self.coordPairList[:,:,:,1]
 
                 # If  no good coords in this iteration, skip it
                 # if iter_coords.shape[0] == 0:
