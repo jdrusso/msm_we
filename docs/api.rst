@@ -44,16 +44,6 @@ ________
 .. autofunction:: msm_we.msm_we.modelWE.plot_flux_committor
 .. autofunction:: msm_we.msm_we.modelWE.plot_flux_committor_pcoordcolor
 
-Full API
-________
-.. include:: modelwe.api.rst
-
-.. toctree::
-   :maxdepth: 3
-   :caption: Full APIZ:
-
-   modelwe.api
-
 
 Optimization (msm_we.optimization)
 ----------------------------------

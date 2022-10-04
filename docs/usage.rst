@@ -14,6 +14,7 @@ To install :code:`msm_we`:
 or, to install it into an existing conda environment:
 
 .. code-block:: bash
+
     cd </path/to/msm_we>
 
     conda env update --name <your WESTPA environment> --file environment.yml
