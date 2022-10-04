@@ -26,11 +26,14 @@ def solve_discrepancy(tmatrix, pi, B):
 
     The Poisson equation for the discrepancy function is
     .. math::
+
         (I - K)h = 1_B - \pi(B), \:\: h \cdot \pi = 0
 
     however, since :math:`I-K` is singular, we instead solve
     .. math::
+
         (I - K + \pi \pi^T / || \pi ||^2_2)h = 1_B - \pi(B), \:\: h \cdot \pi = 0
+
     where :math:`h` is a volumn vector, `1_B` is an indicator function which is 1 in B and 0 everywhere
     else, :math:`\pi` is the steady-state solution of :math:`K`, and `\pi(B)` is a column vector with
     the steady-state value of :math:`\pi(B)` in every element.
@@ -157,6 +160,8 @@ def get_clustered_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bi
 
 class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
 
+    # This constructor is a little weird in order to support creating a binmapper from either the usual arguments,
+    #   OR a bytestring that's a pickled binmapper.
     def __init__(self, *args, **kwargs):
 
         if len(args) + len(kwargs) == 1:

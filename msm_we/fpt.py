@@ -236,8 +236,8 @@ class MatrixFPT:
         This method is useful when there is no B->A ensemble but only A->B transitions,
         for instance when B is absorbing.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         transition_matrix:  Numpy 2D array
 
         stateA, stateB:     List of integers
@@ -300,8 +300,8 @@ class MatrixFPT:
         Returns a list where the i-element is mfpt(i->k). This function is
         useful to compute the mfpt matrix.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         transition_matrix:  Numpy 2D array
 
         target:             Integer number that specifies the index of the state. The indexes
@@ -339,8 +339,8 @@ class MatrixFPT:
     def mfpts_matrix(cls, transition_matrix, lag_time=1):
         """Calculate MFPT matrix, i.e., the matrix where the ij-element is MFPT(i->j)
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         transition_matrix:  Numpy 2D array
 
         lag_time:           Integer
@@ -370,8 +370,8 @@ class MatrixFPT:
         of microstates from the matrix of mfpts. It also returns the indexes
         of the pair of microstates involved.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         matrix_of_mfpts:    Numpy 2D array
                             matrix of MFPTs with ij-element of MFPT(i->j)
 
@@ -410,8 +410,8 @@ class MatrixFPT:
         of microstates from the matrix of mfpts. It also returns the indexes
         of the pair of microstates involved.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         matrix_of_mfpts:    Numpy 2D array
                             matrix of MFPTs with ij-element of MFPT(i->j)
 
@@ -460,19 +460,17 @@ class MatrixFPT:
     ):
         """Calculated distribution of first passage times from transition matrix
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         t_matrix:           Numpy 2D array
 
-        initial_state,
-        final_states:       List of integer numbers
+        initial_state, final_state:       List of integer numbers
                             Specifies the indexes of initial and final states.
 
-        ini_probs:          List of float, default is None
+        initial_distrib:          List of float, default is None
                             initial probabilities for initial states
 
-        min_power,
-        max_power:          Integer
+        min_power,  max_power:          Integer
                             The minimum and maximum power when the FPT distribution is
                             shown in logscale such as (10^min_power, 10^max_power)*lag_time*dt.
 
@@ -815,8 +813,8 @@ class MarkovFPT(MatrixFPT):
         in this way are directly comparable with the values obtained by a long back
         and forth simulation between the target states.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         markov_matrix:      Numpy 2D array
                             Markovian transition matrix
 
@@ -842,8 +840,8 @@ class MarkovFPT(MatrixFPT):
     def markov_commute_time(cls, transition_matrix, stateA, stateB, lag_time=1):
         """Computing commute time for Markovian Model
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         transition_matrix:  Numpy 2D array
                             Markovian transition matrix
 
@@ -871,8 +869,8 @@ class NonMarkovFPT(MatrixFPT):
 
         in both directions of A->B and B->A. The shape of the transition matrix
         should be (2*n_states, 2*n_states).
-        Parameters:
-        -----------
+        Parameters
+        ----------
         nm_transition_matrix:   Numpy 2D array
                                 Non-Markovian transition matrix
 
@@ -880,8 +878,7 @@ class NonMarkovFPT(MatrixFPT):
                                 Both states are a list of indexes.
 
         lag_time:               integer
-                                Lag time used, the trajectory is "observed" every lag_time
-                                time steps
+                                Lag time used, the trajectory is "observed" every lag_time time steps
 
         Returns
         -------

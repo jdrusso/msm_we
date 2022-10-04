@@ -19,8 +19,8 @@ class Ensemble:
     """ Define a base class to store a list of space-continuous trajectories
 
      e.g.: [ trajectory1, trajectory2,...], each trajectory is just a matrix
-    where each row is a snapshot, and each column represents the evolution
-    of the corresponding variable.
+        where each row is a snapshot, and each column represents the evolution
+        of the corresponding variable.
     """
 
     def __init__(self, trajectories=None, verbose=False, dtype="float32", discrete=False, lag_time=1, **kwargs):
@@ -341,7 +341,6 @@ class DiscretePathEnsemble(PathEnsemble, DiscreteEnsemble):
                     initial state used to generate the path
 
                     possible values:
-                    ----------------
                     a) None
                     Use a uniform distribution over the states in stateA
                     c) list

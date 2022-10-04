@@ -1,6 +1,6 @@
-=====
+==================
 Installation/Usage
-=====
+==================
 
 
 To install :code:`msm_we`:

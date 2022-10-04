@@ -172,9 +172,9 @@ def check_tmatrix(t_matrix, accept_null_rows=True):
     """Check if the given matrix is actually a row-stochastic transition matrix
 
      i.e, all the elements are non-negative and the rows add to one.
-    If the keyword argument accept_null_rows is True, is going
-    to accept rows where all the elements are zero. Those "problematic"
-    states are going to be removed later if necessary by clean_tmatrix.
+        If the keyword argument accept_null_rows is True, is going
+        to accept rows where all the elements are zero. Those "problematic"
+        states are going to be removed later if necessary by clean_tmatrix.
     """
 
     def value_error():
