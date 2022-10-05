@@ -56,6 +56,8 @@ class HAMSMDriver:
 
         self.data_manager.close_backing()
 
+        ray_kwargs = {'num_cpus': self.plugin_config.get('num_cpus', None)}
+
         model = msm_we.modelWE()
         model.build_analyze_model(
             file_paths=h5file_paths,
@@ -66,6 +68,7 @@ class HAMSMDriver:
             dimreduce_method=dimreduce_method,
             n_clusters=clusters_per_stratum,
             tau=tau,
+            ray_kwargs=ray_kwargs,
             step_kwargs={}
         )
 
