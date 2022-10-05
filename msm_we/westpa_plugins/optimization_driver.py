@@ -26,7 +26,7 @@ class GlobalModelActor:
         return self.model
 
     def get_original_pcoord(self, state_index):
-        return self.backmap(state_index)[:self.original_pcoord_ndim]
+        return self.backmap(state_index)[: self.original_pcoord_ndim]
 
 
 @ray.remote
@@ -43,9 +43,7 @@ class PcoordCalculator:
         reduced_coords = reduceCoordinates(structure)[0]
 
         original_pcoord = ray.get(
-            self.model_actor.get_original_pcoord.remote(
-                state_index
-            )
+            self.model_actor.get_original_pcoord.remote(state_index)
         )
 
         new_pcoord = np.concatenate([original_pcoord, reduced_coords])
@@ -241,14 +239,13 @@ class OptimizationDriver:
 
         new_pcoord_map = {}
 
+        # TODO: is this robust if you don't already have a ray cluster started?
         n_actors = int(ray.available_resources().get("CPU", 1))
         model_actor = GlobalModelActor.remote(
             model, processCoordinates, self.synd_model, self.original_pcoord_dim
         )
         pcoord_calculators = [
-            PcoordCalculator.remote(
-                model_actor, processCoordinates
-            )
+            PcoordCalculator.remote(model_actor, processCoordinates)
             for i in range(n_actors)
         ]
 
@@ -326,8 +323,7 @@ class OptimizationDriver:
         data_manager.flush_backing()
 
         pcoord_opts = data_manager.dataset_options.get(
-            "pcoord",
-            {"name": "pcoord", "h5path": "pcoord", "compression": False},
+            "pcoord", {"name": "pcoord", "h5path": "pcoord", "compression": False},
         )
 
         #  # Update the currently held segments
@@ -336,16 +332,12 @@ class OptimizationDriver:
 
             # TODO: This is SynD specific, but should be easy to port over to something generic.
             #       Use propagator.get_pcoord directly
-            parent_state_index = get_segment_parent_index(
-                segment
-            )
+            parent_state_index = get_segment_parent_index(segment)
 
             segment.pcoord = np.concatenate(
                 [
                     [new_pcoord_map[parent_state_index]],
-                    np.zeros(
-                        shape=(system.pcoord_len - 1, system.pcoord_ndim)
-                    ),
+                    np.zeros(shape=(system.pcoord_len - 1, system.pcoord_ndim)),
                 ]
             )
 
@@ -353,11 +345,7 @@ class OptimizationDriver:
             iter_group,
             pcoord_opts,
             data=np.array([segment.pcoord for segment in segments]),
-            shape=(
-                len(sim_manager.segments),
-                system.pcoord_len,
-                system.pcoord_ndim,
-            ),
+            shape=(len(sim_manager.segments), system.pcoord_len, system.pcoord_ndim,),
             dtype=system.pcoord_dtype,
         )
 
@@ -388,17 +376,13 @@ class OptimizationDriver:
         for old_istate, new_istate in zip(initial_states, new_istates):
             new_istate = old_istate
             bstate_id = old_istate.basis_state_id
-            parent_state_index = int(
-                sim_manager.next_iter_bstates[bstate_id].auxref
-            )
+            parent_state_index = int(sim_manager.next_iter_bstates[bstate_id].auxref)
             new_istate.pcoord = new_pcoord_map[parent_state_index]
 
         data_manager.flush_backing()
 
         for segment in sim_manager.segments.values():
-            parent_state = get_segment_parent_index(
-                segment
-            )
+            parent_state = get_segment_parent_index(segment)
             segment.pcoord = new_pcoord_map[parent_state]
 
         data_manager.flush_backing()

@@ -14,7 +14,9 @@ class HAMSMDriver:
 
         westpa.rc.pstatus("Initializing haMSM plugin")
 
-        assert _openmp_effective_n_threads() == 1, "Set $OMP_NUM_THREADS=1 for proper msm-we functionality"
+        assert (
+            _openmp_effective_n_threads() == 1
+        ), "Set $OMP_NUM_THREADS=1 for proper msm-we functionality"
 
         if not sim_manager.work_manager.is_master:
             westpa.rc.pstatus("Not running on the master process, skipping")
@@ -26,9 +28,11 @@ class HAMSMDriver:
         self.plugin_config = plugin_config
 
         # Big number is low priority -- this should run after augmentation, but before other things
-        self.priority = plugin_config.get('priority', 2)
+        self.priority = plugin_config.get("priority", 2)
 
-        sim_manager.register_callback(sim_manager.finalize_run, self.construct_hamsm, self.priority)
+        sim_manager.register_callback(
+            sim_manager.finalize_run, self.construct_hamsm, self.priority
+        )
 
     def construct_hamsm(self):
         """
@@ -39,24 +43,24 @@ class HAMSMDriver:
 
         h5file_paths = [self.data_manager.we_h5filename]
 
-        refPDBfile = self.plugin_config.get('ref_pdb_file')
-        model_name = self.plugin_config.get('model_name')
-        clusters_per_stratum = self.plugin_config.get('n_clusters')
+        refPDBfile = self.plugin_config.get("ref_pdb_file")
+        model_name = self.plugin_config.get("model_name")
+        clusters_per_stratum = self.plugin_config.get("n_clusters")
 
-        target_pcoord_bounds = self.plugin_config.get('target_pcoord_bounds')
-        basis_pcoord_bounds = self.plugin_config.get('basis_pcoord_bounds')
+        target_pcoord_bounds = self.plugin_config.get("target_pcoord_bounds")
+        basis_pcoord_bounds = self.plugin_config.get("basis_pcoord_bounds")
 
-        dimreduce_method = self.plugin_config.get('dimreduce_method', None)
-        tau = self.plugin_config.get('tau', None)
+        dimreduce_method = self.plugin_config.get("dimreduce_method", None)
+        tau = self.plugin_config.get("tau", None)
 
-        featurization_module = self.plugin_config.get('featurization')
+        featurization_module = self.plugin_config.get("featurization")
         featurizer = extloader.get_object(featurization_module)
         msm_we.modelWE.processCoordinates = featurizer
         self.data_manager.processCoordinates = featurizer
 
         self.data_manager.close_backing()
 
-        ray_kwargs = {'num_cpus': self.plugin_config.get('num_cpus', None)}
+        ray_kwargs = {"num_cpus": self.plugin_config.get("num_cpus", None)}
 
         model = msm_we.modelWE()
         model.build_analyze_model(
@@ -69,7 +73,7 @@ class HAMSMDriver:
             n_clusters=clusters_per_stratum,
             tau=tau,
             ray_kwargs=ray_kwargs,
-            step_kwargs={}
+            step_kwargs={},
         )
 
         self.data_manager.hamsm_model = model
