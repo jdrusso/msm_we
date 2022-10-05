@@ -115,9 +115,8 @@ class OptimizationDriver:
         #   whatever it may be, and then additionally the result of `model.reduceCoordinates` on the full-coord
         #   structure (not sure the best way to get that, it is eventually stored in auxdata)
         westpa.rc.pstatus("Updating pcoord map")
-        # propagator = self.propagator
         new_pcoord_map = self.compute_new_pcoord_map()
-        self.update_pcoord_map(new_pcoord_map)
+        self.update_westpa_pcoord(new_pcoord_map)
 
         # 4. Continue WE, with optimized parameters
         # No need to re-initialize/restart, just extend max iterations and continue
@@ -284,11 +283,20 @@ class OptimizationDriver:
 
         return new_pcoord_map
 
-    def update_pcoord_map(self, new_pcoord_map):
-        # TODO: Janky
+    def update_westpa_pcoord(self, new_pcoord_map):
+        """
+        Changing a progress coordinate during a WE run requires a number of changes in WESTPA's internal state.
+        This handles making those, so you can call w_run and continue with the new, changed pcoord
 
+        Parameters
+        ----------
+        new_pcoord_map: A dictionary mapping discrete states to the new, extended pcoord
+        """
+
+        # TODO: Replace this with propagator.get_pcoord
         self.propagator.synd_model._backmapper = new_pcoord_map.get
         new_pcoord_dim = new_pcoord_map.get(0).shape[0]
+
         westpa.rc.pstatus(f"New pcoord dimensionality is {new_pcoord_dim}")
 
         system = westpa.rc.get_system_driver()
@@ -326,6 +334,8 @@ class OptimizationDriver:
         westpa.rc.pstatus(f"Attempting to fetch segments for iter {sim_manager.n_iter}")
         for segment in segments:
 
+            # TODO: This is SynD specific, but should be easy to port over to something generic.
+            #       Use propagator.get_pcoord directly
             parent_state_index = get_segment_parent_index(
                 segment
             )
