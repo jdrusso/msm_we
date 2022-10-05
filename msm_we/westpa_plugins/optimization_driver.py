@@ -6,7 +6,6 @@ import numpy as np
 import pickle
 from rich.progress import Progress
 import ray
-import os
 
 
 @ray.remote
@@ -52,6 +51,7 @@ class OptimizationDriver:
 
         self.data_manager = sim_manager.data_manager
         self.sim_manager = sim_manager
+        self.we_driver = westpa.rc.get_we_driver
 
         self.plugin_config = plugin_config
 
@@ -66,17 +66,79 @@ class OptimizationDriver:
 
     def do_optimization(self):
 
-        we_driver = westpa.rc.get_we_driver()
+        # 1. Discrepancy calculation
+        westpa.rc.pstatus("Updating bin mapper")
+        we_bin_mapper = self.compute_optimized_bins()
+        self.we_driver.bin_mapper = we_bin_mapper
 
-        # 1. Retrieve haMSM
-        processCoordinates = self.data_manager.processCoordinates
-        # msm_we.msm_we.modelWE.processCoordinates = processCoordinates
+        # 2. Update allocation
+        # "This is where I'd put my updated allocation... IF I HAD ONE"
+        westpa.rc.pstatus("Updating allocation")
+        we_allocation = self.compute_optimized_allocation()
+        self.we_driver.bin_target_counts = we_allocation
+
+        # 3. Update pcoord
+        # TODO: This is SynMD specific -- how can I make extending the progress coordinate generic?
+        #   Maybe I could wrap the progress coordinate calculation as the original progress coordinate calculation,
+        #   whatever it may be, and then additionally the result of `model.reduceCoordinates` on the full-coord
+        #   structure (not sure the best way to get that, it is eventually stored in auxdata)
+        westpa.rc.pstatus("Updating pcoord map")
+        propagator = westpa.rc.get_propagator()
+        new_pcoord_map = self.compute_new_pcoord_map()
+        propagator.pcoord_map = new_pcoord_map
+
+        # 4. Continue WE, with optimized parameters
+        # No need to re-initialize/restart, just extend max iterations and continue
+        remaining_iters = self.plugin_config.get('max_iters') - self.sim_manager.max_total_iterations
+        if remaining_iters > 0:
+            new_iters = min(remaining_iters, westpa.rc.config.get(['west', 'propagation', 'max_total_iterations']))
+            self.sim_manager.max_total_iterations += new_iters
+
+            westpa.rc.pstatus(f"\n\n=== Applying optimization and continuing for {new_iters} more iterations ===\n")
+            w_run.run_simulation()
+
+        else:
+            westpa.rc.pstatus("No more iterations for optimization, completing.")
+
+    def compute_optimized_allocation(self, strategy=None):
+        """
+        Compute the optimal allocation.
+
+        Parameters
+        ----------
+        strategy
+
+        Returns
+        -------
+        An array-like holding the optimized WE walker allocation
+
+        TODO
+        ----
+        Implement actual bin optimization
+        """
+
+        new_target_counts = self.we_driver.bin_target_counts
+        return new_target_counts
+
+    def compute_optimized_bins(self, strategy=None):
+        """
+
+        Parameters
+        ----------
+        strategy
+
+        Returns
+        -------
+        An OptimizedBinMapper
+
+        TODO
+        ----
+        Add flexibility to multiple strategies
+        """
+
         model = self.data_manager.hamsm_model
 
-        westpa.rc.pstatus(f"Retrieved model with shape {model.Tmatrix.shape}")
-
-        # 2. Discrepancy calculation
-        n_active_bins = np.count_nonzero(we_driver.bin_target_counts)
+        n_active_bins = np.count_nonzero(self.we_driver.bin_target_counts)
 
         discrepancy, variance = optimization.solve_discrepancy(
             tmatrix=model.Tmatrix,
@@ -114,26 +176,14 @@ class OptimizationDriver:
             model.clusters
         )
 
-        westpa.rc.pstatus("Updating bin mapper")
-        we_driver.bin_mapper = we_bin_mapper
+        return we_bin_mapper
 
-        # 4. Update allocation
-        # TODO: Update the allocation
-        # "This is where I'd put my updated allocation... IF I HAD ONE"
+    def compute_new_pcoord_map(self):
 
-        # 5. Update pcoord
-        # TODO: This is SynMD specific -- how can I make extending the progress coordinate generic?
-        #   Maybe I could wrap the progress coordinate calculation as the original progress coordinate calculation,
-        #   whatever it may be, and then additionally the result of `model.reduceCoordinates` on the full-coord
-        #   structure (not sure the best way to get that, it is eventually stored in auxdata)
-        propagator = westpa.rc.get_propagator()
+        model = self.data_manager.hamsm_model
+        processCoordinates = self.data_manager.processCoordinates
 
-        westpa.rc.pstatus("Computing new pcoord map")
         new_pcoord_map = {}
-
-        # # Can parallelize this over Ray workers
-        # for state_index, structure in track(self.coord_map.items(), description="Computing new pcoord map"):
-        #     new_pcoord_map[state_index] = model.reduceCoordinates(structure)
 
         n_actors = int(ray.available_resources().get('CPU', 1))
         model_actor = GlobalModelActor.remote(model, processCoordinates)
@@ -143,11 +193,17 @@ class OptimizationDriver:
         ids = []
 
         with Progress() as progress:
-            submit_task = progress.add_task("Submitting structures for pcoord calculation", total=len(self.coord_map))
-            retrieve_task = progress.add_task(f"Retrieving structure pcoords from {n_actors} workers", total=len(self.coord_map))
+            submit_task = progress.add_task("Submitting structures for pcoord calculation",
+                                            total=len(self.coord_map))
+            retrieve_task = progress.add_task(f"Retrieving structure pcoords from {n_actors} workers",
+                                              total=len(self.coord_map))
 
             for state_index, structure in self.coord_map.items():
-                _id = pcoord_calculators[state_index % n_actors].compute_new_structure_pcoord.remote(structure, state_index)
+                _id = pcoord_calculators[
+                        state_index % n_actors
+                    ].compute_new_structure_pcoord.remote(
+                        structure, state_index
+                    )
                 ids.append(_id)
 
                 progress.advance(submit_task)
@@ -162,26 +218,4 @@ class OptimizationDriver:
                     new_pcoord_map[state_index] = pcoord
                     progress.advance(retrieve_task)
 
-
-        westpa.rc.pstatus("Updating pcoord map")
-        propagator.pcoord_map = new_pcoord_map
-
-        # Don't re-initialize/restart, just extend max iterations and continue
-        remaining_iters = self.plugin_config.get('max_iters') - self.sim_manager.max_total_iterations
-        if remaining_iters > 0:
-            new_iters = min(remaining_iters, westpa.rc.config.get(['west', 'propagation', 'max_total_iterations']))
-            self.sim_manager.max_total_iterations += new_iters
-
-            westpa.rc.pstatus(f"\n\n===== Applying optimization and continuing for an additional {new_iters} iterations =====\n")
-
-            # TODO: It appears that for some reason, when this runs again, OMP_NUM_THREADS isn't respected.
-            #   That means that when this triggers to start the second round of simulation, clustering hangs because it
-            #   oversubscribes the CPU.
-            #   For the moment, this can be fixed by doing OMP_NUM_THREADS=1 w_run
-            # original_omp_threads = str(os.environ.get('OMP_NUM_THREADS', 1))
-            # os.environ['OMP_NUM_THREADS'] = "1"
-            w_run.run_simulation()
-            # os.environ['OMP_NUM_THREADS'] = original_omp_threads
-
-        else:
-            westpa.rc.pstatus("No more iterations for optimization, completing.")
+        return new_pcoord_map
