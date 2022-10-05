@@ -1,3 +1,4 @@
+"""Plugin for automated WE hyperparameter optimization."""
 import msm_we.msm_we
 import westpa
 from westpa.cli.core import w_run
@@ -51,7 +52,7 @@ class OptimizationDriver:
 
         self.data_manager = sim_manager.data_manager
         self.sim_manager = sim_manager
-        self.we_driver = westpa.rc.get_we_driver
+        self.we_driver = westpa.rc.get_we_driver()
 
         self.plugin_config = plugin_config
 
@@ -65,6 +66,10 @@ class OptimizationDriver:
         sim_manager.register_callback(sim_manager.finalize_run, self.do_optimization, self.priority)
 
     def do_optimization(self):
+        """
+        Update WESTPA with an optimized bin mapper, bin allocation, and extend the progress coordinate. Then, continue
+        the WE for more iterations.
+        """
 
         # 1. Discrepancy calculation
         westpa.rc.pstatus("Updating bin mapper")
@@ -122,6 +127,7 @@ class OptimizationDriver:
 
     def compute_optimized_bins(self, strategy=None):
         """
+        Computes discrepancy and variance, and returns the resulting optimized bin mapper
 
         Parameters
         ----------
@@ -179,6 +185,13 @@ class OptimizationDriver:
         return we_bin_mapper
 
     def compute_new_pcoord_map(self):
+        """
+        SynD specific: Compute a new progress coordinate mapping.
+
+        Returns
+        -------
+        A dictionary of {state indices : extended progress coordinates}
+        """
 
         model = self.data_manager.hamsm_model
         processCoordinates = self.data_manager.processCoordinates
