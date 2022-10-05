@@ -1043,6 +1043,7 @@ class modelWE:
         cross_validation_groups=2,
         cross_validation_blocks=4,
         show_live_display=True,
+        allow_validation_failure=False,
         step_kwargs={}
     ):
         """
@@ -1101,6 +1102,9 @@ class modelWE:
             Number of blocks to split your data into, before building the independent models.
 
         show_live_display
+
+        allow_validation_failure: bool, optional (Default = False)
+            If True, then raise a warning but don't fail if construction of a cross-validation model fails.
 
         Returns
         -------
@@ -1257,21 +1261,29 @@ class modelWE:
             # for now just do something useless w/ the post_cluster_model so linter doesn't complain
             step_idx += 1
             if cross_validation_groups > 0:
-                self.do_step(
-                    table,
-                    step_idx,
-                    step=model.do_block_validation,
-                    kwargs={
-                        "cross_validation_groups": cross_validation_groups,
-                        "cross_validation_blocks": cross_validation_blocks,
-                        "use_ray": use_ray,
-                        **step_kwargs.get('block_validation', {})
-                    },
-                )
-                flux_text = ""
-                for group, _validation_model in enumerate(self.validation_models):
-                    flux_text += f"Group {group} flux: {_validation_model.JtargetSS:.2e}\n"
-                self.set_note(table, step_idx, flux_text)
+                try:
+                    self.do_step(
+                        table,
+                        step_idx,
+                        step=model.do_block_validation,
+                        kwargs={
+                            "cross_validation_groups": cross_validation_groups,
+                            "cross_validation_blocks": cross_validation_blocks,
+                            "use_ray": use_ray,
+                            **step_kwargs.get('block_validation', {})
+                        },
+                    )
+                except Exception as e:
+                    log.error(e)
+                    if not allow_validation_failure:
+                        raise e
+                    # TODO: Print for the one that does pass
+                    self.set_note(table, step_idx, "At least one validation model failed")
+                else:
+                    flux_text = ""
+                    for group, _validation_model in enumerate(self.validation_models):
+                        flux_text += f"Group {group} flux: {_validation_model.JtargetSS:.2e}\n"
+                    self.set_note(table, step_idx, flux_text)
 
             # If live updating was disabled, write to the table once now. (Doesn't do anything if it was enabled)
             live.refresh()
