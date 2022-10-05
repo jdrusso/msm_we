@@ -18,6 +18,7 @@ import scipy.sparse as sparse
 from sklearn.decomposition import IncrementalPCA as iPCA
 from sklearn.cluster import KMeans as kmeans
 from sklearn.cluster import MiniBatchKMeans as mini_kmeans
+from sklearn.utils._openmp_helpers import _openmp_effective_n_threads
 from deeptime.decomposition import TICA, VAMP
 
 import logging
@@ -50,6 +51,7 @@ import ray
 # If you implement a custom bin mapper that should work with stratified clustering, you can add it to this set
 #   after importing msm_we
 SUPPORTED_MAPPERS = {RectilinearBinMapper, VoronoiBinMapper}
+
 
 def find_connected_sets(C, directed=True):
     r"""
@@ -419,6 +421,10 @@ class modelWE:
 
         - Reorganize these attributes into some meaningful structure
         """
+
+        # TODO: In general, it's not clear if this needs to be strictly 1... However, oversubscribing causes very difficult
+        #   to diagnose problems (like hanging during clustering / k-means fitting), and 1 seems to be safe.
+        assert _openmp_effective_n_threads() == 1, "Set $OMP_NUM_THREADS=1 for proper msm-we functionality"
 
         self.modelName = None
         """str: Name used for storing files"""
@@ -2846,7 +2852,7 @@ class modelWE:
         Reduced data
         """
 
-        log.debug("Reducing coordinates")
+        # log.debug("Reducing coordinates")
 
         # TODO: This list should not be stored here, this should be a class attribute or something
         if (
@@ -3854,7 +3860,7 @@ class modelWE:
 
             segs_in_bin = np.argwhere(we_bin_assignments == _bin)
 
-            log.debug(f"Clustering {segs_in_bin} segments in WE bin {_bin}.")
+
 
             transformed_coords = self.coordinates.transform(
                 processCoordinates(np.squeeze(iter_coords[segs_in_bin]))
@@ -3866,22 +3872,16 @@ class modelWE:
             else:
                 weights = None
 
-            try:
+            if weights is not None:
+                log.debug(weights.shape)
+            else:
+                log.debug("Weights are None")
 
+            try:
                 kmeans_models.cluster_models[_bin].partial_fit(
                     transformed_coords,
                     sample_weight=weights
                 )
-                # HACK: I wish I understood better what happened here. Frankly, I woke up one day and the cluster prediction
-                # was consistently running ~30x slower in Ray vs serial.
-                # After lots of troubleshooting (a day of my life I'll never get back), I found that the models for each
-                # stratum were oversubscribed on threads. I.e., I have 16 cores, I was running 4 Ray workers, but each worker
-                # was trying to do prediction with 16 threads. This led to agonizingly slow prediction.
-                # Is there a way to use multiple threads, AND ray? Almost certainly, but let's make it simple and just enforce
-                # 1 thread for now..
-                # Note that as far as I'm aware I didn't update any libraries or anything, and this behavior wasn't present
-                # before. So I have no idea what changed that caused this massive oversubscription. But, this fixes it.
-                kmeans_models.cluster_models[_bin]._n_threads = 1
 
 
             except ValueError as e:
