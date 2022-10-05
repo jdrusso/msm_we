@@ -24,7 +24,7 @@ class HAMSMDriver:
 
         self.plugin_config = plugin_config
 
-        # Big number is low priority -- this should run before anything else
+        # Big number is low priority -- this should run after augmentation, but before other things
         self.priority = plugin_config.get('priority', 2)
 
         sim_manager.register_callback(sim_manager.finalize_run, self.construct_hamsm, self.priority)
@@ -51,7 +51,6 @@ class HAMSMDriver:
         self.data_manager.close_backing()
 
         model = msm_we.modelWE()
-
         model.build_analyze_model(
             file_paths=h5file_paths,
             ref_struct=refPDBfile,
@@ -61,11 +60,7 @@ class HAMSMDriver:
             dimreduce_method=dimreduce_method,
             n_clusters=clusters_per_stratum,
             tau=tau,
-            # ray_kwargs={'num_cpus':6},
-            step_kwargs= {'clustering':
-                                   {"verbose": True}
-                          }
+            step_kwargs={}
         )
-        # os.environ['OMP_NUM_THREADS'] = original_omp_threads
 
         self.data_manager.hamsm_model = model
