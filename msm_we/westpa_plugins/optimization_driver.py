@@ -1,6 +1,7 @@
 """Plugin for automated WE hyperparameter optimization."""
 import msm_we.msm_we
 import westpa
+from westpa.core import extloader
 from westpa.cli.core import w_run
 from msm_we import optimization
 import numpy as np
@@ -105,64 +106,75 @@ class OptimizationDriver:
         else:
             westpa.rc.pstatus("No more iterations for optimization, completing.")
 
-    def compute_optimized_allocation(self, strategy=None):
+    def compute_optimized_allocation(self):
         """
         Compute the optimal allocation.
 
-        Parameters
-        ----------
-        strategy
+        If `plugin.allocation_strategy` is None or not provided, the allocation is not updated.
 
-        Returns
-        -------
-        An array-like holding the optimized WE walker allocation
-
-        TODO
-        ----
-        Implement actual bin optimization
+        Otherwise, the constructed haMSM is passed to an arbitrary function that returns an array-like describing the
+        new walker allocation over the WE bins.
         """
 
-        new_target_counts = self.we_driver.bin_target_counts
+        allocation_strategy = self.plugin_config.get('allocation_strategy', None)
+
+        if allocation_strategy is None:
+            westpa.rc.pstatus("\tNot updating allocation")
+            new_target_counts = self.we_driver.bin_target_counts
+        else:
+            westpa.rc.pstatus(f"\tUsing {allocation_strategy} to update allocation")
+            allocation_optimizer = extloader.get_object(allocation_strategy)
+            new_target_counts = allocation_optimizer(self.data_manager.hamsm_model)
+
         return new_target_counts
 
-    def compute_optimized_bins(self, strategy=None):
+    def compute_optimized_bins(self):
         """
-        Computes discrepancy and variance, and returns the resulting optimized bin mapper
+        Computes discrepancy and variance, and returns the resulting optimized bin mapper.
 
-        Parameters
-        ----------
-        strategy
+        If `plugin.binning_strategy` is None or not provided, :code:`optimization.get_clustered_mfpt_bins()` is used.
+
+        Otherwise, the constructed haMSM is passed to an arbitrary function that returns an array-like with the WE bin
+        index of all MSM microbins excluding the basis/target (model.indBasis and model.indTargets).
 
         Returns
         -------
         An OptimizedBinMapper
-
-        TODO
-        ----
-        Add flexibility to multiple strategies
         """
 
         model = self.data_manager.hamsm_model
+        binning_strategy = self.plugin_config.get('binning_strategy', None)
 
         n_active_bins = np.count_nonzero(self.we_driver.bin_target_counts)
 
-        discrepancy, variance = optimization.solve_discrepancy(
-            tmatrix=model.Tmatrix,
-            pi=model.pSS,
-            B=model.indTargets
-        )
+        if binning_strategy is None:
 
-        microstate_assignments = optimization.get_clustered_mfpt_bins(
-            variance, discrepancy,
-            model.pSS,
-            n_active_bins
-        )
+            westpa.rc.pstatus("\tUsing k-means MFPT optimization (optimization.get_clustered_mfpt_bins) "
+                              "for bin optimization")
+
+            discrepancy, variance = optimization.solve_discrepancy(
+                tmatrix=model.Tmatrix,
+                pi=model.pSS,
+                B=model.indTargets
+            )
+
+            microstate_assignments = optimization.get_clustered_mfpt_bins(
+                variance, discrepancy,
+                model.pSS,
+                n_active_bins
+            )
+
+        else:
+            westpa.rc.pstatus(f"\tUsing {binning_strategy} for bin optimization")
+
+            bin_optimizer = extloader.get_object(binning_strategy)
+            microstate_assignments = bin_optimizer(model)
 
         microstate_assignments = np.concatenate(
             [microstate_assignments, [n_active_bins - 2, n_active_bins - 1]]
         )
 
-        westpa.rc.pstatus(f"Microstate assignments are {microstate_assignments}")
+        westpa.rc.pstatus(f"\tMicrostate assignments are {microstate_assignments}")
 
         # 3. Update binning
         base_mapper = model.clusters.bin_mapper
