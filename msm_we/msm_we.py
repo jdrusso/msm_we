@@ -1653,7 +1653,7 @@ class modelWE:
 
             elif topology[-6:] == "prmtop":
                 struct = md.load_prmtop(topology)
-                # self.reference_structure = struct
+                self.reference_structure = struct
                 self.nAtoms = struct.n_atoms
                 self.coord_ndim = 3
                 return
@@ -1664,7 +1664,7 @@ class modelWE:
                 )
 
             struct = md.load(topology)
-            # self.reference_structure = struct
+            self.reference_structure = struct
             self.reference_coord = np.squeeze(struct._xyz)
             self.nAtoms = struct.topology.n_atoms
             self.coord_ndim = 3
@@ -1676,7 +1676,7 @@ class modelWE:
             )
 
             struct = topology
-            # self.reference_structure = struct
+            self.reference_structure = struct
             self.reference_coord = np.squeeze(struct._xyz)
             self.nAtoms = struct.topology.n_atoms
             self.coord_ndim = 3
