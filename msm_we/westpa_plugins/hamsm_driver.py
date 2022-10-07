@@ -43,6 +43,7 @@ class HAMSMDriver:
 
         self.data_manager.hamsm_model = None
 
+        # TODO: refPDBfile should no longer be necessary (or used anywhere) and should be safe to remove
         refPDBfile = self.plugin_config.get("ref_pdb_file")
         model_name = self.plugin_config.get("model_name")
         clusters_per_stratum = self.plugin_config.get("n_clusters")
