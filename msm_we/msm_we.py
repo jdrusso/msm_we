@@ -13,7 +13,7 @@ from copy import deepcopy
 from westpa import analysis
 from westpa.core.binning import RectilinearBinMapper, VoronoiBinMapper
 
-from scipy.sparse import coo_matrix, csr_matrix
+from scipy.sparse import coo_matrix
 import scipy.sparse as sparse
 from sklearn.decomposition import IncrementalPCA as iPCA
 from sklearn.cluster import KMeans as kmeans
@@ -22,6 +22,7 @@ from sklearn.utils._openmp_helpers import _openmp_effective_n_threads
 from deeptime.decomposition import TICA, VAMP
 
 from msm_we.stratified_clustering import StratifiedClusters
+from msm_we.utils import is_connected, find_connected_sets, inverse_iteration
 
 import logging
 from rich.logging import RichHandler
@@ -38,10 +39,6 @@ import matplotlib.pyplot as plt
 
 import mdtraj as md
 
-# used to check connectivity
-import scipy.sparse.csgraph as csgraph
-from scipy.sparse.sputils import isdense
-
 from rich.live import Live
 from rich.table import Table
 
@@ -50,146 +47,6 @@ import ray
 # If you implement a custom bin mapper that should work with stratified clustering, you can add it to this set
 #   after importing msm_we
 SUPPORTED_MAPPERS = {RectilinearBinMapper, VoronoiBinMapper}
-
-
-def find_connected_sets(C, directed=True):
-    r"""
-    This implementation is taken from msmtools.estimation.sparse.connectivity, at commit 9312660.
-    See the original at https://github.com/markovmodel/msmtools/blob/devel/msmtools/estimation/sparse/connectivity.py#L30
-
-    Compute connected components for a directed graph with weights
-    represented by the given count matrix.
-    Parameters
-    ----------
-    C : scipy.sparse matrix or numpy ndarray
-        square matrix specifying edge weights.
-    directed : bool, optional
-       Whether to compute connected components for a directed  or
-       undirected graph. Default is True.
-    Returns
-    -------
-    cc : list of arrays of integers
-        Each entry is an array containing all vertices (states) in
-        the corresponding connected component.
-    """
-    if isdense(C):
-        C = csr_matrix(C)
-
-    M = C.shape[0]
-    """ Compute connected components of C. nc is the number of
-    components, indices contain the component labels of the states
-    """
-    nc, indices = csgraph.connected_components(
-        C, directed=directed, connection="strong"
-    )
-
-    states = np.arange(M)  # Discrete states
-
-    """Order indices"""
-    ind = np.argsort(indices)
-    indices = indices[ind]
-
-    """Order states"""
-    states = states[ind]
-    """ The state index tuple is now of the following form (states,
-    indices)=([s_23, s_17,...,s_3, s_2, ...], [0, 0, ..., 1, 1, ...])
-    """
-
-    """Find number of states per component"""
-    count = np.bincount(indices)
-
-    """Cumulative sum of count gives start and end indices of
-    components"""
-    csum = np.zeros(len(count) + 1, dtype=int)
-    csum[1:] = np.cumsum(count)
-
-    """Generate list containing components, sort each component by
-    increasing state label"""
-    cc = []
-    for i in range(nc):
-        cc.append(np.sort(states[csum[i] : csum[i + 1]]))
-
-    """Sort by size of component - largest component first"""
-    cc = sorted(cc, key=lambda x: -len(x))
-
-    return cc
-
-
-def is_connected(matrix, source_states, target_states, directed=True):
-    """
-    Check for connectivity between two states.
-    If directed is True, then checks for directional connectivity from source_states to target_states.
-
-    Parameters
-    ----------
-    matrix: np.array, NxN
-        Transition matrix
-    source_states: array-like, N
-        Source states
-    target_states: array-like, N
-        Target states
-    directed: bool, default=True
-        Compute directional connectivity
-
-    Returns
-    -------
-    bool
-    """
-
-    return (
-        np.inf
-        not in csgraph.shortest_path(matrix, directed=directed, indices=source_states)[
-            :, target_states
-        ]
-    )
-
-
-def inverse_iteration(guess, matrix, mu=1):
-    """
-    Do one iteration of inverse iteration.
-
-    Parameters
-    ----------
-    guess: array-like  (N elements)
-        Vector of weights to be used as the initial guess.
-
-    matrix: array-like (NxN elements)
-        Transition matrix to use for inverse iteration.
-
-    Returns
-    -------
-    The new vector of weights after one iteration of inverse iteration.
-    """
-
-    # Looking for eigenvector corresponding to eigenvalue 1
-    identity = sparse.eye(guess.shape[0])
-
-    # Inverse
-    try:
-        inverse = sparse.linalg.inv(matrix.T - mu * identity)
-    except RuntimeError as e:
-        if not mu == 1:
-            filename = "bad_matrix.npy"
-            log.error(
-                f"Inverse iteration still failed with mu={mu} -- examine your transition matrix for why it could "
-                f"be unsolvable. Saving the transition matrix to {filename}."
-            )
-            np.save(filename, matrix)
-            raise e
-        elif mu == 1:
-            log.error(
-                f"When solving steady-state, failed to perform inverse iteration! "
-                f"Trying again with mu=0.999 instead of {mu}."
-            )
-            return inverse_iteration(guess, matrix, mu=0.999)
-
-    result = inverse @ guess
-    result = result.squeeze()
-
-    # Normalize
-    result /= sum(result)
-
-    return result
 
 
 class modelWE:
