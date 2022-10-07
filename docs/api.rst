@@ -8,6 +8,7 @@ Documentation
 
    msm_we.msm_we
    msm_we.optimization
+   msm_we.westpa_plugins
    msm_we.fpt
    msm_we.ensembles
    msm_we.nmm
@@ -52,6 +53,21 @@ Optimization (msm_we.optimization)
 .. automodule:: msm_we.optimization
    :members:
 
+
+WESTPA Plugins (msm_we.westpa_plugins)
+---------------------------------------------------------
+
+.. autoclass:: msm_we.westpa_plugins.augmentation_driver.MDAugmentationDriver
+   :members:
+
+.. autoclass:: msm_we.westpa_plugins.hamsm_driver.HAMSMDriver
+   :members:
+
+.. autoclass:: msm_we.westpa_plugins.restart_driver.RestartDriver
+   :members:
+
+.. autoclass:: msm_we.westpa_plugins.optimization_driver.OptimizationDriver
+   :members:
 
 FPT Calculations
 ----------------

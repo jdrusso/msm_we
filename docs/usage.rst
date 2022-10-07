@@ -297,3 +297,8 @@ In this case, we optimize for minimizing flux variance.
         target_pcoord_bounds,
         stratified_clusterer
     )
+
+WESTPA Integration
+------------------
+
+Coming soon...
