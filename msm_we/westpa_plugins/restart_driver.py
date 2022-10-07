@@ -24,16 +24,6 @@ from rich.logging import RichHandler
 
 from matplotlib import pyplot as plt
 
-# Ensure this is installed via pip. msm_we's setup.py is all set up for that.
-# Navigate to the folder where msm_we is, and run python3 -m pip install .
-#   If you're doing development on msm_we, add the -e flag to pip, i.e. "python3 -m pip install -e ."
-#   -e will install it in editable mode, so changes to msm_we will take effect next time it's imported.
-#   Otherwise, if you modify the msm_we code, you'll need to re-install it through pip.
-from msm_we import msm_we
-
-import ray
-import tempfile
-
 EPS = np.finfo(np.float64).eps
 
 log = logging.getLogger(__name__)
