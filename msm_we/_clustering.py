@@ -19,6 +19,12 @@ SUPPORTED_MAPPERS = {RectilinearBinMapper, VoronoiBinMapper}
 
 
 class ClusteringMixin:
+
+    n_clusters = None
+    clusters = None
+    clusterFile = None
+    use_weights_in_clustering = False
+
     def do_clustering(self, arg):
 
         kmeans_model, iters_to_use, cluster_args, processCoordinates = arg

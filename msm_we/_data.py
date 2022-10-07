@@ -7,6 +7,40 @@ from ._logging import log
 
 
 class DataMixin:
+
+    n_iter = None
+
+    fileList = None
+    """list of str: List of all filenames with data"""
+    n_data_files = None
+    """int: Number of files in :code:`fileList`
+    **TODO**: Deprecate this, this could just be a property"""
+
+    westList = None
+    numSegments = None
+    maxIter = None
+
+    # TODO: Describe segindList better.
+    segindList = None
+    """list: List of segment indices(?)"""
+
+    weightList = None
+    """array-like: List of segment weights in an iteration"""
+
+    nSeg = None
+    pcoord0List = None
+    pcoord1List = None
+    seg_weights = {}
+
+    coordPairList = None
+    transitionWeights = None
+    departureWeights = None
+
+    n_hist = None
+    """int: Number of steps of history information to use when building transitions."""
+
+    coordsExist = None
+
     def get_transition_data(self, n_lag):
         """
         This function analyzes pairs of coordinates at the current iteration, set by :code:`self.n_iter`, and at some

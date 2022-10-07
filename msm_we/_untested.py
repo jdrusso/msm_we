@@ -5,6 +5,25 @@ import pyemma
 
 
 class ExtendedModelWE(modelWE):
+
+    # For optimized binning
+    nB = None
+    nW = None
+    min_walkers = None
+
+    binMethod = None
+    allocationMethod = None
+
+    # vamp_lag = 10
+    # vamp_dim = 10
+    # nB = 48  # number of bins for optimized WE a la Aristoff
+    # nW = 40  # number of walkers for optimized WE a la Aristoff
+    # min_walkers = 1  # minimum number of walkers per bin
+    # binMethod = "adaptive"  # adaptive for dynamic k-means bin edges, uniform for equal spacing on kh
+    # allocationMethod = (
+    #     "adaptive"  # adaptive for dynamic allocation, uniform for equal allocation
+    # )
+
     def load_clusters(self, clusterFile):
         """
         Load clusters from a file.

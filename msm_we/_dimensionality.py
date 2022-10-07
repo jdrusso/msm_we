@@ -8,6 +8,13 @@ from ._logging import log
 
 
 class DimensionalityReductionMixin:
+
+    dimReduceMethod = None
+    """str: Dimensionality reduction method. Must be one of "pca", "vamp", or "none" (**NOT** NoneType)"""
+
+    vamp_lag = None
+    vamp_dim = None
+
     class Coordinates(object):
         """
         Fake Coordinates class, in case you don't want to use either PCA or VAMP for dimensionality reduction

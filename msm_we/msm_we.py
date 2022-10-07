@@ -1,7 +1,7 @@
 """haMSM estimation and analysis"""
 from __future__ import division, print_function
-
 __metaclass__ = type
+
 import numpy as np
 import tqdm.auto as tqdm
 from functools import partialmethod
@@ -26,8 +26,10 @@ from msm_we._dimensionality import DimensionalityReductionMixin
 from msm_we._plotting import PlottingMixin
 from msm_we._analysis import AnalysisMixin
 from msm_we._data import DataMixin
+from msm_we._fluxmatrix import FluxMatrixMixin
 
 from _logging import log
+
 
 class modelWE(
     ClusteringMixin,
@@ -35,6 +37,7 @@ class modelWE(
     PlottingMixin,
     AnalysisMixin,
     DataMixin,
+    FluxMatrixMixin
 ):
     """
     History-augmented Markov state model estimation from WE data
@@ -58,31 +61,22 @@ class modelWE(
 
     def __init__(self):
         """
-        Work-in-progress init function. For now, just start adding attribute definitions in here.
-
         Todo
         ----
-        - Most logic from initialize() should be moved in here.
-
-        - Also, comment all of these here. Right now most of them have comments throughout the code.
+        - Document all of these attributes
 
         - Reorganize these attributes into some meaningful structure
         """
 
-        # TODO: In general, it's not clear if this needs to be strictly 1... However, oversubscribing causes very difficult
-        #   to diagnose problems (like hanging during clustering / k-means fitting), and 1 seems to be safe.
+        # TODO: In general, it's not clear if this needs to be strictly 1...
+        #  However, oversubscribing causes very difficult to diagnose problems
+        #  (like hanging during clustering / k-means fitting), and 1 seems to be safe.
         assert (
             _openmp_effective_n_threads() == 1
         ), "Set $OMP_NUM_THREADS=1 for proper msm-we functionality"
 
         self.modelName = None
         """str: Name used for storing files"""
-        self.fileList = None
-        """list of str: List of all filenames with data"""
-        self.n_data_files = None
-        """int: Number of files in :code:`fileList`
-
-        **TODO**: Deprecate this, this could just be a property"""
 
         self.n_lag = 0
         self.pcoord_ndim = None
@@ -114,26 +108,6 @@ class modelWE(
         self._basis_pcoord_bounds = None
         self._target_pcoord_bounds = None
 
-        self.dimReduceMethod = None
-        """str: Dimensionality reduction method. Must be one of "pca", "vamp", or "none" (**NOT** NoneType)"""
-
-        self.vamp_lag = None
-        self.vamp_dim = None
-
-        # For optimized binning
-        self.nB = None
-        self.nW = None
-
-        self.min_walkers = None
-        """str: Test description for minwalkers"""
-
-        self.binMethod = None
-        self.allocationMethod = None
-
-        self.coordsExist = None
-
-        self.westList = None
-
         self.reference_structure = None
         self.reference_coord = None
         self.basis_structure = None
@@ -141,49 +115,12 @@ class modelWE(
         self.basis_coords = None
         self.nAtoms = None
 
-        self.numSegments = None
-        self.maxIter = None
-
-        # TODO: Describe segindList better.
-        self.segindList = None
-        """list: List of segment indices(?)"""
-
-        self.weightList = None
-        """array-like: List of segment weights in an iteration"""
-
-        self.nSeg = None
-        self.pcoord0List = None
-        self.pcoord1List = None
-        self.seg_weights = {}
-
-        self.coordPairList = None
-        self.transitionWeights = None
-        self.departureWeights = None
-
-        self.n_iter = None
-
         self.coordinates = None
         self.ndim = None
 
-        self.n_hist = None
-        """int: Number of steps of history information to use when building transitions."""
-
-        self.n_clusters = None
-        self.clusters = None
-        self.clusterFile = None
-
-        self.errorWeight = None
-        self.errorCount = None
-
         self.targetRMSD_centers = None
         """array-like: List of RMSDs corresponding to each cluster."""
-        self.fluxMatrix = None
         self.indBasis = None
-
-        self.Tmatrix = None
-        self.pSS = None
-        self.lagtime = None
-        self.JtargetSS = None
 
         self.removed_clusters = []
         self.cluster_structures = None
@@ -194,8 +131,6 @@ class modelWE(
         self.validation_models = []
 
         self.pcoord_shape_warned = False
-
-        self.use_weights_in_clustering = False
 
         self.pre_discretization_model = None
 
@@ -320,16 +255,6 @@ class modelWE(
         else:
             self.dimReduceMethod = dim_reduce_method
 
-        self.vamp_lag = 10
-        self.vamp_dim = 10
-        self.nB = 48  # number of bins for optimized WE a la Aristoff
-        self.nW = 40  # number of walkers for optimized WE a la Aristoff
-        self.min_walkers = 1  # minimum number of walkers per bin
-        self.binMethod = "adaptive"  # adaptive for dynamic k-means bin edges, uniform for equal spacing on kh
-        self.allocationMethod = (
-            "adaptive"  # adaptive for dynamic allocation, uniform for equal allocation
-        )
-
         try:
             self.load_iter_data(1)
             self.load_iter_coordinates0()
@@ -345,12 +270,10 @@ class modelWE(
 
         log.debug("msm_we model successfully initialized")
 
-    # TODO: Deprecate this for an N-dimensional version
     @property
     def WEbasisp1_bounds(self):
         return self.basis_pcoord_bounds
 
-    # TODO: Deprecate this for an N-dimensional version
     @WEbasisp1_bounds.setter
     def WEbasisp1_bounds(self, bounds):
         """

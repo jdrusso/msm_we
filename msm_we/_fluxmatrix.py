@@ -13,6 +13,7 @@ from ._logging import log
 class FluxMatrixMixin:
 
     fluxMatrixRaw = None
+    fluxMatrix = None
 
     @ray.remote
     def get_iter_fluxMatrix_ray(model, processCoordinates, n_iter):

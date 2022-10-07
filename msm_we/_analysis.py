@@ -7,6 +7,12 @@ from ._logging import log
 
 
 class AnalysisMixin:
+
+    Tmatrix = None
+    pSS = None
+    lagtime = None
+    JtargetSS = None
+
     def get_Tmatrix(self):
         """
         Compute the transition matrix from the flux matrix.
