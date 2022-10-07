@@ -1,10 +1,10 @@
-from msm_we.msm_we import log
 from sklearn.decomposition import IncrementalPCA as iPCA
 import concurrent
 import multiprocessing as mp
 import tqdm.auto as tqdm
 import numpy as np
 from deeptime.decomposition import TICA, VAMP
+from ._logging import log
 
 
 class DimensionalityReductionMixin:

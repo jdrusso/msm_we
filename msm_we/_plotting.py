@@ -1,6 +1,6 @@
-from msm_we.msm_we import log
 from matplotlib import pyplot as plt
 import numpy as np
+from ._logging import log
 
 # Using the tkinter backend makes matplotlib run better on a cluster, maybe?
 # import matplotlib

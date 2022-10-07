@@ -3,21 +3,12 @@ Discrepancy calculations and WE binning/allocation optimization
 """
 
 import numpy as np
-
-import logging
-
 import westpa.core.binning
-from rich.logging import RichHandler
-
-from . import msm_we
 from sklearn.cluster import KMeans
 import pickle
 import base64
-
-log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
-log.addHandler(RichHandler())
-log.propagate = False
+from . import msm_we
+from ._logging import log
 
 
 def solve_discrepancy(tmatrix, pi, B):

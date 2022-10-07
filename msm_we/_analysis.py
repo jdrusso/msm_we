@@ -1,9 +1,9 @@
-from msm_we.msm_we import log
 import numpy as np
 from scipy import sparse
 from .utils import inverse_iteration, is_connected
 import sys
 import tqdm.auto as tqdm
+from ._logging import log
 
 
 class AnalysisMixin:

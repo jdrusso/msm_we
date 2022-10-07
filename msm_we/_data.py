@@ -1,9 +1,9 @@
-from msm_we.msm_we import log
 import h5py
 import numpy as np
 import sys
 import mdtraj as md
 import tqdm.auto as tqdm
+from ._logging import log
 
 
 class DataMixin:

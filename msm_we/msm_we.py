@@ -27,14 +27,7 @@ from msm_we._plotting import PlottingMixin
 from msm_we._analysis import AnalysisMixin
 from msm_we._data import DataMixin
 
-import logging
-from rich.logging import RichHandler
-
-log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
-log.addHandler(RichHandler())
-log.propagate = False
-
+from _logging import log
 
 class modelWE(
     ClusteringMixin,

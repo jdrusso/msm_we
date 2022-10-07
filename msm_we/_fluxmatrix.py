@@ -6,8 +6,8 @@ import tqdm.auto as tqdm
 import concurrent
 import multiprocessing as mp
 import sys
-from .msm_we import log, modelWE
 from .utils import find_connected_sets
+from ._logging import log
 
 
 class FluxMatrixMixin:
@@ -84,7 +84,7 @@ class FluxMatrixMixin:
             )
 
         return (
-            modelWE.build_flux_matrix(
+            self.build_flux_matrix(
                 self.n_clusters,
                 index_pairs,
                 ind_start_in_basis,
@@ -108,7 +108,7 @@ class FluxMatrixMixin:
     ):
 
         return (
-            modelWE.build_flux_matrix(
+            FluxMatrixMixin.build_flux_matrix(
                 n_clusters,
                 index_pairs,
                 ind_start_in_basis,
