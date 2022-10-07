@@ -330,16 +330,30 @@ class StratifiedClusters:
         # Discretize coords according to which WE bin they're in
         discrete = []
 
+        total_clusters = sum(
+            [
+                len(self.cluster_models[idx].cluster_centers_)
+                if hasattr(self.cluster_models[idx], "cluster_centers_")
+                else 0
+                for idx in self.legitimate_bins
+            ]
+        )
+
         for i, coord in enumerate(coords):
 
+            # Note that for target/basis states, the discrete cluster index isn't really used anywhere other than in
+            #   self.cluster_structures.
+            # Fluxmatrix calculations explicitly short-circuit this.
+            #   (Maybe it doesn't need to, if this is correctly indexed?)
+            # However, this ensures self.dtrajs is correctly indexed.
             if is_target[i]:
-                _discrete = [self.model.n_clusters + 1]
+                _discrete = [total_clusters+1]
 
                 _bin = we_bins[i]
                 self.target_bins.add(_bin)
 
             elif is_basis[i]:
-                _discrete = [self.model.n_clusters]
+                _discrete = [total_clusters]
 
                 _bin = we_bins[i]
                 self.basis_bins.add(_bin)
