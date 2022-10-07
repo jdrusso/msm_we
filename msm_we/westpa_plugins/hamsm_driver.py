@@ -34,14 +34,14 @@ class HAMSMDriver:
             sim_manager.finalize_run, self.construct_hamsm, self.priority
         )
 
+        self.h5file_paths = [self.data_manager.we_h5filename]
+
     def construct_hamsm(self):
         """
         Build an haMSM, for use with later plugins. The final constructed haMSM is stored on the data manager.
         """
 
         self.data_manager.hamsm_model = None
-
-        h5file_paths = [self.data_manager.we_h5filename]
 
         refPDBfile = self.plugin_config.get("ref_pdb_file")
         model_name = self.plugin_config.get("model_name")
@@ -64,7 +64,7 @@ class HAMSMDriver:
 
         model = msm_we.modelWE()
         model.build_analyze_model(
-            file_paths=h5file_paths,
+            file_paths=self.h5file_paths,
             ref_struct=refPDBfile,
             modelName=model_name,
             basis_pcoord_bounds=basis_pcoord_bounds,
@@ -81,4 +81,7 @@ class HAMSMDriver:
             allow_validation_failure=True  # Don't fail if a validation model fails
         )
 
+        westpa.rc.pstatus(f"Storing built haMSM on {self.data_manager}")
         self.data_manager.hamsm_model = model
+
+        return model
