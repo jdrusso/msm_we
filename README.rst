@@ -10,7 +10,7 @@ msm_we
 
 * Authors: John Russo, Jeremy Copperman
 * Free software: MIT license
-* Documentation: https://docs.jdrusso.dev/msm_we/ .
+* Documentation: https://msm-we.readthedocs.io .
 
 Background
 ----------

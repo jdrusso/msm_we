@@ -1,6 +1,9 @@
 Examples
 ========
 
+.. image:: https://mybinder.org/badge_logo.svg
+   :target: https://mybinder.org/v2/gh/jdrusso/msm_we/HEAD
+   
 HAMSM Construction and Analysis
 -------------------------------
 
