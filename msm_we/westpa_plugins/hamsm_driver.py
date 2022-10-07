@@ -8,6 +8,36 @@ from sklearn.utils._openmp_helpers import _openmp_effective_n_threads
 class HAMSMDriver:
     """
     WESTPA plugin to construct an haMSM.
+
+    Requires west.cfg to contain the following plugin config parameters:
+    - n_restarts
+    - extension_iters
+    - n_runs
+    - n_restarts_to_use
+    - initialization_file
+    - model_name
+    - n_clusters
+    - basis_pcoord_bounds
+    - dim_reduce_method
+    - featurization
+    - n_cpus
+
+    Can be used by including the following entries in your west.cfg:
+    .. code::
+
+        - plugin: msm_we.westpa_plugins.restart_driver.RestartDriver
+              n_restarts: 3
+              extension_iters: 5
+              n_runs: 2
+              n_restarts_to_use: -1
+              initialization_file: restart_initialization.json
+              model_name: NaClFlux
+              n_clusters: 3
+              basis_pcoord_bounds: [[14.0,150.0]]
+              target_pcoord_bounds: [[0, 9.1]]
+              dim_reduce_method: pca
+              featurization: restart_overrides.processCoordinates
+              n_cpus: 3
     """
 
     def __init__(self, sim_manager, plugin_config):

@@ -28,6 +28,8 @@ Features
 * Estimate steady-state distributions
 * Estimate flux profiles
 * Estimate committors
+* WESTPA plugins to automate haMSM construction
+* WESTPA plugin to automate bin+allocation optimization
 
 
 Known Issues
