@@ -5,7 +5,6 @@ import pyemma
 
 
 class ExtendedModelWE(modelWE):
-
     def load_clusters(self, clusterFile):
         """
         Load clusters from a file.
@@ -36,15 +35,15 @@ class ExtendedModelWE(modelWE):
         nI = 0
         f = h5py.File(self.modelName + ".h5", "w")
         dsetName = (
-                "/s"
-                + str(first_iter)
-                + "_e"
-                + str(last_iter)
-                + "_lag"
-                + str(n_lag)
-                + "_b"
-                + str(nBins)
-                + "/pcoord1D_fluxMatrix"
+            "/s"
+            + str(first_iter)
+            + "_e"
+            + str(last_iter)
+            + "_lag"
+            + str(n_lag)
+            + "_b"
+            + str(nBins)
+            + "/pcoord1D_fluxMatrix"
         )
         e = dsetName in f
 
@@ -153,7 +152,7 @@ class ExtendedModelWE(modelWE):
                 weightList[seg_idx] = 0.0
 
             fluxMatrix[from_bin_index, to_bin_index] = (
-                    fluxMatrix[from_bin_index, to_bin_index] + weightList[seg_idx]
+                fluxMatrix[from_bin_index, to_bin_index] + weightList[seg_idx]
             )
 
         return fluxMatrix
@@ -203,8 +202,6 @@ class ExtendedModelWE(modelWE):
                 n_jobs=None,
                 skip=0,
             )
-
-
 
     def get_hflux(self, conv):
         convh = conv
@@ -359,7 +356,7 @@ class ExtendedModelWE(modelWE):
                 wt = np.sum(self.pSS[indBin])
                 vw = np.sum(np.multiply(self.pSS[indBin] / wt, self.varh[indBin]))
                 alloc[i] = wt * (vw) ** 0.5
-                value[i] = vw ** 0.5
+                value[i] = vw**0.5
         if self.allocationMethod == "uniform":
             alloc = np.ones_like(alloc)
         alloc = alloc / np.sum(alloc)
@@ -412,10 +409,10 @@ class ExtendedModelWE(modelWE):
         for i in range(nB):
             indBin = np.where(dtraj_kh_clusters == i)
             wi = np.sum(self.pSS[indBin])
-            bin_mutV[i] = ((wi ** 2) / (nT[i])) * np.sum(
+            bin_mutV[i] = ((wi**2) / (nT[i])) * np.sum(
                 np.multiply(self.pSS[indBin] / wi, self.varh[indBin])
             )
-            bin_selV[i] = ((wi ** 2) / (nT[i])) * np.sum(
+            bin_selV[i] = ((wi**2) / (nT[i])) * np.sum(
                 np.multiply(self.pSS[indBin] / wi, np.power(self.kh[indBin], 2))
                 - np.power(np.multiply(self.pSS[indBin] / wi, self.kh[indBin]), 2)
             )
@@ -806,7 +803,7 @@ class ExtendedModelWE(modelWE):
         return warpedWeights
 
     def get_warps_from_pcoord(
-            self, first_iter, last_iter
+        self, first_iter, last_iter
     ):  # get all warps and weights over set of iterations
         warpedWeights = []
         for iS in range(first_iter, last_iter + 1):
@@ -816,7 +813,7 @@ class ExtendedModelWE(modelWE):
             warpList = np.where(self.is_WE_target(pcoord))
             warpedWeights.append(self.weightList[warpList])
             meanJ = (
-                    np.mean(self.weightList[warpList]) / self.tau / np.sum(self.weightList)
+                np.mean(self.weightList[warpList]) / self.tau / np.sum(self.weightList)
             )
             sys.stdout.write("Jdirect: " + str(meanJ) + " iter: " + str(iS) + "\n")
         return warpedWeights
@@ -826,13 +823,13 @@ class ExtendedModelWE(modelWE):
         Jdirect = np.zeros(nIterations - 1)
         f = h5py.File(self.modelName + ".h5", "a")
         dsetName = (
-                "/s"
-                + str(first_iter)
-                + "_e"
-                + str(last_iter)
-                + "_w"
-                + str(window)
-                + "/Jdirect"
+            "/s"
+            + str(first_iter)
+            + "_e"
+            + str(last_iter)
+            + "_w"
+            + str(window)
+            + "/Jdirect"
         )
         e = dsetName in f
         if not e:
@@ -856,13 +853,13 @@ class ExtendedModelWE(modelWE):
             dsetP = f.create_dataset(dsetName, np.shape(Jdirect))
             dsetP[:] = Jdirect
             dsetName = (
-                    "/s"
-                    + str(first_iter)
-                    + "_e"
-                    + str(last_iter)
-                    + "_w"
-                    + str(window)
-                    + "/JdirectTimes"
+                "/s"
+                + str(first_iter)
+                + "_e"
+                + str(last_iter)
+                + "_w"
+                + str(window)
+                + "/JdirectTimes"
             )
             dsetP = f.create_dataset(dsetName, np.shape(JdirectTimes))
             dsetP[:] = JdirectTimes
@@ -870,13 +867,13 @@ class ExtendedModelWE(modelWE):
             dsetP = f[dsetName]
             Jdirect = dsetP[:]
             dsetName = (
-                    "/s"
-                    + str(first_iter)
-                    + "_e"
-                    + str(last_iter)
-                    + "_w"
-                    + str(window)
-                    + "/JdirectTimes"
+                "/s"
+                + str(first_iter)
+                + "_e"
+                + str(last_iter)
+                + "_w"
+                + str(window)
+                + "/JdirectTimes"
             )
             dsetP = f[dsetName]
             JdirectTimes = dsetP[:]
@@ -885,7 +882,7 @@ class ExtendedModelWE(modelWE):
         self.JdirectTimes = JdirectTimes
 
         def evolve_probability(
-                self, nEvolve, nStore
+            self, nEvolve, nStore
         ):  # iterate nEvolve times, storing every nStore iterations, initial condition at basis
             nIterations = np.ceil(nEvolve / nStore).astype(int) + 1
             self.nEvolve = nEvolve
@@ -941,7 +938,7 @@ class ExtendedModelWE(modelWE):
                 pass
 
         def evolve_probability2(
-                self, nEvolve, nStore
+            self, nEvolve, nStore
         ):  # iterate nEvolve times, storing every nStore iterations, initial condition spread for everything at RMSD higher than basis
             nIterations = np.ceil(nEvolve / nStore).astype(int) + 1
             self.nEvolve = nEvolve
@@ -951,7 +948,7 @@ class ExtendedModelWE(modelWE):
             binCenters = self.binCenters
             probBasis = np.zeros((1, self.nBins))
             probBasis[
-            0, self.indBasis[0]:
+                0, self.indBasis[0] :
             ] = 1.0  # assign initial probability to everything at RMSD higher than the basis, for case when nothing observed leaving exact basis
             probBasis = probBasis / np.sum(probBasis)
             pSS = probBasis.copy()
@@ -1002,7 +999,7 @@ class ExtendedModelWE(modelWE):
                 pass
 
         def evolve_probability_from_initial(
-                self, p0, nEvolve, nStore
+            self, p0, nEvolve, nStore
         ):  # iterate nEvolve times, storing every nStore iterations, initial condition provided
             nIterations = np.ceil(nEvolve / nStore).astype(int) + 1
             self.nEvolve = nEvolve

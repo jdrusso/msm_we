@@ -35,6 +35,7 @@ log.propagate = False
 import matplotlib.pyplot as plt
 
 import mdtraj as md
+
 # import pyemma.coordinates as coor
 # import pyemma.coordinates.clustering as clustering
 # import pyemma
@@ -347,7 +348,7 @@ class StratifiedClusters:
             #   (Maybe it doesn't need to, if this is correctly indexed?)
             # However, this ensures self.dtrajs is correctly indexed.
             if is_target[i]:
-                _discrete = [total_clusters+1]
+                _discrete = [total_clusters + 1]
 
                 _bin = we_bins[i]
                 self.target_bins.add(_bin)
@@ -438,7 +439,9 @@ class modelWE:
 
         # TODO: In general, it's not clear if this needs to be strictly 1... However, oversubscribing causes very difficult
         #   to diagnose problems (like hanging during clustering / k-means fitting), and 1 seems to be safe.
-        assert _openmp_effective_n_threads() == 1, "Set $OMP_NUM_THREADS=1 for proper msm-we functionality"
+        assert (
+            _openmp_effective_n_threads() == 1
+        ), "Set $OMP_NUM_THREADS=1 for proper msm-we functionality"
 
         self.modelName = None
         """str: Name used for storing files"""
@@ -1043,7 +1046,7 @@ class modelWE:
         cross_validation_blocks=4,
         show_live_display=True,
         allow_validation_failure=False,
-        step_kwargs={}
+        step_kwargs={},
     ):
         """
         One-shot function to build the model and analyze all at once. This provides a convenient interface for running
@@ -1152,7 +1155,7 @@ class modelWE:
                     "target_pcoord_bounds": target_pcoord_bounds,
                     "dim_reduce_method": dimreduce_method,
                     "tau": tau,
-                    **step_kwargs.get('initialize', {})
+                    **step_kwargs.get("initialize", {}),
                 },
             )
             self.set_note(table, step_idx, "")
@@ -1160,7 +1163,9 @@ class modelWE:
             # # Get number of iterations
             step_idx += 1
             self.do_step(
-                table, step_idx, step=model.get_iterations,
+                table,
+                step_idx,
+                step=model.get_iterations,
             )
             self.set_note(table, step_idx, f"{model.maxIter} iterations exist")
 
@@ -1168,7 +1173,10 @@ class modelWE:
             step_idx += 1
             _max_coord_iter = [max_coord_iter, model.maxIter][max_coord_iter == -1]
             self.do_step(
-                table, step_idx, step=model.get_coordSet, args=[_max_coord_iter],
+                table,
+                step_idx,
+                step=model.get_coordSet,
+                args=[_max_coord_iter],
             )
             self.set_note(
                 table, step_idx, f"Got coords for {_max_coord_iter} iterations"
@@ -1178,8 +1186,10 @@ class modelWE:
             step_idx += 1
             self.set_note(table, step_idx, f"Method: {model.dimReduceMethod}")
             self.do_step(
-                table, step_idx, step=model.dimReduce,
-                kwargs={**step_kwargs.get('dimReduce', {})}
+                table,
+                step_idx,
+                step=model.dimReduce,
+                kwargs={**step_kwargs.get("dimReduce", {})},
             )
 
             # # Clustering
@@ -1194,7 +1204,7 @@ class modelWE:
                     "use_ray": use_ray,
                     "stratified": stratified,
                     "store_validation_model": cross_validation_groups > 0,
-                    **step_kwargs.get('clustering', {})
+                    **step_kwargs.get("clustering", {}),
                 },
             )
 
@@ -1213,7 +1223,7 @@ class modelWE:
                     "last_iter": _fluxmatrix_iters[1],
                     "iters_to_use": fluxmatrix_iters_to_use,
                     "use_ray": use_ray,
-                    **step_kwargs.get('fluxmatrix', {})
+                    **step_kwargs.get("fluxmatrix", {}),
                 },
             )
             self.set_note(
@@ -1230,9 +1240,7 @@ class modelWE:
                 table,
                 step_idx,
                 step=model.organize_fluxMatrix,
-                kwargs={"use_ray": use_ray,
-                        **step_kwargs.get('organize', {})
-                        },
+                kwargs={"use_ray": use_ray, **step_kwargs.get("organize", {})},
             )
             final_clusters = model.fluxMatrix.shape[0]
             self.set_note(
@@ -1269,7 +1277,7 @@ class modelWE:
                             "cross_validation_groups": cross_validation_groups,
                             "cross_validation_blocks": cross_validation_blocks,
                             "use_ray": use_ray,
-                            **step_kwargs.get('block_validation', {})
+                            **step_kwargs.get("block_validation", {}),
                         },
                     )
                 except Exception as e:
@@ -1277,11 +1285,15 @@ class modelWE:
                     if not allow_validation_failure:
                         raise e
                     # TODO: Print for the one that does pass
-                    self.set_note(table, step_idx, "At least one validation model failed")
+                    self.set_note(
+                        table, step_idx, "At least one validation model failed"
+                    )
                 else:
                     flux_text = ""
                     for group, _validation_model in enumerate(self.validation_models):
-                        flux_text += f"Group {group} flux: {_validation_model.JtargetSS:.2e}\n"
+                        flux_text += (
+                            f"Group {group} flux: {_validation_model.JtargetSS:.2e}\n"
+                        )
                     self.set_note(table, step_idx, flux_text)
 
             # If live updating was disabled, write to the table once now. (Doesn't do anything if it was enabled)
@@ -1333,7 +1345,11 @@ class modelWE:
 
         # Get the iterations corresponding to each group
         group_blocks = [
-            range(start_idx, cross_validation_blocks, cross_validation_groups,)
+            range(
+                start_idx,
+                cross_validation_blocks,
+                cross_validation_groups,
+            )
             for start_idx in range(cross_validation_groups)
         ]
 
@@ -1383,7 +1399,6 @@ class modelWE:
 
                 log.error("Error during block validation!")
                 log.exception(e)
-
 
                 # TODO: Would be nice to gracefully handle this and move on to the next validation group.
                 #   However, validation models are used in a number of places, and leaving a model with uninitialized
@@ -1467,12 +1482,17 @@ class modelWE:
                     weights = dset["weight"]
                     seg_weights = np.append(seg_weights, weights)
 
-                    if not pcoord.shape[2] == self.pcoord_ndim and not self.pcoord_shape_warned:
-                        log.warning(f"Dimensions of pcoord in {fileName} ({pcoord.shape[2]}) do not match specified "
-                                    f"pcoord dimensionality self.pcoord_ndim ({self.pcoord_ndim}). "
-                                    f"MSM-WE will only load up to dimension {self.pcoord_ndim}. "
-                                    f"This pcoord is just used for stratification, and this is expected behavior if "
-                                    f"you're extending your pcoord (i.e. in an optimization flow). ")
+                    if (
+                        not pcoord.shape[2] == self.pcoord_ndim
+                        and not self.pcoord_shape_warned
+                    ):
+                        log.warning(
+                            f"Dimensions of pcoord in {fileName} ({pcoord.shape[2]}) do not match specified "
+                            f"pcoord dimensionality self.pcoord_ndim ({self.pcoord_ndim}). "
+                            f"MSM-WE will only load up to dimension {self.pcoord_ndim}. "
+                            f"This pcoord is just used for stratification, and this is expected behavior if "
+                            f"you're extending your pcoord (i.e. in an optimization flow). "
+                        )
                         self.pcoord_shape_warned = True
 
                     # Iterate over segments in this dataset
@@ -1486,12 +1506,17 @@ class modelWE:
                         weightList = np.append(weightList, newSet[seg_idx][0])
                         pcoord0List = np.append(
                             pcoord0List,
-                            np.expand_dims(pcoord[seg_idx, 0, :self.pcoord_ndim], 0),
+                            np.expand_dims(pcoord[seg_idx, 0, : self.pcoord_ndim], 0),
                             axis=0,
                         )
                         pcoord1List = np.append(
                             pcoord1List,
-                            np.expand_dims(pcoord[seg_idx, self.pcoord_len - 1, :self.pcoord_ndim], 0),
+                            np.expand_dims(
+                                pcoord[
+                                    seg_idx, self.pcoord_len - 1, : self.pcoord_ndim
+                                ],
+                                0,
+                            ),
                             axis=0,
                         )
                         n_segs = n_segs + 1
@@ -1682,12 +1707,12 @@ class modelWE:
 
         elif type(topology) == dict:
 
-            self.reference_coord = topology['coords']
-            self.nAtoms = topology['nAtoms']
-            self.coord_ndim = topology['coord_ndim']
+            self.reference_coord = topology["coords"]
+            self.nAtoms = topology["nAtoms"]
+            self.coord_ndim = topology["coord_ndim"]
 
         else:
-            raise NotImplementedError('Unsupported topology')
+            raise NotImplementedError("Unsupported topology")
 
     def set_basis(self, basis):
         """
@@ -1734,10 +1759,10 @@ class modelWE:
 
         elif type(basis) == dict:
 
-            self.basis_coords = basis['coords']
+            self.basis_coords = basis["coords"]
 
         else:
-            raise NotImplementedError('Unsupported topology')
+            raise NotImplementedError("Unsupported topology")
 
     def get_transition_data(self, n_lag):
         """
@@ -2254,7 +2279,9 @@ class modelWE:
 
         """
 
-        cur_iter_coords = np.full((self.nSeg, self.nAtoms, self.coord_ndim), fill_value=np.nan)
+        cur_iter_coords = np.full(
+            (self.nSeg, self.nAtoms, self.coord_ndim), fill_value=np.nan
+        )
 
         log.debug(
             f"Getting coordinates for {self.nSeg} segs in iteration {self.n_iter}, at a lag of 0"
@@ -2300,7 +2327,9 @@ class modelWE:
         self.cur_iter_coords = cur_iter_coords
 
     def load_iter_coordinates0(self):  # get iteration initial coordinates
-        coordList = np.full((self.nSeg, self.nAtoms, self.coord_ndim), fill_value=np.nan)
+        coordList = np.full(
+            (self.nSeg, self.nAtoms, self.coord_ndim), fill_value=np.nan
+        )
         for iS in range(self.nSeg):
             if iS == 0:
                 westFile = self.fileList[self.westList[iS]]
@@ -2374,7 +2403,7 @@ class modelWE:
 
         """
 
-        if streaming is None and False:# and self.dimReduceMethod == "vamp":
+        if streaming is None and False:  # and self.dimReduceMethod == "vamp":
             streaming = False
         elif streaming is None:
             streaming = True
@@ -2383,7 +2412,9 @@ class modelWE:
         total_segments = int(sum(self.numSegments[:last_iter]))
 
         if not streaming:
-            coordSet = np.full((total_segments, self.nAtoms, self.coord_ndim), fill_value=np.nan)
+            coordSet = np.full(
+                (total_segments, self.nAtoms, self.coord_ndim), fill_value=np.nan
+            )
         pcoordSet = np.full((total_segments, self.pcoord_ndim), fill_value=np.nan)
 
         last_seg_idx = total_segments
@@ -2525,7 +2556,7 @@ class modelWE:
         rough_stride=10,
         fine_stride=1,
         variance_cutoff=0.95,
-        use_weights=True
+        use_weights=True,
     ):
         """
         Dimensionality reduction using the scheme specified in initialization.
@@ -2674,8 +2705,8 @@ class modelWE:
                 self.load_iter_data(iteration)
                 self.get_transition_data_lag0()
 
-                coords_from = self.coordPairList[:,:,:,0]
-                coords_to = self.coordPairList[:,:,:,1]
+                coords_from = self.coordPairList[:, :, :, 0]
+                coords_to = self.coordPairList[:, :, :, 1]
 
                 # If  no good coords in this iteration, skip it
                 # if iter_coords.shape[0] == 0:
@@ -2690,9 +2721,13 @@ class modelWE:
             weights = np.array(weights)
 
             if self.dimReduceMethod == "tica":
-                self.coordinates = TICA(lagtime=1, var_cutoff=variance_cutoff, scaling="kinetic_map")
+                self.coordinates = TICA(
+                    lagtime=1, var_cutoff=variance_cutoff, scaling="kinetic_map"
+                )
             elif self.dimReduceMethod == "vamp":
-                self.coordinates = VAMP(lagtime=1, var_cutoff=variance_cutoff, scaling="kinetic_map")
+                self.coordinates = VAMP(
+                    lagtime=1, var_cutoff=variance_cutoff, scaling="kinetic_map"
+                )
 
             # self.coordinates.fit(trajs)
             log.info(f"Performing weighted {self.dimReduceMethod}")
@@ -2703,15 +2738,17 @@ class modelWE:
             if not use_weights or self.dimReduceMethod == "vamp":
                 weights = None
 
-            self.coordinates.fit_from_timeseries((np.array(trajs_start), np.array(trajs_end)), weights=weights)
+            self.coordinates.fit_from_timeseries(
+                (np.array(trajs_start), np.array(trajs_end)), weights=weights
+            )
 
             # Note: ndim is only used in one place, and it's a deprecated obsolete function
             self.ndim = self.coordinates.model.output_dimension
 
-            log.info(f"Weighted {self.dimReduceMethod} will reduce "
-                     f"{self.coordinates._model._instantaneous_coefficients.shape[0]} to {self.ndim} components.")
-
-
+            log.info(
+                f"Weighted {self.dimReduceMethod} will reduce "
+                f"{self.coordinates._model._instantaneous_coefficients.shape[0]} to {self.ndim} components."
+            )
 
         elif self.dimReduceMethod == "none":
             self.ndim = int(3 * self.nAtoms)
@@ -2964,7 +3001,9 @@ class modelWE:
             return None, 0, iteration
 
         # Otherwise, apply the k-means model and discretize
-        transformed_coords = model.coordinates.transform(processCoordinates(iter_coords))
+        transformed_coords = model.coordinates.transform(
+            processCoordinates(iter_coords)
+        )
         dtrajs = kmeans_model.predict(transformed_coords)
 
         return dtrajs, 1, iteration
@@ -3126,7 +3165,9 @@ class modelWE:
                 )
 
                 _data = [
-                    self.get_iter_coordinates(iteration).reshape(-1, self.coord_ndim * self.nAtoms)
+                    self.get_iter_coordinates(iteration).reshape(
+                        -1, self.coord_ndim * self.nAtoms
+                    )
                     for iteration in iters_to_use
                 ]
                 stacked_data = np.vstack(_data)
@@ -3518,10 +3559,14 @@ class modelWE:
                     # TODO: The better way to handle this is as long as you've clustered something, you can do piecemeal
                     #   (i.e. don't have to populate every bin after the first time)
                     if iter_idx == 0:
-                        log.info(f"Failed with {iter_idx} + {extra_iters_used} vs len {(len(iters_to_use))}")
+                        log.info(
+                            f"Failed with {iter_idx} + {extra_iters_used} vs len {(len(iters_to_use))}"
+                        )
                         raise e
                     else:
-                        log.info("Clustering couldn't use last iteration, not all bins filled.")
+                        log.info(
+                            "Clustering couldn't use last iteration, not all bins filled."
+                        )
 
                 all_filled_bins.update(filled_bins)
                 all_unfilled_bins.update(unfilled_bins)
@@ -3738,10 +3783,14 @@ class modelWE:
             # Map coords to WE bins
             pcoord_array = np.array(pcoords)
             # seg_weight_array = np.array(seg_weights)
-            assert pcoord_array.shape[0] == iter_coords.shape[0], f"{pcoord_array.shape}, {iter_coords.shape}"
+            assert (
+                pcoord_array.shape[0] == iter_coords.shape[0]
+            ), f"{pcoord_array.shape}, {iter_coords.shape}"
 
             if self.use_weights_in_clustering:
-                assert seg_weights.shape[0] == seg_weights.shape[0], f"{seg_weights.shape}, {iter_coords.shape}"
+                assert (
+                    seg_weights.shape[0] == seg_weights.shape[0]
+                ), f"{seg_weights.shape}, {iter_coords.shape}"
 
             # Ignore any segments that are in the basis or target
             pcoord_is_target = self.is_WE_target(pcoord_array)
@@ -3766,12 +3815,9 @@ class modelWE:
 
             segs_in_bin = np.argwhere(we_bin_assignments == _bin)
 
-
-
             transformed_coords = self.coordinates.transform(
                 processCoordinates(np.squeeze(iter_coords[segs_in_bin]))
             )
-
 
             if self.use_weights_in_clustering:
                 weights = seg_weights[segs_in_bin].squeeze()
@@ -3785,10 +3831,8 @@ class modelWE:
 
             try:
                 kmeans_models.cluster_models[_bin].partial_fit(
-                    transformed_coords,
-                    sample_weight=weights
+                    transformed_coords, sample_weight=weights
                 )
-
 
             except ValueError as e:
                 log.info(f"Was on bin {_bin}")
@@ -3885,7 +3929,10 @@ class modelWE:
             # Segments in a basis/target should not be mapped to other bins -- however, this is short-circuited in
             #   StratifiedClusters.predict(), so even if they're mapped to those cluster centers, it's fine.
 
-            clusters_in_bin = range(offset, offset + n_clusters_in_bin,)
+            clusters_in_bin = range(
+                offset,
+                offset + n_clusters_in_bin,
+            )
             log.debug(f"Cluster models len: {len(self.clusters.cluster_models)}")
             log.debug(
                 f"WE Bin {we_bin} (consec. index {consecutive_index}) contains {n_clusters_in_bin} clusters {clusters_in_bin}"
@@ -4039,7 +4086,7 @@ class modelWE:
 
         clusters = deepcopy(self.clusters)
         # It's set inside do_stratified_ray_discretization, though I could do it in either place.
-        clusters.model = None #self.pre_discretization_model
+        clusters.model = None  # self.pre_discretization_model
         cluster_model_id = ray.put(clusters)
 
         process_coordinates_id = ray.put(self.processCoordinates)
@@ -4050,7 +4097,10 @@ class modelWE:
         ):
 
             _id = self.do_stratified_ray_discretization.remote(
-                model_id, cluster_model_id, iteration, process_coordinates_id
+                model_id,
+                cluster_model_id,
+                iteration,
+                process_coordinates_id
                 # self, self.clusters, iteration, self.processCoordinates
             )
             task_ids.append(_id)
@@ -4074,7 +4124,13 @@ class modelWE:
                 )
                 results = ray.get(finished)
 
-                for (parent_dtraj, child_dtraj), _, iteration, target_bins, basis_bins in results:
+                for (
+                    (parent_dtraj, child_dtraj),
+                    _,
+                    iteration,
+                    target_bins,
+                    basis_bins,
+                ) in results:
 
                     self.clusters.target_bins.update(target_bins)
                     self.clusters.basis_bins.update(basis_bins)
@@ -4095,7 +4151,6 @@ class modelWE:
         self.dtrajs = [dtraj for dtraj in dtrajs if dtraj is not None]
 
         self.pair_dtrajs = [dtraj for dtraj in pair_dtrajs if dtraj is not None]
-
 
         log.info("Discretization complete")
 
@@ -4209,15 +4264,22 @@ class modelWE:
         kmeans_model.model.load_iter_data(iteration)
         kmeans_model.model.get_transition_data_lag0()
         # print(f"After loading coordPairList in iter {iteration}, shape is {kmeans_model.model.coordPairList.shape}")
-        parent_coords, child_coords = kmeans_model.model.coordPairList[..., 0], self.coordPairList[..., 1]
+        parent_coords, child_coords = (
+            kmeans_model.model.coordPairList[..., 0],
+            self.coordPairList[..., 1],
+        )
 
         # If there are no coords for this iteration, return None
         if child_coords.shape[0] == 0:
             return None, 0, iteration
 
         # Otherwise, apply the k-means model and discretize
-        transformed_parent_coords = kmeans_model.model.coordinates.transform(processCoordinates(parent_coords))
-        transformed_child_coords = kmeans_model.model.coordinates.transform(processCoordinates(child_coords))
+        transformed_parent_coords = kmeans_model.model.coordinates.transform(
+            processCoordinates(parent_coords)
+        )
+        transformed_child_coords = kmeans_model.model.coordinates.transform(
+            processCoordinates(child_coords)
+        )
 
         try:
             kmeans_model.processing_from = True
@@ -4226,7 +4288,9 @@ class modelWE:
             except IndexError as e:
 
                 print("Problem ===== ")
-                print(f"Parent pcoords are shape {kmeans_model.model.pcoord0List.shape}")
+                print(
+                    f"Parent pcoords are shape {kmeans_model.model.pcoord0List.shape}"
+                )
                 print(f"Parent coords are shape {transformed_parent_coords.shape}")
                 print(f"Child pcoords are shape {kmeans_model.model.pcoord1List.shape}")
                 print(f"Child coords are shape {transformed_child_coords.shape}")
@@ -4242,7 +4306,13 @@ class modelWE:
             raise e
             # TODO: Remap to nearest visited
 
-        return (parent_dtrajs, child_dtrajs), 1, iteration, kmeans_model.target_bins, kmeans_model.basis_bins
+        return (
+            (parent_dtrajs, child_dtrajs),
+            1,
+            iteration,
+            kmeans_model.target_bins,
+            kmeans_model.basis_bins,
+        )
 
     @ray.remote
     def get_iter_fluxMatrix_ray(model, processCoordinates, n_iter):
@@ -4275,7 +4345,6 @@ class modelWE:
 
     def get_iter_fluxMatrix(self, n_iter):
 
-
         self.load_iter_data(n_iter)
         parent_pcoords = self.pcoord0List.copy()
         child_pcoords = self.pcoord1List.copy()
@@ -4283,7 +4352,7 @@ class modelWE:
         self.get_transition_data_lag0()
         transition_weights = self.transitionWeights.copy()
 
-        index_pairs = np.array(self.pair_dtrajs[n_iter-1])
+        index_pairs = np.array(self.pair_dtrajs[n_iter - 1])
 
         # Record every point where you're in the target
         ind_end_in_target = np.where(self.is_WE_target(child_pcoords))
@@ -4314,32 +4383,52 @@ class modelWE:
                 + "\n"
             )
 
-
-
-        return modelWE.build_flux_matrix(self.n_clusters,
-                                  index_pairs,
-                                  ind_start_in_basis, ind_end_in_basis,
-                                  ind_end_in_target,
-                                  transition_weights).todense().A
+        return (
+            modelWE.build_flux_matrix(
+                self.n_clusters,
+                index_pairs,
+                ind_start_in_basis,
+                ind_end_in_basis,
+                ind_end_in_target,
+                transition_weights,
+            )
+            .todense()
+            .A
+        )
 
     @ray.remote
-    def build_flux_matrix_remote(n_clusters,
-                                  index_pairs,
-                                  ind_start_in_basis, ind_end_in_basis,
-                                  ind_end_in_target,
-                                  transition_weights,
-                                 n_iter):
+    def build_flux_matrix_remote(
+        n_clusters,
+        index_pairs,
+        ind_start_in_basis,
+        ind_end_in_basis,
+        ind_end_in_target,
+        transition_weights,
+        n_iter,
+    ):
 
-        return modelWE.build_flux_matrix(n_clusters,
-                                         index_pairs,
-                                         ind_start_in_basis,
-                                         ind_end_in_basis, ind_end_in_target,
-                                         transition_weights), n_iter
+        return (
+            modelWE.build_flux_matrix(
+                n_clusters,
+                index_pairs,
+                ind_start_in_basis,
+                ind_end_in_basis,
+                ind_end_in_target,
+                transition_weights,
+            ),
+            n_iter,
+        )
 
     # def get_iter_fluxMatrix(self, n_iter):
     @staticmethod
-    def build_flux_matrix(n_clusters, index_pairs, ind_start_in_basis, ind_end_in_basis,
-                          ind_end_in_target, transition_weights):
+    def build_flux_matrix(
+        n_clusters,
+        index_pairs,
+        ind_start_in_basis,
+        ind_end_in_basis,
+        ind_end_in_target,
+        transition_weights,
+    ):
         """
         Build the flux matrix for an iteration.
 
@@ -4451,7 +4540,7 @@ class modelWE:
             fluxMatrix = coo_matrix(
                 (transition_weights, (start_cluster, end_cluster)),
                 shape=(n_clusters + 2, n_clusters + 2),
-            )#.todense()
+            )  # .todense()
         except ValueError as e:
             log.error(
                 f"Iter_fluxmatrix failed. Transition was from {start_cluster} -> {end_cluster} "
@@ -4471,9 +4560,14 @@ class modelWE:
 
         return fluxMatrix
 
-
     def get_fluxMatrix(
-        self, n_lag, first_iter=1, last_iter=None, iters_to_use=None, use_ray=False, result_batch_size=5
+        self,
+        n_lag,
+        first_iter=1,
+        last_iter=None,
+        iters_to_use=None,
+        use_ray=False,
+        result_batch_size=5,
     ):
         """
         Compute the matrix of fluxes at a given lag time, for a range of iterations.
@@ -4576,7 +4670,10 @@ class modelWE:
             # FIXME: Duplicated code
             # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
             if not use_ray:
-                for iS in tqdm.tqdm(iters_to_use, desc="Constructing flux matrix",):
+                for iS in tqdm.tqdm(
+                    iters_to_use,
+                    desc="Constructing flux matrix",
+                ):
                     log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
 
                     # fluxMatrixI = self.get_iter_fluxMatrix(iS)
@@ -4584,7 +4681,8 @@ class modelWE:
                         max_workers=1, mp_context=mp.get_context("fork")
                     ) as executor:
                         fluxMatrixI = executor.submit(
-                            self.get_iter_fluxMatrix, iS,
+                            self.get_iter_fluxMatrix,
+                            iS,
                         ).result()
 
                     fluxMatrix = fluxMatrix + fluxMatrixI
@@ -4610,7 +4708,8 @@ class modelWE:
 
                 # max_inflight = 70
                 for iteration in tqdm.tqdm(
-                    iters_to_use, desc="Submitting fluxmatrix tasks",
+                    iters_to_use,
+                    desc="Submitting fluxmatrix tasks",
                 ):
 
                     # Allow 1000 in flight calls
@@ -4640,7 +4739,7 @@ class modelWE:
                     self.get_transition_data_lag0()
                     transition_weights = self.transitionWeights.copy()
 
-                    index_pairs = np.array(self.pair_dtrajs[iteration-1])
+                    index_pairs = np.array(self.pair_dtrajs[iteration - 1])
 
                     # _id = self.get_iter_fluxMatrix_ray.remote(
                     #     # model_id, processCoordinates_id, iteration
@@ -4650,13 +4749,12 @@ class modelWE:
                     _id = self.build_flux_matrix_remote.remote(
                         self.n_clusters,
                         index_pairs,
-                        ind_start_in_basis, ind_end_in_basis,
+                        ind_start_in_basis,
+                        ind_end_in_basis,
                         ind_end_in_target,
                         transition_weights,
-                        iteration
+                        iteration,
                     )
-
-
 
                     task_ids.append(_id)
 
@@ -5219,7 +5317,7 @@ class modelWE:
         self.Tmatrix = Mt
 
     def get_steady_state(self, flux_fractional_convergence=1e-4, max_iters=10):
-        """"
+        """ "
         Get the steady-state distribution for the transition matrix.
         Uses scipy eigensolver to obtain an initial guess, then refines that using inverse iteration.
 
@@ -5558,7 +5656,11 @@ class modelWE:
             # sys.stdout.write("%s " % i)
 
     def plot_flux_committor_pcoordcolor(
-        self, nwin=1, ax=None, pcoord_to_use=0, **_plot_args,
+        self,
+        nwin=1,
+        ax=None,
+        pcoord_to_use=0,
+        **_plot_args,
     ):
 
         _models = [self]
