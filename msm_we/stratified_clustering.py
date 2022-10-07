@@ -1,6 +1,6 @@
-from msm_we.msm_we import log
 from sklearn.cluster import MiniBatchKMeans as mini_kmeans
 import numpy as np
+from ._logging import log
 
 
 class StratifiedClusters:
