@@ -14,6 +14,9 @@ from westpa.core.data_manager import create_dataset_from_dsopts
 
 @ray.remote
 class GlobalModelActor:
+    """
+    Ray-parallel Actor that loads a model and holds it in memory. Used by the PcoordCalculator.
+    """
     def __init__(self, model, processCoordinates, synd_model, original_pcoord_ndim):
         msm_we.msm_we.modelWE.processCoordinates = processCoordinates
         self.model = model
@@ -31,6 +34,10 @@ class GlobalModelActor:
 
 @ray.remote
 class PcoordCalculator:
+    """
+    Ray-parallel Actor that computes the extended progress coordinate
+    (original progress coordinate + dimensionality-reduce MSM features) for a structure.
+    """
     def __init__(self, model_actor, processCoordinates):
         msm_we.msm_we.modelWE.processCoordinates = processCoordinates
         self.model_actor = model_actor
@@ -56,6 +63,23 @@ class OptimizationDriver:
     WESTPA plugin to automatically handle performing optimization.
 
     Using an haMSM, updates binning and allocation according to user-specified optimization algorithms.
+    An OptimizedBinMapper is constructed from the optimized binning and allocation, and WE is continued with the new
+    mapper.
+
+    Can be used by including the following entries in your west.cfg::
+
+        west:
+            plugins:
+            - plugin: msm_we.westpa_plugins.optimization_driver.OptimizationDriver
+              full_coord_map: A pickled dictionary mapping discrete states to full-coordinate structures
+              max_iters: Number of total iterations. WE will run for west.system.max_iters, perform optimization, and
+                        continue for another west.system.max_iters, up to this value.
+              # The following parameters are optional, and provided as an example.
+              binning_strategy: An arbitrary python function defining a bin optimization scheme.
+                    Takes in an msm_we.msm_we.modelWE and returns an array-like of length n_msm_states, where each
+                    element is the index of the WE bin that MSM state will be assigned to by the OptimizedMapper.
+              allocation_strategy: An arbitrary python function defining an allocation optimization scheme.
+                    Takes in an msm_we.msm_we.modelWE and returns an array of integer walker allocations for the WE bins.
     """
 
     def __init__(self, sim_manager, plugin_config):
@@ -136,6 +160,14 @@ class OptimizationDriver:
         else:
             westpa.rc.pstatus("No more iterations for optimization, completing.")
 
+    @staticmethod
+    def default_allocation_optimizer(model):
+        """A (trivial) example allocation optimization function, which returns an array with the target number of
+        walkers in each bin."""
+
+        westpa.rc.pstatus("\tNot updating allocation")
+        return westpa.rc.we_driver.bin_target_counts
+
     def compute_optimized_allocation(self):
         """
         Compute the optimal allocation.
@@ -150,13 +182,37 @@ class OptimizationDriver:
 
         if allocation_strategy is None:
             westpa.rc.pstatus("\tNot updating allocation")
-            new_target_counts = self.we_driver.bin_target_counts
+            allocation_optimizer = self.default_allocation_optimizer
         else:
             westpa.rc.pstatus(f"\tUsing {allocation_strategy} to update allocation")
             allocation_optimizer = extloader.get_object(allocation_strategy)
-            new_target_counts = allocation_optimizer(self.data_manager.hamsm_model)
+
+        new_target_counts = allocation_optimizer(self.data_manager.hamsm_model)
 
         return new_target_counts
+
+
+    @staticmethod
+    def default_bin_optimizer(model):
+        """Example bin optimization function, which assigns microstates to WE bins."""
+
+        n_active_bins = np.count_nonzero(westpa.rc.we_driver.bin_target_counts)
+
+        westpa.rc.pstatus(
+            "\tUsing default k-means MFPT optimization (optimization.get_clustered_mfpt_bins) "
+            "for bin optimization"
+        )
+
+        discrepancy, variance = optimization.solve_discrepancy(
+            tmatrix=model.Tmatrix, pi=model.pSS, B=model.indTargets
+        )
+
+        microstate_assignments = optimization.get_clustered_mfpt_bins(
+            variance, discrepancy, model.pSS, n_active_bins
+        )
+
+        return microstate_assignments
+
 
     def compute_optimized_bins(self):
         """
@@ -178,25 +234,13 @@ class OptimizationDriver:
         n_active_bins = np.count_nonzero(self.we_driver.bin_target_counts)
 
         if binning_strategy is None:
-
-            westpa.rc.pstatus(
-                "\tUsing k-means MFPT optimization (optimization.get_clustered_mfpt_bins) "
-                "for bin optimization"
-            )
-
-            discrepancy, variance = optimization.solve_discrepancy(
-                tmatrix=model.Tmatrix, pi=model.pSS, B=model.indTargets
-            )
-
-            microstate_assignments = optimization.get_clustered_mfpt_bins(
-                variance, discrepancy, model.pSS, n_active_bins
-            )
+            bin_optimizer = self.default_bin_optimizer
 
         else:
             westpa.rc.pstatus(f"\tUsing {binning_strategy} for bin optimization")
-
             bin_optimizer = extloader.get_object(binning_strategy)
-            microstate_assignments = bin_optimizer(model)
+
+        microstate_assignments = bin_optimizer(model)
 
         microstate_assignments = np.concatenate(
             [microstate_assignments, [n_active_bins - 2, n_active_bins - 1]]

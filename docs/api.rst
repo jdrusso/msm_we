@@ -63,6 +63,9 @@ WESTPA Plugins (msm_we.westpa_plugins)
 .. autoclass:: msm_we.westpa_plugins.hamsm_driver.HAMSMDriver
    :members:
 
+.. autoclass:: msm_we.westpa_plugins.restart_driver.RestartDriver
+   :members:
+
 .. autoclass:: msm_we.westpa_plugins.optimization_driver.OptimizationDriver
    :members:
 

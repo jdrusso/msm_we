@@ -106,6 +106,31 @@ class RestartDriver(HAMSMDriver):
 
     Since it closes out the current WE run and starts a new one, this plugin should run LAST, after all other plugins.
 
+
+    Can be used by including the following entries in your west.cfg::
+
+        west:
+            plugins:
+            # - plugin: An augmentation plugin is also required, such as
+            #           msm_we.westpa_plugins.augmentation_driver.MDAugmentationDriver
+            - plugin: msm_we.westpa_plugins.restart_driver.RestartDriver
+                  n_restarts: Number of total restarts to do
+                  extension_iters: Amount of iterations to extend runs by if no runs have reached the target by the
+                    first restart.
+                  n_runs: Number of runs to do between restarts
+                  n_restarts_to_use: Number of restarts to use. Can be a fraction, to use the last fraction amount, or
+                    a negative integer, to use the last N.
+                  initialization_file: restart_initialization.json
+                  model_name: Name for the model
+                  n_clusters: Number of clusters to place in each WE bin (see stratified clustering for more details)
+                  basis_pcoord_bounds: [[pcoord dim 0 lower bound, upper bound], [pcoord dim 1 lower, upper], ...]
+                  target_pcoord_bounds: [[pcoord dim 0 lower bound, upper bound], [pcoord dim 1 lower, upper], ...]
+                  dim_reduce_method: A string specifying a dimensionality reduction method for
+                    :meth:`msm_we.msm_we.modelWE.dimReduce`
+                  featurization: A python module implementing a featurization
+                    for msm_we.msm_we.modelWE.processCoordinates
+                  n_cpus: Number of CPUs to use with Ray
+
     TODO
     ----
     The multi-simulation management functionality of this plugin should really be broken out into a separate,

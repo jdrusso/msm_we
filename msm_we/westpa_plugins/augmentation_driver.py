@@ -6,9 +6,18 @@ import os
 
 class MDAugmentationDriver:
     """
-    WESTPA plugin to automatically handle coordinate augmentation.
+    WESTPA plugin to augment west.h5 with auxiliary coordinates.
 
     After each iteration, appends coordinates to iter_XXX/auxdata/coord, for later usage with haMSM construction.
+
+    Can be used by including the following entries in your west.cfg::
+
+        west:
+            plugins:
+            - plugin: msm_we.westpa_plugins.augmentation_driver.MDAugmentationDriver
+                  topology_file: path/to/topology.pdb
+                  child_traj_filename: name of segment trajectory file in traj_segs/<iter>/<seg>/
+                  parent_traj_filename: name of parent trajectory file in traj_segs/<iter>/<seg>/
     """
 
     def __init__(self, sim_manager, plugin_config):
