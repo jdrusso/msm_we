@@ -7,7 +7,6 @@ import tqdm.auto as tqdm
 
 
 class DataMixin:
-
     def get_transition_data(self, n_lag):
         """
         This function analyzes pairs of coordinates at the current iteration, set by :code:`self.n_iter`, and at some

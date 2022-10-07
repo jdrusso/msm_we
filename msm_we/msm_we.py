@@ -1,5 +1,6 @@
 """haMSM estimation and analysis"""
 from __future__ import division, print_function
+
 __metaclass__ = type
 import numpy as np
 import tqdm.auto as tqdm
@@ -12,6 +13,7 @@ from rich.live import Live
 from rich.table import Table
 import ray
 from sklearn.utils._openmp_helpers import _openmp_effective_n_threads
+
 # My mixin structure may be a little strange here, because these aren't really mixins that are meant to be
 #   reused, it's just to break these out.
 # Alternatively, I think I could drop the functions straight in those modules without the mixin classes,
@@ -34,7 +36,13 @@ log.addHandler(RichHandler())
 log.propagate = False
 
 
-class modelWE(ClusteringMixin, DimensionalityReductionMixin, PlottingMixin, AnalysisMixin, DataMixin):
+class modelWE(
+    ClusteringMixin,
+    DimensionalityReductionMixin,
+    PlottingMixin,
+    AnalysisMixin,
+    DataMixin,
+):
     """
     History-augmented Markov state model estimation from WE data
 
@@ -1041,7 +1049,6 @@ class modelWE(ClusteringMixin, DimensionalityReductionMixin, PlottingMixin, Anal
         self.validation_iterations = validation_iterations
         self.validation_models = validation_models
 
-
     def set_topology(self, topology):
         """
         Updates internal state with a new topology.
@@ -1160,7 +1167,6 @@ class modelWE(ClusteringMixin, DimensionalityReductionMixin, PlottingMixin, Anal
 
         else:
             raise NotImplementedError("Unsupported topology")
-
 
     def update_cluster_structures(self):
         """

@@ -8,7 +8,6 @@ import numpy as np
 
 
 class PlottingMixin:
-
     def plot_flux_committor_pcoordcolor(
         self,
         nwin=1,

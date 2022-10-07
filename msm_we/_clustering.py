@@ -19,7 +19,6 @@ SUPPORTED_MAPPERS = {RectilinearBinMapper, VoronoiBinMapper}
 
 
 class ClusteringMixin:
-
     def do_clustering(self, arg):
 
         kmeans_model, iters_to_use, cluster_args, processCoordinates = arg
@@ -63,7 +62,6 @@ class ClusteringMixin:
         kmeans_model.partial_fit(transformed_coords)
 
         return kmeans_model, used_iters
-
 
     def do_discretization(self, arg):
 
@@ -712,7 +710,6 @@ class ClusteringMixin:
         self.clusters.toggle = False
 
         self.launch_ray_discretization()
-
 
     def do_stratified_clustering(self, arg):
         """

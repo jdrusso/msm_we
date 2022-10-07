@@ -8,7 +8,6 @@ from deeptime.decomposition import TICA, VAMP
 
 
 class DimensionalityReductionMixin:
-
     class Coordinates(object):
         """
         Fake Coordinates class, in case you don't want to use either PCA or VAMP for dimensionality reduction

@@ -5,9 +5,8 @@ from .utils import inverse_iteration, is_connected
 import sys
 import tqdm.auto as tqdm
 
+
 class AnalysisMixin:
-
-
     def get_Tmatrix(self):
         """
         Compute the transition matrix from the flux matrix.
@@ -420,8 +419,6 @@ class AnalysisMixin:
             J[i] = JR - JF
             self.Jq = J.squeeze() / self.tau
             # sys.stdout.write("%s " % i)
-
-
 
     def evolve_target_flux(self):
         Mss = self.Tmatrix
