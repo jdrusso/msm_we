@@ -9,6 +9,7 @@ import pickle
 import base64
 from . import msm_we
 from ._logging import log
+from .stratified_clustering import StratifiedClusters
 
 
 def solve_discrepancy(tmatrix, pi, B):
@@ -189,7 +190,7 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
                  basis_pcoord_bounds,
                  previous_binmapper,
                  microstate_mapper: dict,
-                 stratified_clusterer: msm_we.StratifiedClusters,
+                 stratified_clusterer: StratifiedClusters,
                  cluster_on_pcoord: bool = False,
                  *args,
                  **kwargs
