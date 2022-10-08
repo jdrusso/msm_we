@@ -415,16 +415,26 @@ class RestartDriver(HAMSMDriver):
         I think for the purposes of this, it's good to keep the runs completely independent until haMSM model building.
         Either that, or I'm just justifying not having known about w_multi_west when I wrote this. TBD.
 
-        # TODO: Replace all manual path-building with pathlib
-
         The algorithm is as follows:
+
             1. Check to see if we've just completed the final iteration
+
             2. Handle launching multiple runs, if desired
-            2. Build haMSM
-            3. Obtain structures for each haMSM bin
-            4. Make each structure a start-state, with probability set by (MSM-bin SS prob / # structures in bin)
-            5. Potentially some renormalization?
-            6. Start new WE simulation
+
+            3. Build haMSM
+
+            4. Obtain structures for each haMSM bin
+
+            5. Make each structure a start-state, with probability set by (MSM-bin SS prob / # structures in bin)
+
+            6. Potentially some renormalization?
+
+            7. Start new WE simulation
+            
+        TODO
+        ----
+        Replace all manual path-building with pathlib
+
         """
 
 

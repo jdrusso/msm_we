@@ -23,13 +23,16 @@ def find_connected_sets(C, directed=True):
 
     Compute connected components for a directed graph with weights
     represented by the given count matrix.
+
     Parameters
     ----------
+
     C : scipy.sparse matrix or numpy ndarray
         square matrix specifying edge weights.
     directed : bool, optional
        Whether to compute connected components for a directed  or
        undirected graph. Default is True.
+
     Returns
     -------
     cc : list of arrays of integers
