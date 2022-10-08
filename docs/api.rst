@@ -37,7 +37,6 @@ ________
 .. autofunction:: msm_we.modelWE.get_steady_state_target_flux
 .. autofunction:: msm_we.modelWE.get_committor
 .. autofunction:: msm_we.modelWE.get_flux
-.. autofunction:: msm_we.modelWE.get_model_clusters
 .. autofunction:: msm_we.modelWE.get_cluster_centers
 
 Plotting
