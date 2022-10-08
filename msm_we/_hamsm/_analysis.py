@@ -1,9 +1,9 @@
 import numpy as np
 from scipy import sparse
-from .utils import inverse_iteration, is_connected
 import sys
 import tqdm.auto as tqdm
-from ._logging import log
+from msm_we._logging import log
+from msm_we.utils import inverse_iteration, is_connected
 
 
 class AnalysisMixin:

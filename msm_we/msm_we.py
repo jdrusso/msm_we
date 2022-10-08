@@ -21,12 +21,12 @@ from sklearn.utils._openmp_helpers import _openmp_effective_n_threads
 #   class modelWE:
 #       from ._clustering import *
 
-from ._clustering import ClusteringMixin
-from ._dimensionality import DimensionalityReductionMixin
-from ._plotting import PlottingMixin
-from ._analysis import AnalysisMixin
-from ._data import DataMixin
-from ._fluxmatrix import FluxMatrixMixin
+from ._hamsm import ClusteringMixin
+from ._hamsm import DimensionalityReductionMixin
+from ._hamsm import PlottingMixin
+from ._hamsm import AnalysisMixin
+from ._hamsm import DataMixin
+from ._hamsm import FluxMatrixMixin
 from ._logging import log
 
 

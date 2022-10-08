@@ -8,9 +8,9 @@ import tqdm.auto as tqdm
 import multiprocessing as mp
 from westpa import analysis
 from westpa.core.binning import RectilinearBinMapper, VoronoiBinMapper
-from .stratified_clustering import StratifiedClusters
-from .utils import find_connected_sets
-from ._logging import log
+from msm_we.stratified_clustering import StratifiedClusters
+from msm_we.utils import find_connected_sets
+from msm_we._logging import log
 
 
 # If you implement a custom bin mapper that should work with stratified clustering, you can add it to this set

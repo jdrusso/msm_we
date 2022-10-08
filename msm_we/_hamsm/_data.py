@@ -3,7 +3,7 @@ import numpy as np
 import sys
 import mdtraj as md
 import tqdm.auto as tqdm
-from ._logging import log
+from msm_we._logging import log
 
 
 class DataMixin:

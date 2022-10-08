@@ -1,6 +1,6 @@
 """Catch-all for code from the original msm_we implementation that is no longer supported, but kept around for legacy
 purposes/in case it becomes useful in the future."""
-from msm_we.msm_we import *
+from msm_we.msm_we import modelWE
 import pyemma
 
 

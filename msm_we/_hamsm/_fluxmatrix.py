@@ -6,8 +6,8 @@ import tqdm.auto as tqdm
 import concurrent
 import multiprocessing as mp
 import sys
-from .utils import find_connected_sets
-from ._logging import log
+from msm_we.utils import find_connected_sets
+from msm_we._logging import log
 
 
 class FluxMatrixMixin:
