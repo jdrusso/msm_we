@@ -30,8 +30,9 @@ def decompress_pickle(file):
     return data
 
 
+ref_file = BASE_PATH + "/../examples/data/2JOF.pdb"
 
-ref_file = BASE_PATH + '/../examples/data/2JOF.pdb'
+
 def processCoordinates(self, coords):
     u_ref = mda.Universe(ref_file)
     u_check = mda.Universe(ref_file)
@@ -42,8 +43,7 @@ def processCoordinates(self, coords):
 
     for frame in u_check.trajectory:
         dists = distances.dist(
-            u_check.select_atoms('backbone'),
-            u_ref.select_atoms('backbone')
+            u_check.select_atoms("backbone"), u_ref.select_atoms("backbone")
         )[2]
 
         dist_out.append(dists)
@@ -121,12 +121,14 @@ def initialized_model():
     """
     return load_model("reference/1000ns_ntl9/models/initialized.obj")
 
+
 @pytest.fixture
 def loaded_model():
     """
     An initialized haMSM model.
     """
     return load_model("reference/1000ns_ntl9/models/loaded.obj")
+
 
 @pytest.fixture
 def clustered_model():
@@ -154,6 +156,7 @@ def ray_cluster():
     ray.init()
     yield None
     ray.shutdown()
+
 
 @pytest.fixture
 def completed_model():
@@ -304,7 +307,9 @@ def test_dim_reduce(clustered_model):
     assert np.isclose(ref_covariance, test_covariance).all()
 
 
-def test_streaming_stratified_clustering(loaded_model, clustered_model, ray_cluster, modelParams):
+def test_streaming_stratified_clustering(
+    loaded_model, clustered_model, ray_cluster, modelParams
+):
 
     loaded_model = deepcopy(loaded_model)
     loaded_model.clusters = None
