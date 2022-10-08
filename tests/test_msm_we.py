@@ -3,16 +3,19 @@
 
 import pytest
 import numpy as np
-import mdtraj as md
 from copy import deepcopy
 import pickle
 import bz2
 import _pickle as cPickle
 import getpass
 
-from msm_we import msm_we
+import MDAnalysis as mda
+from MDAnalysis.analysis import distances
+
+from msm_we import modelWE
 
 import os
+import ray
 
 BASE_PATH = os.path.dirname(__file__)
 
@@ -27,33 +30,30 @@ def decompress_pickle(file):
     return data
 
 
-# Process coordinates override
+
+ref_file = BASE_PATH + '/../examples/data/2JOF.pdb'
 def processCoordinates(self, coords):
-    """
-    Featurization override. Feature-coordinates are pairwise alpha-carbon distances.
+    u_ref = mda.Universe(ref_file)
+    u_check = mda.Universe(ref_file)
 
-    The first dimension of coords is the number of segments.
-    """
-    if self.dimReduceMethod == "none":
-        nC = np.shape(coords)
-        nC = nC[0]
-        data = coords.reshape(nC, 3 * self.nAtoms)
-        return data
+    dist_out = []
 
-    if self.dimReduceMethod == "pca" or self.dimReduceMethod == "vamp":
-        # Dimensionality reduction
+    u_check.load_new(coords)
 
-        xt = md.Trajectory(xyz=coords, topology=None)
-        indCA = self.reference_structure.topology.select("name CA")
-        pair1, pair2 = np.meshgrid(indCA, indCA, indexing="xy")
-        indUT = np.where(np.triu(pair1, k=1) > 0)
-        pairs = np.transpose(np.array([pair1[indUT], pair2[indUT]])).astype(int)
-        dist = md.compute_distances(xt, pairs, periodic=True, opt=True)
+    for frame in u_check.trajectory:
+        dists = distances.dist(
+            u_check.select_atoms('backbone'),
+            u_ref.select_atoms('backbone')
+        )[2]
 
-        return dist
+        dist_out.append(dists)
+
+    dist_out = np.array(dist_out)
+
+    return dist_out
 
 
-msm_we.modelWE.processCoordinates = processCoordinates
+modelWE.processCoordinates = processCoordinates
 
 
 @pytest.fixture
@@ -63,7 +63,7 @@ def modelParams():
     """
     params = {
         "last_iter": 100,
-        "n_cluster_centers": 100,
+        "n_cluster_centers": 25,
         "cluster_seed": 1337,
         # "WEtargetp1_bounds": [-np.inf, 1.0],
         # "WEbasisp1_bounds":  [9.6, 12.5],
@@ -121,30 +121,16 @@ def initialized_model():
     """
     return load_model("reference/1000ns_ntl9/models/initialized.obj")
 
-
 @pytest.fixture
-def nostream_clustered_model():
+def clustered_model():
     """
     An initialized haMSM model.
     """
 
     return load_model(
-        "reference/1000ns_ntl9/models/nostream_clustered.obj.pbz2",
+        "reference/1000ns_ntl9/models/clustered.obj",
         regenerate_coords=True,
-        compressed=True,
-    )
-
-
-@pytest.fixture
-def stream_clustered_model():
-    """
-    An initialized haMSM model.
-    """
-
-    return load_model(
-        "reference/1000ns_ntl9/models/stream_clustered.obj.pbz2",
-        regenerate_coords=True,
-        compressed=True,
+        compressed=False,
     )
 
 
@@ -155,6 +141,12 @@ def organized_model():
     """
     return load_model("reference/1000ns_ntl9/models/organized.obj")
 
+
+@pytest.fixture()
+def ray_cluster():
+    ray.init()
+    yield None
+    ray.shutdown()
 
 @pytest.fixture
 def completed_model():
@@ -184,7 +176,7 @@ def load_model(relative_path, regenerate_coords=False, compressed=False):
     old_paths = model.fileList
     new_paths = []
     for path in old_paths:
-        relative_path = "/".join(path.split("/")[6:])
+        relative_path = "/".join(path.split("/")[-3:])
         absolute_path = os.path.join(BASE_PATH, relative_path)
         new_paths.append(absolute_path)
     model.fileList = new_paths
@@ -259,7 +251,7 @@ def test_initialize(ref_ntl9_hdf5_paths, ref_ntl9_structure_path):
     Test initialization of the haMSM model from some h5 data files.
     """
 
-    model = msm_we.modelWE()
+    model = modelWE()
 
     h5_path_string = " ".join(ref_ntl9_hdf5_paths)
 
@@ -270,7 +262,7 @@ def test_initialize(ref_ntl9_hdf5_paths, ref_ntl9_structure_path):
     assert model.coordsExist, "Coords were not successfully loaded"
 
 
-def test_get_coord_set(initialized_model, modelParams, nostream_clustered_model):
+def test_get_coord_set(initialized_model, modelParams, clustered_model):
     """
     Test loading coordinates from the h5 files.
     """
@@ -278,42 +270,36 @@ def test_get_coord_set(initialized_model, modelParams, nostream_clustered_model)
     initialized_model.get_iterations()
     initialized_model.get_coordSet(last_iter=modelParams["last_iter"])
 
-    assert initialized_model.first_iter == nostream_clustered_model.first_iter
-    assert initialized_model.last_iter == nostream_clustered_model.last_iter
+    assert initialized_model.first_iter == clustered_model.first_iter
+    assert initialized_model.last_iter == clustered_model.last_iter
     assert np.isclose(
-        initialized_model.pcoordSet, nostream_clustered_model.pcoordSet, equal_nan=True
+        initialized_model.pcoordSet, clustered_model.pcoordSet, equal_nan=True
     ).all()
 
 
-def test_dim_reduce(nostream_clustered_model):
+def test_dim_reduce(clustered_model):
     """
     Test dimensionality reduction. This uses the non-streaming clustered model, but it shouldn't matter.
     """
-    loaded_model = deepcopy(nostream_clustered_model)
+    loaded_model = deepcopy(clustered_model)
     loaded_model.ndim = None
     loaded_model.coordinates = None
     loaded_model.clusters = None
 
     # Dimensionality reduction first
     loaded_model.dimReduce()
-    assert loaded_model.ndim == nostream_clustered_model.ndim
+    assert loaded_model.ndim == clustered_model.ndim
 
     # Make sure the PCA decomposition gave the correct result
-    ref_covariance = nostream_clustered_model.coordinates.get_covariance()
+    ref_covariance = clustered_model.coordinates.get_covariance()
     test_covariance = loaded_model.coordinates.get_covariance()
 
     assert np.isclose(ref_covariance, test_covariance).all()
 
 
-@pytest.mark.parametrize(
-    "generated_filename", ["initialized_model_s1_e100_lag0_clust100.h5"]
-)
-def test_aggregate_cluster(modelParams, nostream_clustered_model, cleanup_generated):
-    """
-    Test k-means clustering. This is an xfail for now, because there's occasional variation in the cluster centers
-    that I haven't quite ironed out yet.
-    """
-    loaded_model = deepcopy(nostream_clustered_model)
+def test_streaming_stratified_clustering(clustered_model, ray_cluster, modelParams):
+
+    loaded_model = deepcopy(clustered_model)
     loaded_model.clusters = None
 
     loaded_model.dimReduce()
@@ -321,17 +307,17 @@ def test_aggregate_cluster(modelParams, nostream_clustered_model, cleanup_genera
     # Do the clustering
     loaded_model.cluster_coordinates(
         modelParams["n_cluster_centers"],
-        streaming=False,
+        stratified=True,
+        use_ray=True,
         random_state=modelParams["cluster_seed"],
-        stratified=False,
     )
 
     # Make sure the clusters are what they should be
     # Be a little flexible here, because the PCA has *very* minor differences in outputs, so the cluster centers
     #   will vary by a little more.
     assert np.isclose(
-        loaded_model.clusters.cluster_centers_,
-        nostream_clustered_model.clusters.cluster_centers_,
+        loaded_model.clusters.cluster_models[3].cluster_centers_,
+        clustered_model.clusters.cluster_models[3].cluster_centers_,
         atol=1e-4,
     ).all()
 
@@ -340,55 +326,10 @@ def test_aggregate_cluster(modelParams, nostream_clustered_model, cleanup_genera
     getpass.getuser() == "runner", reason="Hangs on github actions", run=False
 )
 @pytest.mark.parametrize(
-    "generated_filename", ["initialized_model_s1_e100_lag0_clust100.h5"]
-)
-def test_streaming_aggregate_cluster(
-    modelParams, stream_clustered_model, cleanup_generated
-):
-    """
-    Test k-means clustering.
-
-    This is an xfail for now, with an explicit timeout, because the subprocess calls
-    may not execute on the Github Actions CI runner.
-    getuser() == "runner" is designed to skip this test if running in github CI.
-    """
-    loaded_model = deepcopy(stream_clustered_model)
-    loaded_model.clusters = None
-
-    loaded_model.dimReduce()
-
-    # Do the clustering
-    loaded_model.cluster_coordinates(
-        modelParams["n_cluster_centers"],
-        streaming=True,
-        random_state=modelParams["cluster_seed"],
-        stratified=False,
-    )
-
-    # Make sure the clusters are what they should be
-    # Be a little flexible here, because the PCA has *very* minor differences in outputs, so the cluster centers
-    #   will vary by a little more.
-    assert np.isclose(
-        loaded_model.clusters.cluster_centers_,
-        stream_clustered_model.clusters.cluster_centers_,
-        atol=1e-4,
-    ).all()
-
-
-@pytest.mark.xfail(reason="Not yet implemented")
-def test_streaming_stratified_cluster():
-
-    assert False
-
-
-@pytest.mark.xfail(
-    getpass.getuser() == "runner", reason="Hangs on github actions", run=False
-)
-@pytest.mark.parametrize(
-    "generated_filename", ["initialized_model-fluxmatrix-_s1_e100_lag0_clust100.h5"]
+    "generated_filename", ["initialized_model-fluxmatrix-_s1_e100_lag0_clust300.h5"]
 )
 def test_get_flux_matrix(
-    fluxmatrix_raw, fluxmatrix, stream_clustered_model, cleanup_generated
+    fluxmatrix_raw, fluxmatrix, clustered_model, cleanup_generated, ray_cluster
 ):
     """
     Test flux matrix calculation and organizing.
@@ -400,18 +341,13 @@ def test_get_flux_matrix(
     may not execute on the Github Actions CI runner
     """
 
-    first_iter, last_iter = (
-        stream_clustered_model.first_iter,
-        stream_clustered_model.last_iter,
-    )
+    clustered_model.get_fluxMatrix(n_lag=0)
 
-    stream_clustered_model.get_fluxMatrix(0, first_iter, last_iter)
+    assert (clustered_model.fluxMatrixRaw == fluxmatrix_raw).all()
 
-    assert (stream_clustered_model.fluxMatrixRaw == fluxmatrix_raw).all()
+    clustered_model.organize_fluxMatrix()
 
-    stream_clustered_model.organize_fluxMatrix()
-
-    assert (stream_clustered_model.fluxMatrix == fluxmatrix).all()
+    assert (clustered_model.fluxMatrix == fluxmatrix).all()
 
 
 def test_get_tmatrix(organized_model, tmatrix):
@@ -424,35 +360,38 @@ def test_get_tmatrix(organized_model, tmatrix):
     assert (organized_model.Tmatrix == tmatrix).all()
 
 
-def test_get_steady_state_algebraic(completed_model, pSS):
+def test_get_steady_state(organized_model, pSS):
     """
     Test calculating the steady-state distribution from the model with the transition matrix.
     """
 
-    completed_model.pSS = None
-    completed_model.get_steady_state_algebraic()
+    organized_model.pSS = None
+    organized_model.get_Tmatrix()
+    organized_model.get_steady_state()
 
-    assert np.isclose(completed_model.pSS, pSS).all()
+    assert np.isclose(organized_model.pSS, pSS).all()
 
 
-def test_get_steady_state_target_flux(completed_model, JtargetSS):
+def test_get_steady_state_target_flux(organized_model, JtargetSS):
     """
     Test calculating steady-state flux from the model with the transition matrix.
     """
 
-    completed_model.JtargetSS = None
-    completed_model.get_steady_state_target_flux()
+    organized_model.JtargetSS = None
+    organized_model.get_Tmatrix()
+    organized_model.get_steady_state()
+    organized_model.get_steady_state_target_flux()
 
-    assert completed_model.JtargetSS == JtargetSS
+    assert organized_model.JtargetSS == JtargetSS
 
 
-def test_get_cluster_structures(stream_clustered_model, ref_cluster_structures):
+def test_get_cluster_structures(completed_model, ref_cluster_structures):
     """
     Tests obtaining the library of structures in each MSM bin.
     """
 
-    stream_clustered_model.update_cluster_structures()
-    cluster_structures = stream_clustered_model.cluster_structures
+    completed_model.update_cluster_structures()
+    cluster_structures = completed_model.cluster_structures
 
     # Just check one bin, otherwise the ref file is huge
     assert (np.array(ref_cluster_structures) == np.array(cluster_structures[10])).all()
