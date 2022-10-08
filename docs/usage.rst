@@ -23,7 +23,7 @@ or, to install it into an existing conda environment:
 
 To use :code:`msm_we` in a project::
 
-    from msm_we import msm_we
+    import msm_we
 
 
 The basic workflow of this module is as follows.
