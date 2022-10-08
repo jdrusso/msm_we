@@ -382,7 +382,7 @@ def test_get_steady_state_target_flux(organized_model, JtargetSS):
     organized_model.get_steady_state()
     organized_model.get_steady_state_target_flux()
 
-    assert organized_model.JtargetSS == JtargetSS
+    assert np.isclose(organized_model.JtargetSS, JtargetSS)
 
 
 def test_get_cluster_structures(completed_model, ref_cluster_structures):
