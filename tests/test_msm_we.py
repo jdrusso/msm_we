@@ -122,6 +122,13 @@ def initialized_model():
     return load_model("reference/1000ns_ntl9/models/initialized.obj")
 
 @pytest.fixture
+def loaded_model():
+    """
+    An initialized haMSM model.
+    """
+    return load_model("reference/1000ns_ntl9/models/loaded.obj")
+
+@pytest.fixture
 def clustered_model():
     """
     An initialized haMSM model.
@@ -297,9 +304,9 @@ def test_dim_reduce(clustered_model):
     assert np.isclose(ref_covariance, test_covariance).all()
 
 
-def test_streaming_stratified_clustering(clustered_model, ray_cluster, modelParams):
+def test_streaming_stratified_clustering(loaded_model, clustered_model, ray_cluster, modelParams):
 
-    loaded_model = deepcopy(clustered_model)
+    loaded_model = deepcopy(loaded_model)
     loaded_model.clusters = None
 
     loaded_model.dimReduce()
