@@ -18,8 +18,9 @@ dependencies:
  - tqdm
  - scipy
  - westpa
- - pip
  - nbsphinx
+ - mdanalysis
+ - pip
  - pip:
    - ray
    - .
