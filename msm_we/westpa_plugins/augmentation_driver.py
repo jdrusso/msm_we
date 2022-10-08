@@ -32,16 +32,18 @@ class MDAugmentationDriver:
 
         self.plugin_config = plugin_config
 
-        self.topology_file = plugin_config['topology_file']
+        self.topology_file = plugin_config["topology_file"]
         self.topology = md.load(self.topology_file).topology
 
-        self.parent_traj_filename = plugin_config['parent_traj_filename']
-        self.child_traj_filename = plugin_config['child_traj_filename']
+        self.parent_traj_filename = plugin_config["parent_traj_filename"]
+        self.child_traj_filename = plugin_config["child_traj_filename"]
 
         # Big number is low priority -- this should run before anything else
-        self.priority = plugin_config.get('priority', 1)
+        self.priority = plugin_config.get("priority", 1)
 
-        sim_manager.register_callback(sim_manager.post_propagation, self.augment_coordinates, self.priority)
+        sim_manager.register_callback(
+            sim_manager.post_propagation, self.augment_coordinates, self.priority
+        )
 
     def augment_coordinates(self):
         """
@@ -64,25 +66,33 @@ class MDAugmentationDriver:
         )
         n_walkers = len(segments)
 
-        data_ref_formatter = os.path.expandvars(westpa.rc.config['west']['data']['data_refs']['segment'])
+        data_ref_formatter = os.path.expandvars(
+            westpa.rc.config["west"]["data"]["data_refs"]["segment"]
+        )
 
         for i, segment in enumerate(segments):
 
             # Note: This uses whatever formatter is in west.cfg -- including any environment variables!
             seg_path = data_ref_formatter.format(segment=segment)
-            parent_traj_path = f'{seg_path}/{self.parent_traj_filename}'
-            child_traj_path = f'{seg_path}/{self.child_traj_filename}'
+            parent_traj_path = f"{seg_path}/{self.parent_traj_filename}"
+            child_traj_path = f"{seg_path}/{self.child_traj_filename}"
 
             if os.path.exists(parent_traj_path):
-                parent_coords = np.squeeze(md.load(parent_traj_path, top=self.topology).xyz)
+                parent_coords = np.squeeze(
+                    md.load(parent_traj_path, top=self.topology).xyz
+                )
             else:
                 # If the parent was an i/bstate rather than a segment,
                 #   then load appropriate structure from the bstate/istate here
 
-                segment_istate = self.data_manager.get_segment_initial_states([segment])[0]
+                segment_istate = self.data_manager.get_segment_initial_states(
+                    [segment]
+                )[0]
                 bstate_id = segment_istate.basis_state_id
 
-                segment_bstate = self.data_manager.get_basis_states(self.sim_manager.n_iter)[bstate_id]
+                segment_bstate = self.data_manager.get_basis_states(
+                    self.sim_manager.n_iter
+                )[bstate_id]
                 bstate_path = segment_bstate.auxref
 
                 parent_coords = np.squeeze(md.load(bstate_path, top=self.topology).xyz)
@@ -93,7 +103,7 @@ class MDAugmentationDriver:
             auxcoord_dataset = self.data_manager.we_h5file.require_dataset(
                 name=f"{iter_group_name}/auxdata/coord",
                 shape=(n_walkers, 2, *child_coords.shape),
-                dtype=child_coords.dtype
+                dtype=child_coords.dtype,
             )
 
             auxcoord_dataset[segment.seg_id, 0] = parent_coords

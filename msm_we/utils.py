@@ -1,12 +1,162 @@
 """
 Miscellaneous convenience functions
 
-Adapted from the original NMpathAnalysis package,
+Some functionality was adapted from the original NMpathAnalysis package,
 https://github.com/ZuckermanLab/NMpathAnalysis
 """
 from copy import deepcopy
 import numpy as np
 import operator
+
+from scipy.sparse import csr_matrix
+import scipy.sparse as sparse
+
+# used to check connectivity
+import scipy.sparse.csgraph as csgraph
+from scipy.sparse.sputils import isdense
+
+
+def find_connected_sets(C, directed=True):
+    r"""
+    This implementation is taken from msmtools.estimation.sparse.connectivity, at commit 9312660.
+    See the original at https://github.com/markovmodel/msmtools/blob/devel/msmtools/estimation/sparse/connectivity.py#L30
+
+    Compute connected components for a directed graph with weights
+    represented by the given count matrix.
+
+    Parameters
+    ----------
+
+    C : scipy.sparse matrix or numpy ndarray
+        square matrix specifying edge weights.
+    directed : bool, optional
+       Whether to compute connected components for a directed  or
+       undirected graph. Default is True.
+
+    Returns
+    -------
+    cc : list of arrays of integers
+        Each entry is an array containing all vertices (states) in
+        the corresponding connected component.
+    """
+    if isdense(C):
+        C = csr_matrix(C)
+
+    M = C.shape[0]
+    """ Compute connected components of C. nc is the number of
+    components, indices contain the component labels of the states
+    """
+    nc, indices = csgraph.connected_components(
+        C, directed=directed, connection="strong"
+    )
+
+    states = np.arange(M)  # Discrete states
+
+    """Order indices"""
+    ind = np.argsort(indices)
+    indices = indices[ind]
+
+    """Order states"""
+    states = states[ind]
+    """ The state index tuple is now of the following form (states,
+    indices)=([s_23, s_17,...,s_3, s_2, ...], [0, 0, ..., 1, 1, ...])
+    """
+
+    """Find number of states per component"""
+    count = np.bincount(indices)
+
+    """Cumulative sum of count gives start and end indices of
+    components"""
+    csum = np.zeros(len(count) + 1, dtype=int)
+    csum[1:] = np.cumsum(count)
+
+    """Generate list containing components, sort each component by
+    increasing state label"""
+    cc = []
+    for i in range(nc):
+        cc.append(np.sort(states[csum[i] : csum[i + 1]]))
+
+    """Sort by size of component - largest component first"""
+    cc = sorted(cc, key=lambda x: -len(x))
+
+    return cc
+
+
+def is_connected(matrix, source_states, target_states, directed=True):
+    """
+    Check for connectivity between two states.
+    If directed is True, then checks for directional connectivity from source_states to target_states.
+
+    Parameters
+    ----------
+    matrix: np.array, NxN
+        Transition matrix
+    source_states: array-like, N
+        Source states
+    target_states: array-like, N
+        Target states
+    directed: bool, default=True
+        Compute directional connectivity
+
+    Returns
+    -------
+    bool
+    """
+
+    return (
+        np.inf
+        not in csgraph.shortest_path(matrix, directed=directed, indices=source_states)[
+            :, target_states
+        ]
+    )
+
+
+def inverse_iteration(guess, matrix, mu=1):
+    """
+    Do one iteration of inverse iteration.
+
+    Parameters
+    ----------
+    guess: array-like  (N elements)
+        Vector of weights to be used as the initial guess.
+
+    matrix: array-like (NxN elements)
+        Transition matrix to use for inverse iteration.
+
+    Returns
+    -------
+    The new vector of weights after one iteration of inverse iteration.
+    """
+
+    # Looking for eigenvector corresponding to eigenvalue 1
+    identity = sparse.eye(guess.shape[0])
+
+    # Inverse
+    try:
+        inverse = sparse.linalg.inv(matrix.T - mu * identity)
+    except RuntimeError as e:
+        if not mu == 1:
+            filename = "bad_matrix.npy"
+            log.error(
+                f"Inverse iteration still failed with mu={mu} -- examine your transition matrix for why it could "
+                f"be unsolvable. Saving the transition matrix to {filename}."
+            )
+            np.save(filename, matrix)
+            raise e
+        elif mu == 1:
+            log.error(
+                f"When solving steady-state, failed to perform inverse iteration! "
+                f"Trying again with mu=0.999 instead of {mu}."
+            )
+            return inverse_iteration(guess, matrix, mu=0.999)
+
+    result = inverse @ guess
+    result = result.squeeze()
+
+    # Normalize
+    result /= sum(result)
+
+    return result
 
 
 class Interval:
@@ -43,21 +193,37 @@ class Interval:
         if (self.n_variables == 1) and (len_shape == 1):  # single 1D interval
             return self.interval_set[0] <= item < self.interval_set[1]
 
-        elif (self.n_variables == 1) and (len_shape == 2):  # union of multiple 1D intervals
-            return any([(item in Interval(self.interval_set[i], 1)) for i in range(shape[0])])
+        elif (self.n_variables == 1) and (
+            len_shape == 2
+        ):  # union of multiple 1D intervals
+            return any(
+                [(item in Interval(self.interval_set[i], 1)) for i in range(shape[0])]
+            )
 
         elif (self.n_variables > 1) and len_shape == 2:  # n-dimensional interval
-            return all([(item[i] in Interval(self.interval_set[i], 1)) for i in range(shape[0])])
+            return all(
+                [
+                    (item[i] in Interval(self.interval_set[i], 1))
+                    for i in range(shape[0])
+                ]
+            )
 
         elif len(shape) == 3:  # union of n-dimensional intervals
-            return any([(item in Interval(self.interval_set[i], self.n_variables)) for i in range(shape[0])])
+            return any(
+                [
+                    (item in Interval(self.interval_set[i], self.n_variables))
+                    for i in range(shape[0])
+                ]
+            )
         else:
             raise Exception("The given interval has not the expected shape")
 
 
 def reverse_sort_lists(list_1, list_2):
     """Reverse sorting two list based on the first one"""
-    list_1_sorted, list_2_sorted = zip(*sorted(zip(list_1, list_2), key=operator.itemgetter(0), reverse=True))
+    list_1_sorted, list_2_sorted = zip(
+        *sorted(zip(list_1, list_2), key=operator.itemgetter(0), reverse=True)
+    )
     return list_1_sorted, list_2_sorted
 
 
@@ -171,10 +337,10 @@ def random_markov_matrix(n_states=5, seed=None):
 def check_tmatrix(t_matrix, accept_null_rows=True):
     """Check if the given matrix is actually a row-stochastic transition matrix
 
-     i.e, all the elements are non-negative and the rows add to one.
-        If the keyword argument accept_null_rows is True, is going
-        to accept rows where all the elements are zero. Those "problematic"
-        states are going to be removed later if necessary by clean_tmatrix.
+    i.e, all the elements are non-negative and the rows add to one.
+       If the keyword argument accept_null_rows is True, is going
+       to accept rows where all the elements are zero. Those "problematic"
+       states are going to be removed later if necessary by clean_tmatrix.
     """
 
     def value_error():
@@ -219,7 +385,9 @@ def clean_tmatrix(transition_matrix, rm_absorbing=True):
             t_matrix = np.delete(t_matrix, index, axis=0)
             removed_states.append(index)
         elif t_matrix[index, index] == 1.0:  # absorbing state
-            if not all([t_matrix[index, j] == 0.0 for j in range(n_states) if j != index]):
+            if not all(
+                [t_matrix[index, j] == 0.0 for j in range(n_states) if j != index]
+            ):
                 raise ValueError(
                     "The sum of the elements in a row of the \
                     transition matrix must be one"
@@ -263,7 +431,9 @@ def pops_from_tmatrix(transition_matrix):
     new_n_states = n_states - len(removed_states)
 
     ss_solution = np.zeros(new_n_states)  # steady-state solution
-    for is_close_to_one, is_real, eigv in zip(eig_vals_close_to_one, real_eig_vecs, eig_vecs):
+    for is_close_to_one, is_real, eigv in zip(
+        eig_vals_close_to_one, real_eig_vecs, eig_vecs
+    ):
         if (
             is_close_to_one
             and is_real
@@ -298,7 +468,10 @@ def pops_from_nm_tmatrix(transition_matrix):
     size = len(transition_matrix)
 
     if size % 2 != 0:
-        raise ValueError("The non-Markovian transition matrix has to " "have an even number of columns/rows")
+        raise ValueError(
+            "The non-Markovian transition matrix has to "
+            "have an even number of columns/rows"
+        )
 
     n_states = size // 2  # Real/physical microstates
 

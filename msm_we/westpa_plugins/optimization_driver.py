@@ -17,6 +17,7 @@ class GlobalModelActor:
     """
     Ray-parallel Actor that loads a model and holds it in memory. Used by the PcoordCalculator.
     """
+
     def __init__(self, model, processCoordinates, synd_model, original_pcoord_ndim):
         msm_we.msm_we.modelWE.processCoordinates = processCoordinates
         self.model = model
@@ -38,6 +39,7 @@ class PcoordCalculator:
     Ray-parallel Actor that computes the extended progress coordinate
     (original progress coordinate + dimensionality-reduce MSM features) for a structure.
     """
+
     def __init__(self, model_actor, processCoordinates):
         msm_we.msm_we.modelWE.processCoordinates = processCoordinates
         self.model_actor = model_actor
@@ -191,7 +193,6 @@ class OptimizationDriver:
 
         return new_target_counts
 
-
     @staticmethod
     def default_bin_optimizer(model):
         """Example bin optimization function, which assigns microstates to WE bins."""
@@ -212,7 +213,6 @@ class OptimizationDriver:
         )
 
         return microstate_assignments
-
 
     def compute_optimized_bins(self):
         """
@@ -367,7 +367,8 @@ class OptimizationDriver:
         data_manager.flush_backing()
 
         pcoord_opts = data_manager.dataset_options.get(
-            "pcoord", {"name": "pcoord", "h5path": "pcoord", "compression": False},
+            "pcoord",
+            {"name": "pcoord", "h5path": "pcoord", "compression": False},
         )
 
         #  # Update the currently held segments
@@ -389,7 +390,11 @@ class OptimizationDriver:
             iter_group,
             pcoord_opts,
             data=np.array([segment.pcoord for segment in segments]),
-            shape=(len(sim_manager.segments), system.pcoord_len, system.pcoord_ndim,),
+            shape=(
+                len(sim_manager.segments),
+                system.pcoord_len,
+                system.pcoord_ndim,
+            ),
             dtype=system.pcoord_dtype,
         )
 

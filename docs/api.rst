@@ -6,7 +6,7 @@ Documentation
 .. autosummary::
    :nosignatures:
 
-   msm_we.msm_we
+   msm_we
    msm_we.optimization
    msm_we.westpa_plugins
    msm_we.fpt
@@ -14,37 +14,36 @@ Documentation
    msm_we.nmm
    msm_we.utils
 
-haMSM model building and analysis (msm_we.msm_we.modelWE)
+haMSM model building and analysis (msm_we.modelWE)
 ---------------------------------------------------------
-.. autoclass:: msm_we.msm_we.modelWE
+.. autoclass:: msm_we.modelWE
 
 Construction
 ______________
 
-.. autofunction:: msm_we.msm_we.modelWE.build_analyze_model
-.. autofunction:: msm_we.msm_we.modelWE.initialize
-.. autofunction:: msm_we.msm_we.modelWE.get_coordSet
-.. autofunction:: msm_we.msm_we.modelWE.dimReduce
-.. autofunction:: msm_we.msm_we.modelWE.cluster_coordinates
-.. autofunction:: msm_we.msm_we.modelWE.get_fluxMatrix
-.. autofunction:: msm_we.msm_we.modelWE.organize_fluxMatrix
-.. autofunction:: msm_we.msm_we.modelWE.do_block_validation
+.. autofunction:: msm_we.modelWE.build_analyze_model
+.. autofunction:: msm_we.modelWE.initialize
+.. autofunction:: msm_we.modelWE.get_coordSet
+.. autofunction:: msm_we.modelWE.dimReduce
+.. autofunction:: msm_we.modelWE.cluster_coordinates
+.. autofunction:: msm_we.modelWE.get_fluxMatrix
+.. autofunction:: msm_we.modelWE.organize_fluxMatrix
+.. autofunction:: msm_we.modelWE.do_block_validation
 
 Analysis
 ________
-.. autofunction:: msm_we.msm_we.modelWE.get_Tmatrix
-.. autofunction:: msm_we.msm_we.modelWE.get_steady_state
-.. autofunction:: msm_we.msm_we.modelWE.get_steady_state_target_flux
-.. autofunction:: msm_we.msm_we.modelWE.get_committor
-.. autofunction:: msm_we.msm_we.modelWE.get_flux
-.. autofunction:: msm_we.msm_we.modelWE.get_model_clusters
-.. autofunction:: msm_we.msm_we.modelWE.get_cluster_centers
+.. autofunction:: msm_we.modelWE.get_Tmatrix
+.. autofunction:: msm_we.modelWE.get_steady_state
+.. autofunction:: msm_we.modelWE.get_steady_state_target_flux
+.. autofunction:: msm_we.modelWE.get_committor
+.. autofunction:: msm_we.modelWE.get_flux
+.. autofunction:: msm_we.modelWE.get_cluster_centers
 
 Plotting
 ________
-.. autofunction:: msm_we.msm_we.modelWE.plot_flux
-.. autofunction:: msm_we.msm_we.modelWE.plot_flux_committor
-.. autofunction:: msm_we.msm_we.modelWE.plot_flux_committor_pcoordcolor
+.. autofunction:: msm_we.modelWE.plot_flux
+.. autofunction:: msm_we.modelWE.plot_flux_committor
+.. autofunction:: msm_we.modelWE.plot_flux_committor_pcoordcolor
 
 
 Optimization (msm_we.optimization)

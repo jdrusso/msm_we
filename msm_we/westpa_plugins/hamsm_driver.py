@@ -102,8 +102,8 @@ class HAMSMDriver:
             # For some reason if I don't specify fluxmatrix_iters, after the first time around
             # it'll keep using the arguments from the first time...
             # That's really alarming?
-            fluxmatrix_iters=[1,-1],
-            allow_validation_failure=True  # Don't fail if a validation model fails
+            fluxmatrix_iters=[1, -1],
+            allow_validation_failure=True,  # Don't fail if a validation model fails
         )
 
         westpa.rc.pstatus(f"Storing built haMSM on {self.data_manager}")
