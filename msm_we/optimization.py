@@ -49,7 +49,7 @@ def solve_discrepancy(tmatrix, pi, B):
     log.info("Computing pi matrix")
     norm = np.dot(pi, pi.T)
 
-    pi_matrix = pi * pi.T.reshape(-1,1) / norm
+    pi_matrix = pi * pi.T.reshape(-1, 1) / norm
 
     b_indicator = np.zeros_like(pi)
     b_indicator[B] = 1.0
@@ -57,19 +57,21 @@ def solve_discrepancy(tmatrix, pi, B):
     pi_b = np.ones_like(pi)
     pi_b[:] = sum(pi[B])
 
-    discrepancy = np.linalg.solve(np.identity(tmatrix.shape[0]) - tmatrix + pi_matrix,
-                                  b_indicator - pi_b)
+    discrepancy = np.linalg.solve(
+        np.identity(tmatrix.shape[0]) - tmatrix + pi_matrix, b_indicator - pi_b
+    )
 
     variance = np.sqrt(
-        np.dot(tmatrix, discrepancy**2) -
-        np.dot(tmatrix, discrepancy)**2
+        np.dot(tmatrix, discrepancy**2) - np.dot(tmatrix, discrepancy) ** 2
     )
 
     if np.isnan(variance).any():
         log.warning("NaN elements in variance!")
 
     # TODO: Verify this is the correct sanity check
-    assert np.isclose(discrepancy @ pi, 0), "Discrepancy solution failed normalization sanity check!"
+    assert np.isclose(
+        discrepancy @ pi, 0
+    ), "Discrepancy solution failed normalization sanity check!"
 
     return discrepancy, variance
 
@@ -102,7 +104,7 @@ def get_uniform_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bins
     pi_v_sort = np.argsort(discrepancy).squeeze()
     cumsum = np.cumsum(pi_v[pi_v_sort])
 
-    n_active_bins = n_desired_we_bins-2
+    n_active_bins = n_desired_we_bins - 2
 
     bin_bounds = np.linspace(0, cumsum[-1], n_active_bins + 1)[1:]
     bin_assignments = np.digitize(cumsum, bin_bounds, right=True)
@@ -136,7 +138,7 @@ def get_clustered_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bi
 
     # The last two elements of this are the basis and target states respectively
     pi_v = steady_state * variance
-    n_active_bins = n_desired_we_bins-2
+    n_active_bins = n_desired_we_bins - 2
     pi_v_sort = np.argsort(discrepancy).squeeze()
     cumsum = np.cumsum(pi_v[pi_v_sort])
 
@@ -162,11 +164,15 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
     def __init__(self, *args, **kwargs):
 
         if len(args) + len(kwargs) == 1:
-            log.info("Single argument provided to binmapper initializer, attempting to unpickle")
-            self.unpickle(kwargs['bytestring'])
+            log.info(
+                "Single argument provided to binmapper initializer, attempting to unpickle"
+            )
+            self.unpickle(kwargs["bytestring"])
 
         elif len(args) + len(kwargs) > 1:
-            log.info("Multiple arguments provided to binmapper initializer, creating new object")
+            log.info(
+                "Multiple arguments provided to binmapper initializer, creating new object"
+            )
             self.create_new(*args, **kwargs)
 
     def unpickle(self, bytestring):
@@ -183,18 +189,19 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         for k, v in vars(loaded).items():
             setattr(self, k, v)
 
-    def create_new(self,
-                 nbins: int,
-                 n_original_pcoord_dims: int,
-                 target_pcoord_bounds,
-                 basis_pcoord_bounds,
-                 previous_binmapper,
-                 microstate_mapper: dict,
-                 stratified_clusterer: StratifiedClusters,
-                 cluster_on_pcoord: bool = False,
-                 *args,
-                 **kwargs
-                 ):
+    def create_new(
+        self,
+        nbins: int,
+        n_original_pcoord_dims: int,
+        target_pcoord_bounds,
+        basis_pcoord_bounds,
+        previous_binmapper,
+        microstate_mapper: dict,
+        stratified_clusterer: StratifiedClusters,
+        cluster_on_pcoord: bool = False,
+        *args,
+        **kwargs,
+    ):
         """
         Creates an OptimizedBinMapper, suitable for use with the optimization workflow
 
@@ -224,11 +231,15 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
 
         self.clusterer.model.n_clusters = 2
         for cluster_model in self.clusterer.cluster_models:
-            if hasattr(cluster_model, 'cluster_centers_'):
+            if hasattr(cluster_model, "cluster_centers_"):
                 self.clusterer.model.n_clusters += len(cluster_model.cluster_centers_)
-        log.info(f"Clusterer has {self.clusterer.model.n_clusters} total clusters (include 1 for basis and 1 for target)")
-        log.debug(f"Clusterer remap is {self.clusterer.we_remap} "
-                 f"(last two correspond to basis, target states and can be ignored)")
+        log.info(
+            f"Clusterer has {self.clusterer.model.n_clusters} total clusters (include 1 for basis and 1 for target)"
+        )
+        log.debug(
+            f"Clusterer remap is {self.clusterer.we_remap} "
+            f"(last two correspond to basis, target states and can be ignored)"
+        )
 
     def mapper(self, coords, mask, output, *args, **kwargs):
 
@@ -250,17 +261,17 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         #   n_clusters + 1 is.
         #  This isn't actually used for anything else, and no clustering happens for these, so I can actually
         #  set these arbitrarily.
-        original_pcoords = final_coords[:, :self.n_original_pcoord_dims]
+        original_pcoords = final_coords[:, : self.n_original_pcoord_dims]
 
-        if not hasattr(self, 'cluster_on_pcoord'):
+        if not hasattr(self, "cluster_on_pcoord"):
             self.cluster_on_pcoord = False
 
         if not self.cluster_on_pcoord:
-            extended_pcoords = final_coords[:, self.n_original_pcoord_dims:]
+            extended_pcoords = final_coords[:, self.n_original_pcoord_dims :]
         else:
-            extended_pcoords = final_coords[:, :self.n_original_pcoord_dims]
+            extended_pcoords = final_coords[:, : self.n_original_pcoord_dims]
 
-        basis_we_bin_idx, target_we_bin_idx = self.nbins-2, self.nbins-1
+        basis_we_bin_idx, target_we_bin_idx = self.nbins - 2, self.nbins - 1
 
         log.debug(f"Original pcoords dimensionality was {self.n_original_pcoord_dims}")
         log.debug(f"Original pcoords had shape {original_pcoords.shape}")
@@ -269,7 +280,6 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         # TODO: Get the basis and target state from this, and then I don't need to use the bounds here
         base_bins = self.base_mapper.assign(original_pcoords)
         log.debug(f"Base bin mapper mapped to {base_bins}")
-
 
         # Now, do stratified clustering on the rest of the coordinates.
         # Each segment will be
@@ -288,18 +298,32 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
         #   just comes from my optimization step
         log.debug(f"Mapping microstates to WE bins using {self.microstate_mapper}")
 
-        we_bin_assignments = np.array([float(self.microstate_mapper[microstate])
-                                       if microstate < len(self.microstate_mapper) else -1
-                                       for microstate in stratified_cluster_assignments
-                                      ])
+        we_bin_assignments = np.array(
+            [
+                float(self.microstate_mapper[microstate])
+                if microstate < len(self.microstate_mapper)
+                else -1
+                for microstate in stratified_cluster_assignments
+            ]
+        )
 
-        log.debug(f"Basis WE bin is labeled {basis_we_bin_idx}, target WE bin is labeled {target_we_bin_idx}")
-        log.debug(f"WE bin assignments before correcting basis/target are {we_bin_assignments}")
+        log.debug(
+            f"Basis WE bin is labeled {basis_we_bin_idx}, target WE bin is labeled {target_we_bin_idx}"
+        )
+        log.debug(
+            f"WE bin assignments before correcting basis/target are {we_bin_assignments}"
+        )
 
-        we_bin_assignments[self.clusterer.model.is_WE_target(final_coords)] = target_we_bin_idx
-        we_bin_assignments[self.clusterer.model.is_WE_basis(final_coords)] = basis_we_bin_idx
+        we_bin_assignments[
+            self.clusterer.model.is_WE_target(final_coords)
+        ] = target_we_bin_idx
+        we_bin_assignments[
+            self.clusterer.model.is_WE_basis(final_coords)
+        ] = basis_we_bin_idx
 
-        zipped_assignments = np.array(list(zip(original_pcoords.reshape(-1), we_bin_assignments)))
+        zipped_assignments = np.array(
+            list(zip(original_pcoords.reshape(-1), we_bin_assignments))
+        )
         zip_sort = np.argsort(original_pcoords.reshape(-1))
 
         log.debug(f"WE bin assignments are {zipped_assignments[zip_sort]}")
@@ -308,6 +332,8 @@ class OptimizedBinMapper(westpa.core.binning.FuncBinMapper):
             output[i] = we_bin_assignments[i]
 
         assert not np.isnan(output).any(), "Some segments couldn't get assigned WE bins"
-        assert all(output >= 0), "Some target/basis microstates didn't get correctly remapped"
+        assert all(
+            output >= 0
+        ), "Some target/basis microstates didn't get correctly remapped"
 
         return output.astype(int)

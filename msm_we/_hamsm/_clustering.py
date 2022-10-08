@@ -1357,8 +1357,6 @@ class ClusteringMixin:
 
         return closest
 
-
-
     def update_cluster_structures(self):
         """
         Find structures (i.e. sets of coordinates) corresponding to each clusters.

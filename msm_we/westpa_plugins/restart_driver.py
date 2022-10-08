@@ -41,7 +41,7 @@ STRUCT_EXTENSIONS = {
     md.formats.AmberRestartFile: "rst7",
 }
 
-EXTENSION_LOCKFILE = 'doing_extension'
+EXTENSION_LOCKFILE = "doing_extension"
 
 
 def check_target_reached(h5_filename):
@@ -53,13 +53,17 @@ def check_target_reached(h5_filename):
     h5_filename: string
         Path to a WESTPA HDF5 data file
     """
-    with h5py.File(h5_filename, 'r') as h5_file:
+    with h5py.File(h5_filename, "r") as h5_file:
         # Get the key to the final iteration. Need to do -2 instead of -1 because there's an empty-ish final iteration
         #   written.
-        for iteration_key in list(h5_file['iterations'].keys())[-2:0:-1]:
-            endpoint_types = h5_file[f'iterations/{iteration_key}/seg_index']['endpoint_type']
+        for iteration_key in list(h5_file["iterations"].keys())[-2:0:-1]:
+            endpoint_types = h5_file[f"iterations/{iteration_key}/seg_index"][
+                "endpoint_type"
+            ]
             if Segment.SEG_ENDPOINT_RECYCLED in endpoint_types:
-                log.debug(f"recycled segment found in file {h5_filename} at iteration {iteration_key}")
+                log.debug(
+                    f"recycled segment found in file {h5_filename} at iteration {iteration_key}"
+                )
                 return True
     return False
 
@@ -74,14 +78,15 @@ def fix_deprecated_initialization(initialization_state):
 
     # Some of my initial files had this old-style formatting. Handle it for now, but remove eventually
     for old_key, new_key in [
-        ('tstate-file', 'tstate_file'),
-        ('bstate-file', 'bstate_file'),
-        ('sstate-file', 'sstate_file'),
-        ('segs-per-state', 'segs_per_state'),
+        ("tstate-file", "tstate_file"),
+        ("bstate-file", "bstate_file"),
+        ("sstate-file", "sstate_file"),
+        ("segs-per-state", "segs_per_state"),
     ]:
         if old_key in initialization_state.keys():
             log.warning(
-                f"This initialization JSON file uses the deprecated  " f"hyphenated form for  {old_key}. Replace with underscores."
+                f"This initialization JSON file uses the deprecated  "
+                f"hyphenated form for  {old_key}. Replace with underscores."
             )
 
             value = initialization_state.pop(old_key)
@@ -147,7 +152,9 @@ class RestartDriver(HAMSMDriver):
         # Use the
         super().__init__(sim_manager, plugin_config)
         westpa.rc.pstatus(self.sim_manager._callback_table)
-        self.sim_manager._callback_table[sim_manager.finalize_run].remove((2, 'construct_hamsm', super().construct_hamsm))
+        self.sim_manager._callback_table[sim_manager.finalize_run].remove(
+            (2, "construct_hamsm", super().construct_hamsm)
+        )
 
         westpa.rc.pstatus("Restart plugin initialized")
 
@@ -160,46 +167,60 @@ class RestartDriver(HAMSMDriver):
 
         self.plugin_config = plugin_config
 
-        self.restart_file = plugin_config.get('restart_file', 'restart.dat')
-        self.initialization_file = plugin_config.get('initialization_file', 'restart_initialization.json')
+        self.restart_file = plugin_config.get("restart_file", "restart.dat")
+        self.initialization_file = plugin_config.get(
+            "initialization_file", "restart_initialization.json"
+        )
 
-        self.extension_iters = plugin_config.get('extension_iters', 0)
-        self.max_total_iterations = westpa.rc.config.get(['west', 'propagation', 'max_total_iterations'], default=None)
+        self.extension_iters = plugin_config.get("extension_iters", 0)
+        self.max_total_iterations = westpa.rc.config.get(
+            ["west", "propagation", "max_total_iterations"], default=None
+        )
         self.base_total_iterations = self.max_total_iterations
 
-        self.n_restarts = plugin_config.get('n_restarts', -1)
-        self.n_runs = plugin_config.get('n_runs', 1)
+        self.n_restarts = plugin_config.get("n_restarts", -1)
+        self.n_runs = plugin_config.get("n_runs", 1)
 
         # .get() might return this as a bool anyways, but be safe
-        self.debug = bool(plugin_config.get('debug', False))
+        self.debug = bool(plugin_config.get("debug", False))
         if self.debug:
             log.setLevel("DEBUG")
             msm_we_logger.setLevel("DEBUG")
 
         # Default to using all restarts
-        self.restarts_to_use = plugin_config.get('n_restarts_to_use', self.n_restarts)
-        assert self.restarts_to_use > 0 or self.restarts_to_use == -1, "Invalid number of restarts to use"
+        self.restarts_to_use = plugin_config.get("n_restarts_to_use", self.n_restarts)
+        assert (
+            self.restarts_to_use > 0 or self.restarts_to_use == -1
+        ), "Invalid number of restarts to use"
         if self.restarts_to_use >= 1:
             assert (
                 self.restarts_to_use == self.restarts_to_use // 1
             ), "If choosing a decimal restarts_to_use, must be between 0 and 1."
 
-        struct_filetype = plugin_config.get('struct_filetype', 'mdtraj.formats.PDBTrajectoryFile')
+        struct_filetype = plugin_config.get(
+            "struct_filetype", "mdtraj.formats.PDBTrajectoryFile"
+        )
         self.struct_filetype = get_object(struct_filetype)
 
         # This should be low priority, because it closes the H5 file and starts a new WE run. So it should run LAST
         #   after any other plugins.
-        self.priority = plugin_config.get('priority', 100)  # I think a big number is lower priority...
+        self.priority = plugin_config.get(
+            "priority", 100
+        )  # I think a big number is lower priority...
 
         # If it's being used with SynD, the full coordinates must be specified for start-state generation.
         # TODO: Find a more efficient way to do this than explicitly constructing the inverse dictionary.
-        self.synd_full_coord_map_path = plugin_config.get('synd_full_coord_map_path', None)
+        self.synd_full_coord_map_path = plugin_config.get(
+            "synd_full_coord_map_path", None
+        )
         if self.synd_full_coord_map_path is not None:
 
-            with open(self.synd_full_coord_map_path, 'rb') as infile:
+            with open(self.synd_full_coord_map_path, "rb") as infile:
                 self.synd_full_coord_map = pickle.load(infile)
 
-        sim_manager.register_callback(sim_manager.finalize_run, self.prepare_new_we, self.priority)
+        sim_manager.register_callback(
+            sim_manager.finalize_run, self.prepare_new_we, self.priority
+        )
 
     def get_original_bins(self):
         """
@@ -217,7 +238,9 @@ class RestartDriver(HAMSMDriver):
         we_driver = self.sim_manager.we_driver
         bins = we_driver.next_iter_binning
         n_bins = len(bins)
-        binprobs = np.fromiter(map(operator.attrgetter('weight'), bins), dtype=np.float64, count=n_bins)
+        binprobs = np.fromiter(
+            map(operator.attrgetter("weight"), bins), dtype=np.float64, count=n_bins
+        )
 
         return bins, binprobs
 
@@ -268,33 +291,37 @@ class RestartDriver(HAMSMDriver):
         # Copy traj_segs, seg_logs, and west.h5 for restart0/runXX back into ./
         #       Later: (May only need to copy the latest iteration traj_segs, to avoid tons of back and forth)
         try:
-            shutil.rmtree('traj_segs')
-            shutil.rmtree('seg_logs')
+            shutil.rmtree("traj_segs")
+            shutil.rmtree("seg_logs")
         except OSError as e:
-            if str(e) == 'Cannot call rmtree on a symbolic link':
-                os.unlink('traj_segs')
-                os.unlink('seg_logs')
+            if str(e) == "Cannot call rmtree on a symbolic link":
+                os.unlink("traj_segs")
+                os.unlink("seg_logs")
 
         os.remove(self.data_manager.we_h5filename)
 
-        os.symlink(f'restart0/run{run_number}/traj_segs', 'traj_segs')
-        os.symlink(f'restart0/run{run_number}/seg_logs', 'seg_logs')
+        os.symlink(f"restart0/run{run_number}/traj_segs", "traj_segs")
+        os.symlink(f"restart0/run{run_number}/seg_logs", "seg_logs")
 
         if first_extension:
 
             # Get lines to make a new west.cfg by extending west.propagation.max_total_iterations
-            with open('west.cfg', 'r') as west_config:
+            with open("west.cfg", "r") as west_config:
                 lines = west_config.readlines()
                 for i, line in enumerate(lines):
                     # Parse out the number of maximum iterations
-                    if 'max_total_iterations' in line:
-                        max_iters = [int(i) for i in line.replace(':', ' ').replace('\n', ' ').split() if i.isdigit()]
+                    if "max_total_iterations" in line:
+                        max_iters = [
+                            int(i)
+                            for i in line.replace(":", " ").replace("\n", " ").split()
+                            if i.isdigit()
+                        ]
                         new_max_iters = max_iters[0] + self.extension_iters
                         new_line = f"{line.split(':')[0]}: {new_max_iters}\n"
                         lines[i] = new_line
                         break
 
-        with open(self.restart_file, 'w') as fp:
+        with open(self.restart_file, "w") as fp:
             json.dump(restart_state, fp)
 
         log.info("First WE extension run ready!")
@@ -315,11 +342,15 @@ class RestartDriver(HAMSMDriver):
         #   I remain skeptical there's not something weird under the hood that isn't being addressed correctly with
         #   regard to state, but if it works, it's good enough for now..
         westpa.rc.sim_manager.segments = None
-        shutil.copy(f'restart0/run{run_number}/west.h5', self.data_manager.we_h5filename)
+        shutil.copy(
+            f"restart0/run{run_number}/west.h5", self.data_manager.we_h5filename
+        )
         self.data_manager.open_backing()
 
         log.debug(f"Sim manager thought n_iter was {westpa.rc.sim_manager.n_iter}")
-        log.debug(f"Data manager thought current_iteration was {self.data_manager.current_iteration}")
+        log.debug(
+            f"Data manager thought current_iteration was {self.data_manager.current_iteration}"
+        )
         log.debug(f"{self.sim_manager} vs {westpa.rc.sim_manager}")
 
         if run_number == 1:
@@ -332,25 +363,36 @@ class RestartDriver(HAMSMDriver):
 
         model = self.model
 
-        log.info("Producing flux-profile, pseudocommittor, and target flux comparison plots.")
+        log.info(
+            "Producing flux-profile, pseudocommittor, and target flux comparison plots."
+        )
         flux_pcoord_fig, flux_pcoord_ax = plt.subplots()
         model.plot_flux(ax=flux_pcoord_ax, suppress_validation=True)
-        flux_pcoord_fig.text(x=0.1, y=-0.05, s='This flux profile should become flatter after restarting', fontsize=12)
+        flux_pcoord_fig.text(
+            x=0.1,
+            y=-0.05,
+            s="This flux profile should become flatter after restarting",
+            fontsize=12,
+        )
         flux_pcoord_ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
-        flux_pcoord_fig.savefig(f'{restart_directory}/flux_plot.pdf', bbox_inches="tight")
+        flux_pcoord_fig.savefig(
+            f"{restart_directory}/flux_plot.pdf", bbox_inches="tight"
+        )
 
         flux_pseudocomm_fig, flux_pseudocomm_ax = plt.subplots()
         model.plot_flux_committor(ax=flux_pseudocomm_ax, suppress_validation=True)
         flux_pseudocomm_fig.text(
             x=0.1,
             y=-0.05,
-            s='This flux profile should become flatter after restarting.'
+            s="This flux profile should become flatter after restarting."
             '\nThe x-axis is a "pseudo"committor, since it may be '
-            'calculated from WE trajectories in the one-way ensemble.',
+            "calculated from WE trajectories in the one-way ensemble.",
             fontsize=12,
         )
         flux_pseudocomm_ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
-        flux_pseudocomm_fig.savefig(f'{restart_directory}/pseudocomm-flux_plot.pdf', bbox_inches="tight")
+        flux_pseudocomm_fig.savefig(
+            f"{restart_directory}/pseudocomm-flux_plot.pdf", bbox_inches="tight"
+        )
 
         flux_comparison_fig, flux_comparison_ax = plt.subplots(figsize=(7, 3))
         # Get haMSM flux estimates
@@ -362,8 +404,10 @@ class RestartDriver(HAMSMDriver):
         for _model in models:
             flux_estimates.append(_model.JtargetSS)
 
-        hamsm_flux_colors = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
-        direct_flux_colors = iter(plt.cm.cool(np.linspace(0.2, 0.8, len(model.fileList))))
+        hamsm_flux_colors = iter(plt.rcParams["axes.prop_cycle"].by_key()["color"])
+        direct_flux_colors = iter(
+            plt.cm.cool(np.linspace(0.2, 0.8, len(model.fileList)))
+        )
 
         # Get WE direct flux estimate
         for _file in model.fileList:
@@ -385,12 +429,15 @@ class RestartDriver(HAMSMDriver):
             flux_comparison_ax.axhline(
                 target_flux,
                 color=next(direct_flux_colors),
-                label=f"Last iter WE direct {target_flux:.2e}" f"\n  ({short_filename})",
-                linestyle='--',
+                label=f"Last iter WE direct {target_flux:.2e}"
+                f"\n  ({short_filename})",
+                linestyle="--",
             )
 
         flux_comparison_ax.axhline(
-            flux_estimates[0], label=f"Main model estimate\n  {flux_estimates[0]:.2e}", color=next(hamsm_flux_colors)
+            flux_estimates[0],
+            label=f"Main model estimate\n  {flux_estimates[0]:.2e}",
+            color=next(hamsm_flux_colors),
         )
         for i in range(1, n_validation_models + 1):
             flux_comparison_ax.axhline(
@@ -399,12 +446,15 @@ class RestartDriver(HAMSMDriver):
                 color=next(hamsm_flux_colors),
             )
 
-        flux_comparison_ax.legend(bbox_to_anchor=(1.01, 0.9), loc='upper left')
-        flux_comparison_ax.set_yscale('log')
-        flux_comparison_ax.set_ylabel('Flux')
+        flux_comparison_ax.legend(bbox_to_anchor=(1.01, 0.9), loc="upper left")
+        flux_comparison_ax.set_yscale("log")
+        flux_comparison_ax.set_ylabel("Flux")
         flux_comparison_ax.set_xticks([])
         flux_comparison_fig.tight_layout()
-        flux_comparison_fig.savefig(f'{restart_directory}/hamsm_vs_direct_flux_comparison_plot.pdf', bbox_inches="tight")
+        flux_comparison_fig.savefig(
+            f"{restart_directory}/hamsm_vs_direct_flux_comparison_plot.pdf",
+            bbox_inches="tight",
+        )
 
     def prepare_new_we(self):
         """
@@ -430,13 +480,12 @@ class RestartDriver(HAMSMDriver):
             6. Potentially some renormalization?
 
             7. Start new WE simulation
-            
+
         TODO
         ----
         Replace all manual path-building with pathlib
 
         """
-
 
         # Do nothing if it's not the final iteration
         if not self.is_last_iteration:
@@ -445,18 +494,18 @@ class RestartDriver(HAMSMDriver):
 
         log.debug("Final iteration, preparing restart")
 
-        restart_state = {'restarts_completed': 0, 'runs_completed': 0}
+        restart_state = {"restarts_completed": 0, "runs_completed": 0}
 
         # Check for the existence of the extension lockfile here
         doing_extension = os.path.exists(EXTENSION_LOCKFILE)
 
         # Look for a restart.dat file to get the current state (how many restarts have been performed already)
         if os.path.exists(self.restart_file):
-            with open(self.restart_file, 'r') as fp:
+            with open(self.restart_file, "r") as fp:
                 restart_state = json.load(fp)
 
         # This is the final iteration of a run, so mark this run as completed
-        restart_state['runs_completed'] += 1
+        restart_state["runs_completed"] += 1
 
         # Make the folder to store data for this marathon
         restart_directory = f"restart{restart_state['restarts_completed']}"
@@ -467,12 +516,12 @@ class RestartDriver(HAMSMDriver):
         # Write coordinates to h5
         # prepare_coordinates(self.plugin_config, self.data_manager.we_h5file, self.data_manager.we_h5filename)
 
-        for data_folder in ['traj_segs', 'seg_logs']:
+        for data_folder in ["traj_segs", "seg_logs"]:
             old_path = data_folder
 
             # If you're doing an extension, this will be a symlink. So no need to copy, just unlink it and move on
             if doing_extension and os.path.islink(old_path):
-                log.debug('Unlinking symlink')
+                log.debug("Unlinking symlink")
                 os.unlink(old_path)
                 os.mkdir(old_path)
                 continue
@@ -488,13 +537,16 @@ class RestartDriver(HAMSMDriver):
             try:
                 os.rename(old_path, new_path)
             except FileNotFoundError:
-                log.warning(f"Folder {old_path} was not found." "This may be normal, but check your configuration.")
+                log.warning(
+                    f"Folder {old_path} was not found."
+                    "This may be normal, but check your configuration."
+                )
             else:
                 # Make a new data folder for the next run
                 os.mkdir(old_path)
 
-        last_run = restart_state['runs_completed'] >= self.n_runs
-        last_restart = restart_state['restarts_completed'] >= self.n_restarts
+        last_run = restart_state["runs_completed"] >= self.n_runs
+        last_restart = restart_state["restarts_completed"] >= self.n_restarts
 
         # We've just finished a run. Let's check if we have to do any more runs in this marathon before doing a restart.
         #   In the case of n_runs == 1, then we're just doing a single run and restarting it every so often.
@@ -525,35 +577,38 @@ class RestartDriver(HAMSMDriver):
             # Basis and target states are unchanged. Can I get the original parameters passed to w_init?
             # Ideally, I should be able to call w_init with the exact same parameters that went to it the first time
             initialization_state = {
-                'tstate_file': None,
-                'bstate_file': None,
-                'sstate_file': None,
-                'tstates': None,
-                'bstates': None,
-                'sstates': None,
-                'segs_per_state': None,
+                "tstate_file": None,
+                "bstate_file": None,
+                "sstate_file": None,
+                "tstates": None,
+                "bstates": None,
+                "sstates": None,
+                "segs_per_state": None,
             }
 
             # TODO: Implement this, and get rid of the initialization_file usage right below. Placeholder for now.
-            if restart_state['runs_completed'] == 1:
+            if restart_state["runs_completed"] == 1:
 
                 # Get and write basis, target, start states and segs per state for this marathon to disk
                 pass
 
             # Save the WESTPA h5 data from this run
             self.data_manager.finalize_run()
-            shutil.copyfile('west.h5', f"{run_directory}/west.h5")
+            shutil.copyfile("west.h5", f"{run_directory}/west.h5")
 
             # If this is a regular, fresh run (not an extension)
             if not doing_extension:
                 if os.path.exists(self.initialization_file):
-                    with open(self.initialization_file, 'r') as fp:
+                    with open(self.initialization_file, "r") as fp:
                         initialization_dict = json.load(fp)
-                        initialization_dict = fix_deprecated_initialization(initialization_dict)
+                        initialization_dict = fix_deprecated_initialization(
+                            initialization_dict
+                        )
                         initialization_state.update(initialization_dict)
                 else:
                     raise Exception(
-                        "No initialization JSON file provided -- " "I don't know how to start new runs in this marathon."
+                        "No initialization JSON file provided -- "
+                        "I don't know how to start new runs in this marathon."
                     )
 
                 westpa.rc.pstatus(
@@ -566,7 +621,7 @@ class RestartDriver(HAMSMDriver):
                 westpa.rc.pstatus(
                     f"\nRun: \n\t w_init --tstate-file {initialization_state['tstate_file']} "
                     + f"--bstate-file {initialization_state['bstate_file']} "
-                    f"--sstate-file {initialization_state['sstate_file']} " 
+                    f"--sstate-file {initialization_state['sstate_file']} "
                     f"--segs-per-state {initialization_state['segs_per_state']}\n"
                 )
 
@@ -575,7 +630,7 @@ class RestartDriver(HAMSMDriver):
                     shotgun=False,
                 )
 
-                with open(self.restart_file, 'w') as fp:
+                with open(self.restart_file, "w") as fp:
                     json.dump(restart_state, fp)
 
                 log.info("New WE run ready!")
@@ -591,10 +646,15 @@ class RestartDriver(HAMSMDriver):
             #   Instead of w_initting a new iteration, copy the files from restart0/runXX back into ./
             elif doing_extension:
 
-                self.prepare_extension_run(run_number=restart_state['runs_completed'] + 1, restart_state=restart_state)
+                self.prepare_extension_run(
+                    run_number=restart_state["runs_completed"] + 1,
+                    restart_state=restart_state,
+                )
                 return
 
-        log.debug(f"{restart_state['restarts_completed']}/{self.n_restarts} restarts completed")
+        log.debug(
+            f"{restart_state['restarts_completed']}/{self.n_restarts} restarts completed"
+        )
 
         # Build the haMSM
         log.debug("Initializing haMSM")
@@ -602,7 +662,9 @@ class RestartDriver(HAMSMDriver):
         # Need to write the h5 file and close it out, but I need to get the current bstates first.
         original_bstates = self.sim_manager.current_iter_bstates
         if original_bstates is None:
-            original_bstates = self.data_manager.get_basis_states(self.sim_manager.n_iter - 1)
+            original_bstates = self.data_manager.get_basis_states(
+                self.sim_manager.n_iter - 1
+            )
 
         assert original_bstates is not None, "Bstates are none in the current iteration"
 
@@ -623,28 +685,32 @@ class RestartDriver(HAMSMDriver):
 
         # If set to -1, use all restarts
         if self.restarts_to_use == -1:
-            last_N_restarts = 1 + restart_state['restarts_completed']
+            last_N_restarts = 1 + restart_state["restarts_completed"]
         # If this is an integer, use the last N restarts
         elif self.restarts_to_use >= 1:
             last_N_restarts = self.restarts_to_use
         # If it's a decimal between 0 and 1, use it as a fraction
         # At restart 1, and a fraction of 0.5, this should just use restart 1
         elif 0 < self.restarts_to_use < 1:
-            last_N_restarts = int(self.restarts_to_use * (1 + restart_state['restarts_completed']))
+            last_N_restarts = int(
+                self.restarts_to_use * (1 + restart_state["restarts_completed"])
+            )
 
             # If this fraction is <1, use all until it's not
             if last_N_restarts < 1:
-                last_N_restarts = 1 + restart_state['restarts_completed']
+                last_N_restarts = 1 + restart_state["restarts_completed"]
 
         log.debug(f"Last N is {last_N_restarts}")
-        first_restart = max(1 + restart_state['restarts_completed'] - last_N_restarts, 0)
-        usable_restarts = range(first_restart, 1 + restart_state['restarts_completed'])
+        first_restart = max(
+            1 + restart_state["restarts_completed"] - last_N_restarts, 0
+        )
+        usable_restarts = range(first_restart, 1 + restart_state["restarts_completed"])
 
         log.info(
             f"At restart {restart_state['restarts_completed']}, building haMSM using data from restarts {list(usable_restarts)}"
         )
         for restart_number in usable_restarts:
-            for run_number in range(1, 1 + restart_state['runs_completed']):
+            for run_number in range(1, 1 + restart_state["runs_completed"]):
 
                 west_file_path = f"restart{restart_number}/run{run_number}/west.h5"
                 marathon_west_files.append(west_file_path)
@@ -653,7 +719,7 @@ class RestartDriver(HAMSMDriver):
 
         #
         # If this is the first restart, check to see if you got any target state flux
-        if restart_state['restarts_completed'] == 0:
+        if restart_state["restarts_completed"] == 0:
             pass
 
             # Check to see if you got any target flux in ANY runs
@@ -675,7 +741,9 @@ class RestartDriver(HAMSMDriver):
                     # Remove the doing_extensions.lck lockfile
                     os.remove(EXTENSION_LOCKFILE)
 
-                    westpa.rc.sim_manager.max_total_iterations = self.base_total_iterations
+                    westpa.rc.sim_manager.max_total_iterations = (
+                        self.base_total_iterations
+                    )
 
                 # Otherwise, just continue as normal
                 pass
@@ -688,13 +756,15 @@ class RestartDriver(HAMSMDriver):
                 # Create the doing_extensions.lck "lockfile" to indicate we're in extend mode (or keep if exists)
                 #   and write the initial number of iterations to it.
                 if not os.path.exists(EXTENSION_LOCKFILE):
-                    with open(EXTENSION_LOCKFILE, 'w') as lockfile:
+                    with open(EXTENSION_LOCKFILE, "w") as lockfile:
                         lockfile.write(str(self.max_total_iterations))
 
                 # Reset runs_completed to 0, and rewrite restart.dat accordingly
-                restart_state['runs_completed'] = 0
+                restart_state["runs_completed"] = 0
 
-                self.prepare_extension_run(run_number=1, restart_state=restart_state, first_extension=True)
+                self.prepare_extension_run(
+                    run_number=1, restart_state=restart_state, first_extension=True
+                )
                 return
 
         log.debug("Building haMSM and computing steady-state")
@@ -711,7 +781,7 @@ class RestartDriver(HAMSMDriver):
         ss_flux = model.JtargetSS
         # model = self.data_manager.model
 
-        log.debug(f'Steady-state distribution: {ss_dist}')
+        log.debug(f"Steady-state distribution: {ss_dist}")
         log.info(f"Target steady-state flux is {ss_flux}")
 
         # Obtain cluster-structures
@@ -724,14 +794,14 @@ class RestartDriver(HAMSMDriver):
             os.makedirs(struct_directory)
 
         flux_filename = f"{restart_directory}/JtargetSS.txt"
-        with open(flux_filename, 'w') as fp:
+        with open(flux_filename, "w") as fp:
 
             log.debug(f"Writing flux to {flux_filename}")
             fp.write(str(model.JtargetSS))
             fp.close()
 
         ss_filename = f"{restart_directory}/pSS.txt"
-        with open(ss_filename, 'w') as fp:
+        with open(ss_filename, "w") as fp:
 
             log.debug(f"Writing pSS to {ss_filename}")
             np.savetxt(fp, model.pSS)
@@ -748,19 +818,23 @@ class RestartDriver(HAMSMDriver):
         log.debug("Writing structures")
         # TODO: Include start states from previous runs
         sstates_filename = f"{restart_directory}/startstates.txt"
-        with open(sstates_filename, 'w') as fp:
+        with open(sstates_filename, "w") as fp:
 
             # Track the total number of segments iterated over
             seg_idx = 0
 
-            log.info(f"Obtaining potential start structures ({len(model.cluster_structures.items())} bins avail)")
+            log.info(
+                f"Obtaining potential start structures ({len(model.cluster_structures.items())} bins avail)"
+            )
 
             # Can use these for sanity checks
             total_weight = 0.0
             total_bin_weights = []
 
             # Loop over each set of (bin index, all the structures in that bin)
-            for (msm_bin_idx, structures) in tqdm.tqdm(model.cluster_structures.items()):
+            for (msm_bin_idx, structures) in tqdm.tqdm(
+                model.cluster_structures.items()
+            ):
 
                 total_bin_weights.append(0)
 
@@ -771,10 +845,14 @@ class RestartDriver(HAMSMDriver):
                 # The per-segment bin probability.
                 # Map a cluster number onto a cluster INDEX, because after cleaning the cluster numbers may no longer
                 # be consecutive.
-                bin_prob = ss_dist[model.cluster_mapping[msm_bin_idx]]  # / len(structures)
+                bin_prob = ss_dist[
+                    model.cluster_mapping[msm_bin_idx]
+                ]  # / len(structures)
 
                 if bin_prob == 0:
-                    log.info(f"MSM-Bin {msm_bin_idx}  has probability 0, so not saving any structs from it.")
+                    log.info(
+                        f"MSM-Bin {msm_bin_idx}  has probability 0, so not saving any structs from it."
+                    )
                     continue
 
                 # The total amount of WE weight in this MSM microbin
@@ -785,18 +863,24 @@ class RestartDriver(HAMSMDriver):
 
                 if self.synd_full_coord_map_path is not None:
                     import hashlib
+
                     # Here, we have a bunch of structures that, if we're using SynD, we need to be able to map back to
                     #   discrete states.
                     # Maybe that's another feature to add to SynD, but in the meantime, we can do the following...
                     # We can't make a dictionary mapping structures to discrete states, because lists and arrays aren't
                     #   hashable. But, we can explicitly hash the structures, then use that.
                     # There's probably a better way of uniquely representing structures, but this will do for now.
-                    self.reverse_coord_map = {hashlib.md5(v).hexdigest(): k for k, v in self.synd_full_coord_map.items()}
+                    self.reverse_coord_map = {
+                        hashlib.md5(v).hexdigest(): k
+                        for k, v in self.synd_full_coord_map.items()
+                    }
 
                 for struct_idx, structure in enumerate(structures):
 
                     # One structure per segment
-                    seg_we_weight = model.cluster_structure_weights[msm_bin_idx][struct_idx]
+                    seg_we_weight = model.cluster_structure_weights[msm_bin_idx][
+                        struct_idx
+                    ]
                     msm_bin_we_weight_tracker += seg_we_weight
 
                     # Structure weights are set according to Algorithm 5.3 in
@@ -807,14 +891,19 @@ class RestartDriver(HAMSMDriver):
                     if self.synd_full_coord_map_path is not None:
                         # If we're using SynD, the basis state isn't a structure but a discrete index.
 
-                        structure_index = self.reverse_coord_map[hashlib.md5(structure).hexdigest()]
-                        fp.write(f'b{msm_bin_idx}_s{struct_idx} {structure_weight} {structure_index}\n')
+                        structure_index = self.reverse_coord_map[
+                            hashlib.md5(structure).hexdigest()
+                        ]
+                        fp.write(
+                            f"b{msm_bin_idx}_s{struct_idx} {structure_weight} {structure_index}\n"
+                        )
                         seg_idx += 1
 
                     else:
 
                         structure_filename = (
-                            f"{struct_directory}/bin{msm_bin_idx}_" f"struct{struct_idx}.{STRUCT_EXTENSIONS[self.struct_filetype]}"
+                            f"{struct_directory}/bin{msm_bin_idx}_"
+                            f"struct{struct_idx}.{STRUCT_EXTENSIONS[self.struct_filetype]}"
                         )
 
                         total_bin_weights[-1] += structure_weight
@@ -832,15 +921,28 @@ class RestartDriver(HAMSMDriver):
 
                         coords = structure * 10  # Correct units
 
-                        with self.struct_filetype(structure_filename, 'w') as struct_file:
+                        with self.struct_filetype(
+                            structure_filename, "w"
+                        ) as struct_file:
 
                             # Write the structure file
                             if self.struct_filetype is md.formats.PDBTrajectoryFile:
-                                struct_file.write(coords, topology, modelIndex=1, unitcell_angles=angles, unitcell_lengths=lengths)
+                                struct_file.write(
+                                    coords,
+                                    topology,
+                                    modelIndex=1,
+                                    unitcell_angles=angles,
+                                    unitcell_lengths=lengths,
+                                )
 
                             elif self.struct_filetype is md.formats.AmberRestartFile:
                                 # AmberRestartFile takes slightly differently named keyword args
-                                struct_file.write(coords, time=None, cell_angles=angles, cell_lengths=lengths)
+                                struct_file.write(
+                                    coords,
+                                    time=None,
+                                    cell_angles=angles,
+                                    cell_lengths=lengths,
+                                )
 
                             else:
                                 # Otherwise, YOLO just hope all the positional arguments are in the right place
@@ -850,11 +952,15 @@ class RestartDriver(HAMSMDriver):
                                     " You should ensure that it takes argument as (coords, topology)"
                                 )
                                 struct_file.write(coords, topology)
-                                raise Exception("Don't know what extension to use for this filetype")
+                                raise Exception(
+                                    "Don't know what extension to use for this filetype"
+                                )
 
                         # Add this start-state to the start-states file
                         # This path is relative to WEST_SIM_ROOT
-                        fp.write(f'b{msm_bin_idx}_s{struct_idx} {structure_weight} {structure_filename}\n')
+                        fp.write(
+                            f"b{msm_bin_idx}_s{struct_idx} {structure_weight} {structure_filename}\n"
+                        )
                         seg_idx += 1
 
                 # log.info(f"WE weight ({msm_bin_we_weight_tracker:.5e} / {msm_bin_we_weight:.5e})")
@@ -886,7 +992,7 @@ class RestartDriver(HAMSMDriver):
             bstates_str += bstate_str
 
         bstates_filename = f"{restart_directory}/basisstates.txt"
-        with open(bstates_filename, 'w') as fp:
+        with open(bstates_filename, "w") as fp:
             fp.write(bstates_str)
 
         tstates_str = ""
@@ -898,7 +1004,7 @@ class RestartDriver(HAMSMDriver):
             tstate_str = f"{orig_tstate_label} {orig_tstate_pcoord}\n"
             tstates_str += tstate_str
         tstates_filename = f"{restart_directory}/targetstates.txt"
-        with open(tstates_filename, 'w') as fp:
+        with open(tstates_filename, "w") as fp:
             fp.write(tstates_str)
 
         # Pickle the model
@@ -921,10 +1027,10 @@ class RestartDriver(HAMSMDriver):
             return
 
         # Update restart_file file
-        restart_state['restarts_completed'] += 1
+        restart_state["restarts_completed"] += 1
         # If we're doing a restart, then reset the number of completed runs to 0 for the next marathon.
-        restart_state['runs_completed'] = 0
-        with open(self.restart_file, 'w') as fp:
+        restart_state["runs_completed"] = 0
+        with open(self.restart_file, "w") as fp:
             json.dump(restart_state, fp)
 
         log.info("Initializing new run")
@@ -934,20 +1040,22 @@ class RestartDriver(HAMSMDriver):
 
         old_initialization_path = self.initialization_file
         new_initialization_path = f"{restart_directory}/{self.initialization_file}"
-        log.debug(f"Moving initialization file from {old_initialization_path} to {new_initialization_path}.")
+        log.debug(
+            f"Moving initialization file from {old_initialization_path} to {new_initialization_path}."
+        )
         shutil.move(old_initialization_path, new_initialization_path)
 
         initialization_state = {
-            'tstate_file': tstates_filename,
-            'bstate_file': bstates_filename,
-            'sstate_file': sstates_filename,
-            'tstates': None,
-            'bstates': None,
-            'sstates': None,
-            'segs_per_state': segs_per_state,
+            "tstate_file": tstates_filename,
+            "bstate_file": bstates_filename,
+            "sstate_file": sstates_filename,
+            "tstates": None,
+            "bstates": None,
+            "sstates": None,
+            "segs_per_state": segs_per_state,
         }
 
-        with open(self.initialization_file, 'w') as fp:
+        with open(self.initialization_file, "w") as fp:
             json.dump(initialization_state, fp)
 
         westpa.rc.pstatus(
@@ -964,6 +1072,8 @@ class RestartDriver(HAMSMDriver):
         w_init.initialize(**initialization_state, shotgun=False)
 
         log.info("New WE run ready!")
-        westpa.rc.pstatus(f"\n\n===== Restart {restart_state['restarts_completed']} running =====\n")
+        westpa.rc.pstatus(
+            f"\n\n===== Restart {restart_state['restarts_completed']} running =====\n"
+        )
 
         w_run.run_simulation()

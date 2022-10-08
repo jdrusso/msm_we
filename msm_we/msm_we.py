@@ -1,5 +1,6 @@
 """haMSM estimation and analysis"""
 from __future__ import division, print_function
+
 __metaclass__ = type
 
 import numpy as np
@@ -36,7 +37,7 @@ class modelWE(
     PlottingMixin,
     AnalysisMixin,
     DataMixin,
-    FluxMatrixMixin
+    FluxMatrixMixin,
 ):
     """
     History-augmented Markov state model estimation from WE data

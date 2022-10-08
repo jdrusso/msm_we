@@ -193,21 +193,37 @@ class Interval:
         if (self.n_variables == 1) and (len_shape == 1):  # single 1D interval
             return self.interval_set[0] <= item < self.interval_set[1]
 
-        elif (self.n_variables == 1) and (len_shape == 2):  # union of multiple 1D intervals
-            return any([(item in Interval(self.interval_set[i], 1)) for i in range(shape[0])])
+        elif (self.n_variables == 1) and (
+            len_shape == 2
+        ):  # union of multiple 1D intervals
+            return any(
+                [(item in Interval(self.interval_set[i], 1)) for i in range(shape[0])]
+            )
 
         elif (self.n_variables > 1) and len_shape == 2:  # n-dimensional interval
-            return all([(item[i] in Interval(self.interval_set[i], 1)) for i in range(shape[0])])
+            return all(
+                [
+                    (item[i] in Interval(self.interval_set[i], 1))
+                    for i in range(shape[0])
+                ]
+            )
 
         elif len(shape) == 3:  # union of n-dimensional intervals
-            return any([(item in Interval(self.interval_set[i], self.n_variables)) for i in range(shape[0])])
+            return any(
+                [
+                    (item in Interval(self.interval_set[i], self.n_variables))
+                    for i in range(shape[0])
+                ]
+            )
         else:
             raise Exception("The given interval has not the expected shape")
 
 
 def reverse_sort_lists(list_1, list_2):
     """Reverse sorting two list based on the first one"""
-    list_1_sorted, list_2_sorted = zip(*sorted(zip(list_1, list_2), key=operator.itemgetter(0), reverse=True))
+    list_1_sorted, list_2_sorted = zip(
+        *sorted(zip(list_1, list_2), key=operator.itemgetter(0), reverse=True)
+    )
     return list_1_sorted, list_2_sorted
 
 
@@ -321,10 +337,10 @@ def random_markov_matrix(n_states=5, seed=None):
 def check_tmatrix(t_matrix, accept_null_rows=True):
     """Check if the given matrix is actually a row-stochastic transition matrix
 
-     i.e, all the elements are non-negative and the rows add to one.
-        If the keyword argument accept_null_rows is True, is going
-        to accept rows where all the elements are zero. Those "problematic"
-        states are going to be removed later if necessary by clean_tmatrix.
+    i.e, all the elements are non-negative and the rows add to one.
+       If the keyword argument accept_null_rows is True, is going
+       to accept rows where all the elements are zero. Those "problematic"
+       states are going to be removed later if necessary by clean_tmatrix.
     """
 
     def value_error():
@@ -369,7 +385,9 @@ def clean_tmatrix(transition_matrix, rm_absorbing=True):
             t_matrix = np.delete(t_matrix, index, axis=0)
             removed_states.append(index)
         elif t_matrix[index, index] == 1.0:  # absorbing state
-            if not all([t_matrix[index, j] == 0.0 for j in range(n_states) if j != index]):
+            if not all(
+                [t_matrix[index, j] == 0.0 for j in range(n_states) if j != index]
+            ):
                 raise ValueError(
                     "The sum of the elements in a row of the \
                     transition matrix must be one"
@@ -413,7 +431,9 @@ def pops_from_tmatrix(transition_matrix):
     new_n_states = n_states - len(removed_states)
 
     ss_solution = np.zeros(new_n_states)  # steady-state solution
-    for is_close_to_one, is_real, eigv in zip(eig_vals_close_to_one, real_eig_vecs, eig_vecs):
+    for is_close_to_one, is_real, eigv in zip(
+        eig_vals_close_to_one, real_eig_vecs, eig_vecs
+    ):
         if (
             is_close_to_one
             and is_real
@@ -448,7 +468,10 @@ def pops_from_nm_tmatrix(transition_matrix):
     size = len(transition_matrix)
 
     if size % 2 != 0:
-        raise ValueError("The non-Markovian transition matrix has to " "have an even number of columns/rows")
+        raise ValueError(
+            "The non-Markovian transition matrix has to "
+            "have an even number of columns/rows"
+        )
 
     n_states = size // 2  # Real/physical microstates
 

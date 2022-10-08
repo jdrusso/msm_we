@@ -562,11 +562,9 @@ class AnalysisMixin:
             self.qm = q
         self.q = q.copy()
 
-
     @staticmethod
     def print_pseudocommittor_warning():
         log.warning(
             "Note that, if steady-state weighted ensemble data is being analyzed, this is a 'pseudocommittor' "
             "and not a true committor as a result of being constructed from a one-way ensemble."
         )
-        
