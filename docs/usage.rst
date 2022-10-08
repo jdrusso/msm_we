@@ -56,7 +56,7 @@ Model building and preparation
         msm_we.modelWE.processCoordinates = processCoordinates
 
 
-    It's important to do this monkey-patching at the module level, i.e. on the :class:`msm_we.msm_we.modelWE`
+    It's important to do this monkey-patching at the module level, i.e. on the :class:`msm_we.modelWE`
     class itself, rather than on an instance of the class.
 
 4. Create the model object.
@@ -179,7 +179,7 @@ Analysis
     This is because it uses the flux estimate as a convergence criterion.
     If the flux is 0, then it's not meaningful to  look at convergence of 0, so it'll just run
     for the maximum number of iterations. You can specify :code:`max_iters=1` to avoid unnecessary
-    iteration, or you can use :meth:`~msm_we.msm_we.modelWE.get_steady_state_algebraic`.
+    iteration, or you can use :meth:`~msm_we.modelWE.get_steady_state_algebraic`.
 
 12. Update cluster structures
 
@@ -226,12 +226,12 @@ running on the same node as the Ray head.
 Model-building, in one command
 ------------------------------------
 
-The above steps are all wrapped in a single call by :meth:`~msm_we.msm_we.modelWE.build_analyze_model`,
+The above steps are all wrapped in a single call by :meth:`~msm_we.modelWE.build_analyze_model`,
 which can be called like
 
 .. code-block:: python
 
-    from msm_we.msm_we import modelWE
+    from msm_we import modelWE
 
     model = modelWE()
 
@@ -248,8 +248,8 @@ which can be called like
 This performs all the steps manually outlined above, up to flux calculation.
 Additionally, this can split up your data to do block validation.
 
-Most arguments to :meth:`~msm_we.msm_we.modelWE.initialize` can also be passed to
-:meth:`~msm_we.msm_we.modelWE.build_analyze_model`.
+Most arguments to :meth:`~msm_we.modelWE.initialize` can also be passed to
+:meth:`~msm_we.modelWE.build_analyze_model`.
 
 See the documentation for additional arguments that can be passed.
 
