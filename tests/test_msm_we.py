@@ -322,7 +322,6 @@ def test_streaming_stratified_clustering(
 
     loaded_model.dimReduce()
 
-    assert loaded_model.pre_discretization_model.fileList == [os.path.join(BASE_PATH, 'reference/1000ns_ntl9/west.h5')]
     assert loaded_model.fileList == [os.path.join(BASE_PATH, 'reference/1000ns_ntl9/west.h5')]
 
     # Do the clustering
