@@ -184,6 +184,10 @@ class RestartDriver(HAMSMDriver):
         self.n_restarts = plugin_config.get("n_restarts", -1)
         self.n_runs = plugin_config.get("n_runs", 1)
 
+        # May want to be able to disable this, if it causes issues with recalculating new pcoords
+        #   (i.e. during optimization)
+        self.cache_pcoords = plugin_config.get("cache_pcoords", True)
+
         # .get() might return this as a bool anyways, but be safe
         self.debug = bool(plugin_config.get("debug", False))
         if self.debug:
@@ -879,7 +883,7 @@ class RestartDriver(HAMSMDriver):
 
         # Obtain cluster-structures
         log.debug("Obtaining cluster-structures")
-        model.update_cluster_structures(build_pcoord_cache=True)
+        model.update_cluster_structures(build_pcoord_cache=self.cache_pcoords)
 
         # TODO: Do this with pathlib
         struct_directory = f"{restart_directory}/structs"
