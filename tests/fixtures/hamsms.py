@@ -6,7 +6,8 @@ import bz2
 import _pickle as cPickle
 import ray
 
-BASE_PATH = os.path.dirname(__file__)
+# This will point to tests/
+BASE_PATH = os.path.dirname(__file__) + "/../"
 
 
 @pytest.fixture
@@ -55,7 +56,7 @@ def completed_model():
 
 
 @pytest.fixture
-def modelParams():
+def model_params():
     """
     Store some parameters about the reference model
     """
@@ -112,8 +113,6 @@ def ref_cluster_structures():
     return np.load(path, allow_pickle=True)
 
 
-
-
 def load_model(relative_path, regenerate_coords=False, compressed=False):
 
     path = os.path.join(BASE_PATH, relative_path)
@@ -148,7 +147,7 @@ def load_model(relative_path, regenerate_coords=False, compressed=False):
     return model
 
 
-@pytest.fixture()
+@pytest.fixture(scope='session')
 def ray_cluster():
     ray.init()
     yield None
