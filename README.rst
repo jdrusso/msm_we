@@ -8,6 +8,9 @@ msm_we
 .. image:: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml/badge.svg
         :target: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml
 
+.. image:: https://badge.fury.io/py/msm_we.svg
+        :target: https://badge.fury.io/py/msm_we
+
 * Authors: John Russo, Jeremy Copperman
 * Free software: MIT license
 * Documentation: https://msm-we.readthedocs.io .
