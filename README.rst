@@ -1,12 +1,15 @@
 ======
 msm_we
 ======
-..
-        .. image:: https://github.com/jdrusso/msm_we/actions/workflows/run_tests.yml/badge.svg
-                :target: https://github.com/jdrusso/msm_we/actions/workflows/run_tests.yml
+
+.. image:: https://github.com/jdrusso/msm_we/actions/workflows/mamba-test.yml/badge.svg
+        :target: https://github.com/jdrusso/msm_we/actions/workflows/mamba-test.yml
 
 .. image:: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml/badge.svg
         :target: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml
+
+.. image:: https://badge.fury.io/py/msm_we.svg
+        :target: https://badge.fury.io/py/msm_we
 
 * Authors: John Russo, Jeremy Copperman
 * Free software: MIT license
