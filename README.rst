@@ -10,6 +10,9 @@ msm_we
 
 .. image:: https://badge.fury.io/py/msm_we.svg
         :target: https://badge.fury.io/py/msm_we
+        
+.. image:: https://codecov.io/github/jdrusso/msm_we/branch/main/graph/badge.svg?token=BGVJ3BY6S2 
+        :target: https://codecov.io/github/jdrusso/msm_we
 
 * Authors: John Russo, Jeremy Copperman
 * Free software: MIT license
