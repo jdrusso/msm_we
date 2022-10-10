@@ -1393,6 +1393,7 @@ class ClusteringMixin:
         # Move this elsewhere, WE segment weights are useful to have outside of this
         all_seg_weights = np.full(int(sum(self.numSegments)), fill_value=None)
 
+        pcoord_cache = None
         if build_pcoord_cache:
             pcoord_cache = {}
 
