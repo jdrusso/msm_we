@@ -698,11 +698,7 @@ class RestartDriver(HAMSMDriver):
                 )
 
                 self.init_we(initialization_state, self.pcoord_cache)
-                # w_init.initialize(
-                #     **initialization_state,
-                #     shotgun=False,
-                # )
-                #
+
                 with open(self.restart_file, "w") as fp:
                     json.dump(restart_state, fp)
 
@@ -863,6 +859,7 @@ class RestartDriver(HAMSMDriver):
         # Obtain cluster-structures
         log.debug("Obtaining cluster-structures")
         model.update_cluster_structures(build_pcoord_cache=self.cache_pcoords)
+        self.pcoord_cache = deepcopy(model.pcoord_cache)
 
         # TODO: Do this with pathlib
         struct_directory = f"{restart_directory}/structs"
@@ -1055,7 +1052,7 @@ class RestartDriver(HAMSMDriver):
             #     f"\n\t pSS (+target, no basis) sum: {sum(model.pSS[:-2]) + model.pSS[-1]}"
             # )
 
-        ### Start the new simulation
+        # ## Start the new simulation
 
         bstates_str = ""
         for original_bstate in original_bstates:
@@ -1147,9 +1144,7 @@ class RestartDriver(HAMSMDriver):
         )
         log.critical(f"Calling init_we with model {model}")
 
-        self.pcoord_cache = deepcopy(model.pcoord_cache)
         self.init_we(initialization_state, self.pcoord_cache)
-        # w_init.initialize(**initialization_state, shotgun=False)
 
         log.info("New WE run ready!")
         westpa.rc.pstatus(
