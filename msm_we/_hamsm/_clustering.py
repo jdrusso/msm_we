@@ -1384,6 +1384,10 @@ class ClusteringMixin:
         total_num_iterations = self.maxIter
         # Don't include the last iteration, where dynamics didn't run
         for _iter in range(1, total_num_iterations - 1):
+
+            if _iter not in self.seg_weights.keys():
+                self.load_iter_data(_iter)
+
             iter_weights = self.seg_weights[_iter]
 
             # This is an array, not a dict, so index by... well, index, and not iter_number

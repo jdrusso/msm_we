@@ -71,9 +71,10 @@ class modelWE(
         # TODO: In general, it's not clear if this needs to be strictly 1...
         #  However, oversubscribing causes very difficult to diagnose problems
         #  (like hanging during clustering / k-means fitting), and 1 seems to be safe.
-        assert (
-            _openmp_effective_n_threads() == 1
-        ), "Set $OMP_NUM_THREADS=1 for proper msm-we functionality"
+        if not _openmp_effective_n_threads() == 1:
+            log.critical("Set $OMP_NUM_THREADS=1 for proper msm-we functionality! "
+                         "Other values may cause strange problems such as silent hanging during "
+                         "discretization or ray-parallel steps.")
 
         self.modelName = None
         """str: Name used for storing files"""
