@@ -2,7 +2,8 @@
 msm_we
 ======
 
-[![Tests](https://github.com/jdrusso/msm_we/actions/workflows/mamba-test.yml/badge.svg?branch=main&event=push)](https://github.com/jdrusso/msm_we/actions/workflows/mamba-test.yml)
+.. image:: https://github.com/jdrusso/msm_we/actions/workflows/mamba-test.yml/badge.svg?branch=main&event=push
+        :target: https://github.com/jdrusso/msm_we/actions/workflows/mamba-test.yml
 
 .. image:: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml/badge.svg
         :target: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml
