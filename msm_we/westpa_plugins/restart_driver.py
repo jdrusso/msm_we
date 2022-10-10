@@ -231,6 +231,7 @@ class RestartDriver(HAMSMDriver):
         )
 
         self.pcoord_cache = None
+        self.model = None
 
     def get_original_bins(self):
         """
@@ -843,7 +844,6 @@ class RestartDriver(HAMSMDriver):
         # Wipe out the old pcoord cache
         self.pcoord_cache = None
 
-        # TODO: Why can't I retrieve this off self.data_manager?
         self.model = self.construct_hamsm()
         model = self.model
         westpa.rc.pstatus(f"Getting built haMSM from {self.data_manager}")
