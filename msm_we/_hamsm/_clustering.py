@@ -25,6 +25,14 @@ class ClusteringMixin:
     clusterFile = None
     use_weights_in_clustering = False
 
+    targetRMSD_centers = None
+    targetRMSD_minmax = None
+    targetRMSD_all = None
+
+    pcoord_cache = None
+    cluster_structures = None
+    cluster_structure_weights = None
+
     def do_clustering(self, arg):
 
         kmeans_model, iters_to_use, cluster_args, processCoordinates = arg
@@ -1357,9 +1365,15 @@ class ClusteringMixin:
 
         return closest
 
-    def update_cluster_structures(self):
+    def update_cluster_structures(self, build_pcoord_cache=False):
         """
         Find structures (i.e. sets of coordinates) corresponding to each clusters.
+
+        Parameters
+        ----------
+        build_pcoord_cache: bool
+            If True, builds self.pcoord_cache, which has elements [cluster_idx][seg_idx] holding the pcoord for
+            the seg_idx'th segment in MSM cluster cluster_idx.
 
         Returns
         -------
@@ -1378,6 +1392,9 @@ class ClusteringMixin:
 
         # Move this elsewhere, WE segment weights are useful to have outside of this
         all_seg_weights = np.full(int(sum(self.numSegments)), fill_value=None)
+
+        if build_pcoord_cache:
+            pcoord_cache = {}
 
         i = 0
         # total_num_iterations = len(self.numSegments)
@@ -1406,6 +1423,7 @@ class ClusteringMixin:
 
         # Assign each segment to a cluster by iterating over coords
         # Track the "absolute" segment index because all_seg_weights is a flat list
+        # NOTE: This is *NOT* the within-iteration index, this is an absolute index.
         seg_idx = 0
         for iteration in range(1, total_num_iterations - 1):
 
@@ -1439,9 +1457,15 @@ class ClusteringMixin:
                     cluster_structures[cluster_idx] = []
                     cluster_structure_weights[cluster_idx] = []
 
+
+
                 seg_coords = iter_coords[_seg]
                 cluster_structures[cluster_idx].append(seg_coords)
                 cluster_structure_weights[cluster_idx].append(all_seg_weights[seg_idx])
+
+                if build_pcoord_cache:
+                    cluster_cache = pcoord_cache.setdefault(cluster_idx, [])
+                    cluster_cache.append(self.pcoord1List[_seg])
 
                 seg_idx += 1
 
@@ -1456,6 +1480,7 @@ class ClusteringMixin:
 
         self.cluster_structures = cluster_structures
         self.cluster_structure_weights = cluster_structure_weights
+        self.pcoord_cache = pcoord_cache
 
         log.debug("Cluster structure mapping completed.")
         log.debug(f"Cluster keys are {cluster_structures.keys()}")
