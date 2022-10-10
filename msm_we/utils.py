@@ -15,6 +15,8 @@ import scipy.sparse as sparse
 import scipy.sparse.csgraph as csgraph
 from scipy.sparse.sputils import isdense
 
+from ._logging import log
+
 
 def find_connected_sets(C, directed=True):
     r"""
