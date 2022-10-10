@@ -7,6 +7,7 @@ from deeptime.decomposition import TICA, VAMP
 from msm_we._logging import log
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from msm_we import modelWE
 
@@ -31,7 +32,7 @@ class DimensionalityReductionMixin:
         def transform(self, coords):
             return coords
 
-    def reduceCoordinates(self: 'modelWE', coords):
+    def reduceCoordinates(self: "modelWE", coords):
         """
         This performs the dimensionality reduction.
 
@@ -68,7 +69,7 @@ class DimensionalityReductionMixin:
 
         raise Exception("dimReduceMethod undefined in reduceCoordinates")
 
-    def do_pca(self: 'modelWE', arg):
+    def do_pca(self: "modelWE", arg):
         rough_pca, iteration, processCoordinates = arg
         iter_coords = self.get_iter_coordinates(iteration)
 
@@ -83,7 +84,7 @@ class DimensionalityReductionMixin:
 
         return rough_pca
 
-    def do_full_pca(self: 'modelWE', arg):
+    def do_full_pca(self: "modelWE", arg):
 
         ipca, iteration, processCoordinates, components_for_var = arg
 
@@ -110,7 +111,7 @@ class DimensionalityReductionMixin:
         return ipca, used_iters
 
     def dimReduce(
-        self: 'modelWE',
+        self: "modelWE",
         first_iter=1,
         first_rough_iter=None,
         last_iter=None,

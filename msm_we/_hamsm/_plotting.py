@@ -3,6 +3,7 @@ import numpy as np
 from msm_we._logging import log
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from msm_we import modelWE
 
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 
 class PlottingMixin:
     def plot_flux_committor_pcoordcolor(
-        self: 'modelWE',
+        self: "modelWE",
         nwin=1,
         ax=None,
         pcoord_to_use=0,
@@ -92,7 +93,7 @@ class PlottingMixin:
         return ax, lines
 
     def plot_flux_committor(
-        self: 'modelWE',
+        self: "modelWE",
         nwin=1,
         ax=None,
         save=False,
@@ -218,7 +219,7 @@ class PlottingMixin:
         return ax
 
     def plot_flux(
-        self: 'modelWE',
+        self: "modelWE",
         custom_name=None,
         ax=None,
         save=False,
@@ -354,7 +355,7 @@ class PlottingMixin:
 
         return ax
 
-    def plot_committor(self: 'modelWE'):
+    def plot_committor(self: "modelWE"):
         fig = plt.figure(figsize=(8, 6))
         plt.scatter(self.targetRMSD_centers[:, 0], self.q, s=15, c="black")
         plt.yscale("log")
