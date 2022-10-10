@@ -2,7 +2,7 @@
 msm_we
 ======
 
-.. image:: https://github.com/jdrusso/msm_we/actions/workflows/run_tests.yml/badge.svg
+.. image:: https://github.com/jdrusso/msm_we/actions/workflows/mamba-test.yml/badge.svg
         :target: https://github.com/jdrusso/msm_we/actions/workflows/mamba-test.yml
 
 .. image:: https://github.com/jdrusso/msm_we/actions/workflows/build_docs.yml/badge.svg
