@@ -24,6 +24,7 @@ from rich.logging import RichHandler
 
 from matplotlib import pyplot as plt
 
+from copy import deepcopy
 import re
 
 EPS = np.finfo(np.float64).eps
@@ -223,6 +224,8 @@ class RestartDriver(HAMSMDriver):
         sim_manager.register_callback(
             sim_manager.finalize_run, self.prepare_new_we, self.priority
         )
+
+        self.pcoord_cache = None
 
     def get_original_bins(self):
         """
@@ -458,25 +461,21 @@ class RestartDriver(HAMSMDriver):
             bbox_inches="tight",
         )
 
-    def init_we(self, initialization_state, model=None):
-
-        # model = None
+    def init_we(self, initialization_state, pcoord_cache):
 
         import time
         import re
         start_time = time.perf_counter()
 
         original_get_pcoord = None
-        log.critical(f"Model is {model}")
 
-        if model is not None:
+        if pcoord_cache is not None:
 
             log.critical("Enabling pcoord cache for new WE run initialization")
 
             # TODO: Use cached pcoords
             propagator = westpa.rc.propagator
             original_get_pcoord = propagator.get_pcoord
-            pcoord_cache = model.pcoord_cache
 
             """
             For the cached pcoords, I'll be getting a bunch of istate/bstate/sstates, and I need to 
@@ -539,7 +538,7 @@ class RestartDriver(HAMSMDriver):
         )
 
         # TODO: Restore original pcoord calculation
-        if model is not None:
+        if pcoord_cache is not None:
             propagator.get_pcoord = original_get_pcoord
 
         end_time = time.perf_counter()
@@ -715,7 +714,7 @@ class RestartDriver(HAMSMDriver):
                     f"--segs-per-state {initialization_state['segs_per_state']}\n"
                 )
 
-                self.init_we(initialization_state)
+                self.init_we(initialization_state, self.pcoord_cache)
                 # w_init.initialize(
                 #     **initialization_state,
                 #     shotgun=False,
@@ -861,6 +860,9 @@ class RestartDriver(HAMSMDriver):
         log.debug("Building haMSM and computing steady-state")
         log.debug(f"Cur iter is {self.cur_iter}")
         self.h5file_paths = marathon_west_files
+
+        # Wipe out the old pcoord cache
+        self.pcoord_cache = None
 
         # TODO: Why can't I retrieve this off self.data_manager?
         self.model = self.construct_hamsm()
@@ -1161,7 +1163,9 @@ class RestartDriver(HAMSMDriver):
             + f"--bstate-file {bstates_filename} --sstate-file {sstates_filename} --segs-per-state {segs_per_state}\n"
         )
         log.critical(f"Calling init_we with model {model}")
-        self.init_we(initialization_state, model)
+
+        self.pcoord_cache = deepcopy(model.pcoord_cache)
+        self.init_we(initialization_state, self.pcoord_cache)
         # w_init.initialize(**initialization_state, shotgun=False)
 
         log.info("New WE run ready!")
