@@ -869,6 +869,7 @@ class DataMixin:
                         self.pcoord_shape_warned = True
 
                     # Iterate over segments in this dataset
+                    # TODO: This loop is probably really inefficient?
                     for seg_idx in range(n_segs_in_file):
                         # if np.sum(pcoord[seg_idx,self.pcoord_len-1,:])==0.0:
                         # # intentionally using this to write in dummy pcoords,

@@ -24,6 +24,10 @@ from rich.logging import RichHandler
 
 from matplotlib import pyplot as plt
 
+from copy import deepcopy
+import time
+import re
+
 EPS = np.finfo(np.float64).eps
 
 log = logging.getLogger(__name__)
@@ -181,6 +185,10 @@ class RestartDriver(HAMSMDriver):
         self.n_restarts = plugin_config.get("n_restarts", -1)
         self.n_runs = plugin_config.get("n_runs", 1)
 
+        # May want to be able to disable this, if it causes issues with recalculating new pcoords
+        #   (i.e. during optimization)
+        self.cache_pcoords = plugin_config.get("cache_pcoords", True)
+
         # .get() might return this as a bool anyways, but be safe
         self.debug = bool(plugin_config.get("debug", False))
         if self.debug:
@@ -221,6 +229,9 @@ class RestartDriver(HAMSMDriver):
         sim_manager.register_callback(
             sim_manager.finalize_run, self.prepare_new_we, self.priority
         )
+
+        self.pcoord_cache = None
+        self.model = None
 
     def get_original_bins(self):
         """
@@ -456,6 +467,68 @@ class RestartDriver(HAMSMDriver):
             bbox_inches="tight",
         )
 
+    def init_we(self, initialization_state, pcoord_cache):
+
+        start_time = time.perf_counter()
+
+        original_get_pcoord = None
+
+        if pcoord_cache is not None:
+
+            log.info("Enabling pcoord cache for new WE run initialization")
+            propagator = westpa.rc.propagator
+            original_get_pcoord = propagator.get_pcoord
+
+            def get_cached_pcoord(state):
+                """
+                For the cached pcoords, I'll be getting a bunch of istate/bstate/sstates, and I need to
+                    map them to some cached pcoord values.
+
+                At this point, my start states are just basis states (not initial states)... Because of that,
+                in order to determine if it's a start state or an "actual" basis state, we can check if the label\
+                matches the bX_sY format we use below.
+
+                This is a little janky and fragile.
+
+                This function is defined inline because it needs to take only the state argument, and have access to
+                the cache.
+                TODO: That could also be done by just adding those as attributes to the state.
+                """
+
+                # If it IS a start-state, then retrieve the pcoord from the cache
+                label = state.label
+
+                template = re.compile(r'^b(\d+)_s(\d+)$')
+                is_start_state = template.match(label)
+
+                if is_start_state:
+
+                    # This is NOT the "segment index" as WESTPA describes it -- it's the index of this structure
+                    #   among structures in this cluster.
+                    cluster_idx, cluster_seg_idx = re.findall(r'\d+', state.label)
+                    cluster_idx = int(cluster_idx)
+                    cluster_seg_idx = int(cluster_seg_idx)
+
+                    state.pcoord = pcoord_cache[int(cluster_idx)][int(cluster_seg_idx)]
+
+                # If it's not a start state, then apply the normal pcoord calculation
+                else:
+                    log.debug(f"Not using cache for state {state}")
+                    original_get_pcoord(state)
+
+            propagator.get_pcoord = get_cached_pcoord
+
+        w_init.initialize(
+            **initialization_state,
+            shotgun=False,
+        )
+
+        if pcoord_cache is not None:
+            propagator.get_pcoord = original_get_pcoord
+
+        end_time = time.perf_counter()
+        log.debug(f"Runtime of w_init was {end_time - start_time:.2f} seconds")
+
     def prepare_new_we(self):
         """
         This function prepares a new WESTPA simulation using haMSM analysis to accelerate convergence.
@@ -625,10 +698,7 @@ class RestartDriver(HAMSMDriver):
                     f"--segs-per-state {initialization_state['segs_per_state']}\n"
                 )
 
-                w_init.initialize(
-                    **initialization_state,
-                    shotgun=False,
-                )
+                self.init_we(initialization_state, self.pcoord_cache)
 
                 with open(self.restart_file, "w") as fp:
                     json.dump(restart_state, fp)
@@ -771,7 +841,9 @@ class RestartDriver(HAMSMDriver):
         log.debug(f"Cur iter is {self.cur_iter}")
         self.h5file_paths = marathon_west_files
 
-        # TODO: Why can't I retrieve this off self.data_manager?
+        # Wipe out the old pcoord cache
+        self.pcoord_cache = None
+
         self.model = self.construct_hamsm()
         model = self.model
         westpa.rc.pstatus(f"Getting built haMSM from {self.data_manager}")
@@ -786,7 +858,8 @@ class RestartDriver(HAMSMDriver):
 
         # Obtain cluster-structures
         log.debug("Obtaining cluster-structures")
-        model.update_cluster_structures()
+        model.update_cluster_structures(build_pcoord_cache=self.cache_pcoords)
+        self.pcoord_cache = deepcopy(model.pcoord_cache)
 
         # TODO: Do this with pathlib
         struct_directory = f"{restart_directory}/structs"
@@ -979,7 +1052,7 @@ class RestartDriver(HAMSMDriver):
             #     f"\n\t pSS (+target, no basis) sum: {sum(model.pSS[:-2]) + model.pSS[-1]}"
             # )
 
-        ### Start the new simulation
+        # ## Start the new simulation
 
         bstates_str = ""
         for original_bstate in original_bstates:
@@ -1058,6 +1131,7 @@ class RestartDriver(HAMSMDriver):
         with open(self.initialization_file, "w") as fp:
             json.dump(initialization_state, fp)
 
+
         westpa.rc.pstatus(
             f"\n\n"
             f"===== Restart {restart_state['restarts_completed']}, "
@@ -1068,8 +1142,9 @@ class RestartDriver(HAMSMDriver):
             f"\nRun: \n\t w_init --tstate-file {tstates_filename} "
             + f"--bstate-file {bstates_filename} --sstate-file {sstates_filename} --segs-per-state {segs_per_state}\n"
         )
+        log.critical(f"Calling init_we with model {model}")
 
-        w_init.initialize(**initialization_state, shotgun=False)
+        self.init_we(initialization_state, self.pcoord_cache)
 
         log.info("New WE run ready!")
         westpa.rc.pstatus(
