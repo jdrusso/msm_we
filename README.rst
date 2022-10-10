@@ -41,10 +41,12 @@ Features
 Known Issues
 ------------
 
-Sometimes, on Python3.7 (and maybe below) the subprocess calls will fail. This may manifest as a silent failure,
+- Due to H5py version dependencies, this is currently not compatible with Python 3.10.
+
+- Sometimes, on Python3.7 (and maybe below) the subprocess calls will fail. This may manifest as a silent failure,
 followed by hanging (which is very fun to debug!) To fix this, upgrade to Python 3.8+.
 
-If running with `$OMP_NUM_THREADS > 1`, Ray parallelism may occasionally silently hang during clustering / fluxmatrix calculations
+- If running with `$OMP_NUM_THREADS > 1`, Ray parallelism may occasionally silently hang during clustering / fluxmatrix calculations
 
 
 Credits

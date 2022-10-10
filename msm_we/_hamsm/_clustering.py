@@ -1464,6 +1464,8 @@ class ClusteringMixin:
                     cluster_structures[cluster_idx] = []
                     cluster_structure_weights[cluster_idx] = []
 
+
+
                 seg_coords = iter_coords[_seg]
                 cluster_structures[cluster_idx].append(seg_coords)
                 cluster_structure_weights[cluster_idx].append(all_seg_weights[seg_idx])
