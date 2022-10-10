@@ -138,11 +138,11 @@ def test_get_flux_matrix(
 
     clustered_model.get_fluxMatrix(n_lag=0)
 
-    assert np.allclose(clustered_model.fluxMatrixRaw == fluxmatrix_raw)
+    assert np.allclose(clustered_model.fluxMatrixRaw, fluxmatrix_raw)
 
     clustered_model.organize_fluxMatrix()
 
-    assert np.allclose(clustered_model.fluxMatrix == fluxmatrix)
+    assert np.allclose(clustered_model.fluxMatrix, fluxmatrix)
 
 
 def test_get_tmatrix(organized_model, tmatrix):
@@ -152,7 +152,7 @@ def test_get_tmatrix(organized_model, tmatrix):
 
     organized_model.get_Tmatrix()
 
-    assert np.allclose(organized_model.Tmatrix == tmatrix)
+    assert np.allclose(organized_model.Tmatrix, tmatrix)
 
 
 def test_get_steady_state(organized_model, pSS):
