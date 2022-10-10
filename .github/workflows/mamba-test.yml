@@ -1,4 +1,4 @@
-name: Run tests via mamba
+name: Tests
 
 on:
   push:
@@ -72,5 +72,8 @@ jobs:
         pytest --cov -v --color=yes --capture=no --log-cli-level INFO
     - name: Upload coverage to Codecov
       if: matrix.python-version == '3.9'
-      uses: codecov/codecov-action@v3
+      run: |
+        curl -Os https://uploader.codecov.io/latest/linux/codecov
+        chmod +x codecov
+        ./codecov
         
