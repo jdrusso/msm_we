@@ -59,18 +59,18 @@ jobs:
         
         
     - name: Run tests
-      if: ${{ matrix.python-version != "3.9" }}
+      if: matrix.python-version != '3.9'
       run: |
         pytest -v --color=yes --capture=no --log-cli-level INFO
     
     - name: Install coverage
-      if: ${{ matrix.python-version == "3.9" }}
+      if: matrix.python-version == '3.9'
       run: pip install pytest-cov
     - name: Run tests with coverage
-      if: ${{ matrix.python-version == "3.9" }}
+      if: matrix.python-version == '3.9'
       run: |
         pytest --cov -v --color=yes --capture=no --log-cli-level INFO
     - name: Upload coverage to Codecov
-      if: ${{ matrix.python-version == "3.9" }}
+      if: matrix.python-version == '3.9'
       uses: codecov/codecov-action@v3
         
