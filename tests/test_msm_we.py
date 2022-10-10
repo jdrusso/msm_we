@@ -4,7 +4,6 @@
 import pytest
 import numpy as np
 from copy import deepcopy
-import getpass
 
 import MDAnalysis as mda
 from MDAnalysis.analysis import distances
@@ -91,6 +90,7 @@ def test_dim_reduce(clustered_model):
     assert np.isclose(ref_covariance, test_covariance).all()
 
 
+@pytest.mark.xfail(reason="Mini-Batch KMeans appears to have enough randomness to make this fail occasionally.")
 def test_streaming_stratified_clustering(
     loaded_model, clustered_model, ray_cluster, model_params
 ):
@@ -111,6 +111,7 @@ def test_streaming_stratified_clustering(
     # Make sure the clusters are what they should be
     # Be a little flexible here, because the PCA has *very* minor differences in outputs, so the cluster centers
     #   will vary by a little more.
+    # Furthermore, minibatch Kmeans has some randomness in it, so we leave a little fudge factor for that too.
     assert np.allclose(
         loaded_model.clusters.cluster_models[3].cluster_centers_,
         clustered_model.clusters.cluster_models[3].cluster_centers_,
@@ -119,9 +120,6 @@ def test_streaming_stratified_clustering(
     )
 
 
-@pytest.mark.xfail(
-    getpass.getuser() == "runner", reason="Hangs on github actions", run=False
-)
 @pytest.mark.parametrize(
     "generated_filename", ["initialized_model-fluxmatrix-_s1_e100_lag0_clust300.h5"]
 )
@@ -140,11 +138,11 @@ def test_get_flux_matrix(
 
     clustered_model.get_fluxMatrix(n_lag=0)
 
-    assert (clustered_model.fluxMatrixRaw == fluxmatrix_raw).all()
+    assert np.allclose(clustered_model.fluxMatrixRaw == fluxmatrix_raw)
 
     clustered_model.organize_fluxMatrix()
 
-    assert (clustered_model.fluxMatrix == fluxmatrix).all()
+    assert np.allclose(clustered_model.fluxMatrix == fluxmatrix)
 
 
 def test_get_tmatrix(organized_model, tmatrix):
@@ -154,7 +152,7 @@ def test_get_tmatrix(organized_model, tmatrix):
 
     organized_model.get_Tmatrix()
 
-    assert (organized_model.Tmatrix == tmatrix).all()
+    assert np.allclose(organized_model.Tmatrix == tmatrix)
 
 
 def test_get_steady_state(organized_model, pSS):
@@ -166,7 +164,7 @@ def test_get_steady_state(organized_model, pSS):
     organized_model.get_Tmatrix()
     organized_model.get_steady_state()
 
-    assert np.isclose(organized_model.pSS, pSS).all()
+    assert np.allclose(organized_model.pSS, pSS)
 
 
 def test_get_steady_state_target_flux(organized_model, JtargetSS):
