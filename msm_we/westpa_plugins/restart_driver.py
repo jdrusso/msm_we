@@ -25,6 +25,7 @@ from rich.logging import RichHandler
 from matplotlib import pyplot as plt
 
 from copy import deepcopy
+import time
 import re
 
 EPS = np.finfo(np.float64).eps
@@ -467,34 +468,31 @@ class RestartDriver(HAMSMDriver):
 
     def init_we(self, initialization_state, pcoord_cache):
 
-        import time
-        import re
         start_time = time.perf_counter()
 
         original_get_pcoord = None
 
         if pcoord_cache is not None:
 
-            log.critical("Enabling pcoord cache for new WE run initialization")
-
-            # TODO: Use cached pcoords
+            log.info("Enabling pcoord cache for new WE run initialization")
             propagator = westpa.rc.propagator
             original_get_pcoord = propagator.get_pcoord
 
-            """
-            For the cached pcoords, I'll be getting a bunch of istate/bstate/sstates, and I need to 
-                map them to some cached pcoord values.
-                
-            At this point, my start states are just basis states (not initial states)... Because of that,
-            in order to determine if it's a start state or an "actual" basis state, we can check if the label\
-            matches the bX_sY format we use below.
-            
-            This is a little janky and fragile, and other possible ways to check if a BasisState was generate from a
-            start state could be
-            
-            """
             def get_cached_pcoord(state):
-                # from westpa.core.states import InitialState
+                """
+                For the cached pcoords, I'll be getting a bunch of istate/bstate/sstates, and I need to
+                    map them to some cached pcoord values.
+
+                At this point, my start states are just basis states (not initial states)... Because of that,
+                in order to determine if it's a start state or an "actual" basis state, we can check if the label\
+                matches the bX_sY format we use below.
+
+                This is a little janky and fragile.
+
+                This function is defined inline because it needs to take only the state argument, and have access to
+                the cache.
+                TODO: That could also be done by just adding those as attributes to the state.
+                """
 
                 # If it IS a start-state, then retrieve the pcoord from the cache
                 label = state.label
@@ -502,14 +500,7 @@ class RestartDriver(HAMSMDriver):
                 template = re.compile(r'^b(\d+)_s(\d+)$')
                 is_start_state = template.match(label)
 
-                # if type(state) is InitialState and state.type == InitialState.ISTATE_TYPE_START:
                 if is_start_state:
-                    try:
-                        auxref = state.auxref
-                    except AttributeError as e:
-
-                        log.critical(f"Failed cache for state {state} with vars {vars(state)}")
-                        raise e
 
                     # This is NOT the "segment index" as WESTPA describes it -- it's the index of this structure
                     #   among structures in this cluster.
@@ -517,21 +508,11 @@ class RestartDriver(HAMSMDriver):
                     cluster_idx = int(cluster_idx)
                     cluster_seg_idx = int(cluster_seg_idx)
 
-                    # log.critical("Getting pcoord from cache")
-                    try:
-                        state.pcoord = pcoord_cache[int(cluster_idx)][int(cluster_seg_idx)]
-                    except KeyError as e:
-                        log.critical(f'Failed pcoord lookup for cluster {cluster_idx} seg {cluster_seg_idx} with '
-                                     f'label {label}')
-                        log.critical(f"Cache is defined for segs {list(pcoord_cache[int(cluster_idx)].keys())}")
-                        raise e
+                    state.pcoord = pcoord_cache[int(cluster_idx)][int(cluster_seg_idx)]
 
                 # If it's not a start state, then apply the normal pcoord calculation
                 else:
-                    log.critical(f"Getting pcoord the original way, because {type(state)} and has attribute? "
-                                 f"{hasattr(state, 'basis_auxref')}")
-                    log.critical(vars(state))
-
+                    log.debug(f"Not using cache for state {state}")
                     original_get_pcoord(state)
 
             propagator.get_pcoord = get_cached_pcoord
@@ -541,13 +522,11 @@ class RestartDriver(HAMSMDriver):
             shotgun=False,
         )
 
-        # TODO: Restore original pcoord calculation
         if pcoord_cache is not None:
             propagator.get_pcoord = original_get_pcoord
 
         end_time = time.perf_counter()
-        log.critical(f"Runtime of w_init was {end_time - start_time:.2f} seconds")
-
+        log.debug(f"Runtime of w_init was {end_time - start_time:.2f} seconds")
 
     def prepare_new_we(self):
         """
