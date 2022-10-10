@@ -1,11 +1,9 @@
 import numpy as np
 import ray
-import h5py
 from scipy.sparse import coo_matrix
 import tqdm.auto as tqdm
 import concurrent
 import multiprocessing as mp
-import sys
 from msm_we.utils import find_connected_sets
 from msm_we._logging import log
 
@@ -27,16 +25,7 @@ class FluxMatrixMixin:
             and feed it directly in.
         """
 
-        # model_id, n_iter, processCoordinates_id = args
-
-        # self = ray.get(model_id)
-        # processCoordinates = ray.get(processCoordinates_id)
         self = model
-
-        # self.processCoordinates = processCoordinates
-
-        # self.clusters = deepcopy(self.clusters)
-        # self.clusters.model = self
 
         iter_fluxmatrix = self.get_iter_fluxMatrix(n_iter)
 
@@ -120,7 +109,6 @@ class FluxMatrixMixin:
             n_iter,
         )
 
-    # def get_iter_fluxMatrix(self, n_iter):
     @staticmethod
     def build_flux_matrix(
         n_clusters,
@@ -135,91 +123,20 @@ class FluxMatrixMixin:
 
         Returns
         -------
-
-        TODO
-        ----
-        This function is slow because of the call to get_transition_data_lag0(). See that function for more info.
-            Removed!
-
-        This can be refactored to be static
         """
-
-        # 1. Update state with data from the iteration you want to compute the flux matrix for
-        # sys.stdout.write("iteration " + str(n_iter) + ": data \n")
-
-        # Need this to load pcoordXList
-        # self.load_iter_data(n_iter)
-        # parent_pcoords = self.pcoord0List.copy()
-        # child_pcoords = self.pcoord1List.copy()
-        #
-        # #  2. Load transition data at the requested lag
-        # if self.n_lag > 0:
-        #     raise NotImplementedError
-        #     # If you're using more than 1 lag, obtain segment histories at that lag
-        #     #   This means you have to look back one or more iterations
-        #
-        #     # sys.stdout.write("segment histories \n")
-        #     self.get_seg_histories(self.n_lag + 1)
-        #     # sys.stdout.write(" transition data...\n")
-        #     self.get_transition_data(self.n_lag)
-        # elif self.n_lag == 0:
-        #     # If you're using a lag of 0, your coordinate pairs are just the beginning/end of the iteration.
-        #     #   In that, it's not possible to have warps/recycles, since those are done handled between iterations.
-        #     try:
-        #         self.get_transition_data_lag0()
-        #         transition_weights = self.transitionWeights.copy()
-        #         pass
-        #     except KeyError:
-        #         log.warning(
-        #             f"No coordinates for iter {n_iter}, skipping this iter in fluxmatrix calculation"
-        #         )
-        #         return np.zeros(shape=(self.n_clusters + 2, self.n_clusters + 2))
-
-        # log.debug(f"Getting flux matrix for iter {n_iter}")# with {self.nSeg} segments")
-        # If you used a lag of 0, transitions weights are just weightList
-        # If you used a lag > 0, these include the weight histories from previous iterations
-        # num_transitions = np.shape(self.transitionWeights)[0]
 
         # Create dedicated clusters for the target and basis states,
         # and reassign any points within the target or basis to those
         target_cluster_index = n_clusters + 1
         basis_cluster_index = n_clusters
 
-        # (Segment, Atom, [lagged, current coord])
-        # log.debug(f"Coord pairlist shape is {self.coordPairList.shape}")
-
-        # Get which coords are not NaN
-        # good_coords = ~np.isnan(self.coordPairList).any(axis=(1, 2, 3))
-
-        # Assign a cluster to the lagged and the current coords
-
-        # reduced_initial, reduced_final = None, None
-        # reduced_initial = self.reduceCoordinates(
-        #     self.coordPairList[good_coords, :, :, 0]
-        # )
-
-        # reduced_final = self.reduceCoordinates(self.coordPairList[good_coords, :, :, 1])
-
-        # Wrap this in a try to make sure we unset the toggle
-        # Note: This toggle is only used for stratified clusteirng, but it's set either way.
-        # self.clusters.toggle = True
-        # self.clusters.processing_from = True
         try:
-            # start_cluster = self.clusters.predict(reduced_initial)
-            # end_cluster = self.clusters.predict(reduced_final)
-            # start_cluster = np.array([x[0] for x in self.pair_dtrajs[n_iter-1]])
-            # end_cluster = np.array([x[1] for x in self.pair_dtrajs[n_iter-1]])
             start_cluster, end_cluster = index_pairs.T.copy()
         except Exception as e:
             log.error(index_pairs)
-            # log.error(reduced_final)
-            # self.clusters.processing_from = False
-            # self.clusters.toggle = False
             raise e
         else:
             pass
-            # self.clusters.processing_from = False
-            # self.clusters.toggle = False
 
         # good_coords = np.arange(0, parent_pcoords.shape[0]).astype(int)
 
@@ -329,223 +246,109 @@ class FluxMatrixMixin:
         fluxMatrix = np.zeros((self.n_clusters + 2, self.n_clusters + 2))
         nI = 0
 
-        fileName = (
-            self.modelName
-            + "-fluxmatrix-_s"
-            + str(first_iter)
-            + "_e"
-            + str(last_iter)
-            + "_lag"
-            + str(n_lag)
-            + "_clust"
-            + str(self.n_clusters)
-        )
+        # Add up the flux matrices for each iteration to get the flux matrix.
+        # Then, save that matrix to the data file, along with the number of iterations used
+        # FIXME: Duplicated code
+        # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
+        if not use_ray:
+            for iS in tqdm.tqdm(
+                iters_to_use,
+                desc="Constructing flux matrix",
+            ):
+                log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
 
-        # Overwrite this file, don't try to read from it.  Hence the "w" flag
-        # TODO: Maybe in the future return to this,
-        #  but it caused more problems than it was worth when doing multiple runs.
-        try:
-            f = h5py.File(fileName + ".h5", "w")
-        except BlockingIOError:
-            # Janky -- if the file exists, pick a random name
-            import random
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
+                    fluxMatrixI = executor.submit(
+                        self.get_iter_fluxMatrix,
+                        iS,
+                    ).result()
 
-            fileName += f"_{int(random.random()*1000):04d}"
-            f = h5py.File(fileName + ".h5", "w")
+                fluxMatrix = fluxMatrix + fluxMatrixI
+                nI = nI + 1
 
-        dsetName = "fluxMatrix"
+                log.debug(f"Completed flux matrix for iter {iS}")
 
-        # FIXME: name this something descriptive or just use the 'in' statement in the if/elif
-        fluxmatrix_exists_in_h5 = dsetName in f
-        always_overwrite_fluxmatrix = True
+        # If we're running through Ray..
+        else:
 
-        # If this data file does not contain a fluxMatrix entry, create it
-        # For now, don't use a saved fluxmatrix, annoying to debug
-        if always_overwrite_fluxmatrix or not fluxmatrix_exists_in_h5:
-            # Create the fluxMatrix dataset
-            dsetP = f.create_dataset(dsetName, np.shape(fluxMatrix))
-            dsetP[:] = fluxMatrix
+            # First, connect to the ray cluster
+            self.check_connect_ray()
 
-            # Add up the flux matrices for each iteration to get the flux matrix.
-            # Then, save that matrix to the data file, along with the number of iterations used
-            # FIXME: Duplicated code
-            # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
-            if not use_ray:
-                for iS in tqdm.tqdm(
-                    iters_to_use,
-                    desc="Constructing flux matrix",
-                ):
-                    log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
+            # Submit all the tasks for iteration fluxmatrix calculations
+            task_ids = []
 
-                    # fluxMatrixI = self.get_iter_fluxMatrix(iS)
-                    with concurrent.futures.ProcessPoolExecutor(
-                        max_workers=1, mp_context=mp.get_context("fork")
-                    ) as executor:
-                        fluxMatrixI = executor.submit(
-                            self.get_iter_fluxMatrix,
-                            iS,
-                        ).result()
+            for iteration in tqdm.tqdm(
+                iters_to_use,
+                desc="Submitting fluxmatrix tasks",
+            ):
 
-                    fluxMatrix = fluxMatrix + fluxMatrixI
-                    nI = nI + 1
+                self.load_iter_data(iteration)
+                parent_pcoords = self.pcoord0List.copy()
+                child_pcoords = self.pcoord1List.copy()
 
-                    # f = h5py.File(fileName + ".h5", "a")
-                    dsetP = f[dsetName]
-                    dsetP[:] = fluxMatrix / nI
-                    dsetP.attrs["iter"] = iS
-                    log.debug(f"Completed flux matrix for iter {iS}")
+                ind_end_in_target = np.where(self.is_WE_target(child_pcoords))
+                ind_start_in_basis = np.where(self.is_WE_basis(parent_pcoords))
+                ind_end_in_basis = np.where(self.is_WE_basis(child_pcoords))
 
-            # If we're running through Ray..
-            else:
+                self.get_transition_data_lag0()
+                transition_weights = self.transitionWeights.copy()
 
-                # First, connect to the ray cluster
-                self.check_connect_ray()
+                index_pairs = np.array(self.pair_dtrajs[iteration - 1])
 
-                # Submit all the tasks for iteration fluxmatrix calculations
-                task_ids = []
+                _id = self.build_flux_matrix_remote.remote(
+                    self.n_clusters,
+                    index_pairs,
+                    ind_start_in_basis,
+                    ind_end_in_basis,
+                    ind_end_in_target,
+                    transition_weights,
+                    iteration,
+                )
 
-                # model_id = ray.put(self)
-                # processCoordinates_id = ray.put(self.processCoordinates)
+                task_ids.append(_id)
 
-                # max_inflight = 70
-                for iteration in tqdm.tqdm(
-                    iters_to_use,
-                    desc="Submitting fluxmatrix tasks",
-                ):
-
-                    # Allow 1000 in flight calls
-                    # This is buggy, so disable for now.
-                    # For example, if i = 5000, this call blocks until that
-                    # 4000 of the object_refs in result_refs are ready
-                    # and available.
-                    # See: https://docs.ray.io/en/latest/ray-design-patterns/limit-tasks.html
-                    # if len(task_ids) > max_inflight:
-                    #
-                    #     # The number that need to be ready before we can submit more
-                    #     num_ready = iteration - max_inflight
-                    #     log.info(f"At iteration {iteration}, waiting to submit more jobs until {num_ready} are ready")
-                    #     ready, notready = ray.wait(task_ids, num_returns=num_ready)
-                    #     log.info(f"At iteration {iteration}, {len(ready)} jobs are ready {len(notready)} not, submitting more.")
-
-                    # log.debug(f"Submitted fluxmatrix task iteration {iteration}")
-
-                    self.load_iter_data(iteration)
-                    parent_pcoords = self.pcoord0List.copy()
-                    child_pcoords = self.pcoord1List.copy()
-
-                    ind_end_in_target = np.where(self.is_WE_target(child_pcoords))
-                    ind_start_in_basis = np.where(self.is_WE_basis(parent_pcoords))
-                    ind_end_in_basis = np.where(self.is_WE_basis(child_pcoords))
-
-                    self.get_transition_data_lag0()
-                    transition_weights = self.transitionWeights.copy()
-
-                    index_pairs = np.array(self.pair_dtrajs[iteration - 1])
-
-                    # _id = self.get_iter_fluxMatrix_ray.remote(
-                    #     # model_id, processCoordinates_id, iteration
-                    #     parent_pcoords, child_pcoords, transition_weights
-                    # )
-
-                    _id = self.build_flux_matrix_remote.remote(
-                        self.n_clusters,
-                        index_pairs,
-                        ind_start_in_basis,
-                        ind_end_in_basis,
-                        ind_end_in_target,
-                        transition_weights,
-                        iteration,
+            # Wait for them to complete
+            # Process results as they're ready, instead of in submission order
+            #  See: https://docs.ray.io/en/latest/ray-design-patterns/submission-order.html
+            # Additionally, this batches rather than getting them all at once, or one by one.
+            with tqdm.tqdm(
+                total=len(iters_to_use), desc="Retrieving flux matrices"
+            ) as pbar:
+                while task_ids:
+                    result_batch_size = min(result_batch_size, len(task_ids))
+                    log.debug(
+                        f"Waiting for {result_batch_size} results ({len(task_ids)} total remain)"
                     )
 
-                    task_ids.append(_id)
+                    # Returns the first ObjectRefs that are ready, with a 60s timeout.
+                    finished, task_ids = ray.wait(
+                        task_ids, num_returns=result_batch_size, timeout=20
+                    )
+                    results = ray.get(finished)
+                    log.debug(f"Obtained {len(results)} results")
 
-                # Wait for them to complete
-                # Process results as they're ready, instead of in submission order
-                #  See: https://docs.ray.io/en/latest/ray-design-patterns/submission-order.html
-                # Additionally, this batches rather than getting them all at once, or one by one.
+                    # Add each matrix to the total fluxmatrix
+                    for _fmatrix, _iter in results:
+                        fluxMatrix = fluxMatrix + _fmatrix.todense().A
+                        pbar.update(1)
+                        pbar.refresh()
 
-                with tqdm.tqdm(
-                    total=len(iters_to_use), desc="Retrieving flux matrices"
-                ) as pbar:
-                    while task_ids:
-                        result_batch_size = min(result_batch_size, len(task_ids))
-                        log.debug(
-                            f"Waiting for {result_batch_size} results ({len(task_ids)} total remain)"
-                        )
+                    # Try to free up some memory used by Ray for these objects
+                    # See: https://github.com/ray-project/ray/issues/15058
+                    # I was running into issues with objects spilling from the object store during fluxmatrix
+                    #   calculation. None of the individual calculations should really get that big, so maybe
+                    #   something wasn't getting freed from memory when it should've.
+                    del finished
+                    del results
 
-                        # Returns the first ObjectRefs that are ready, with a 60s timeout.
-                        finished, task_ids = ray.wait(
-                            task_ids, num_returns=result_batch_size, timeout=20
-                        )
-                        results = ray.get(finished)
-                        log.debug(f"Obtained {len(results)} results")
+            log.info("Fluxmatrices all obtained")
+            del task_ids
+            nI = len(iters_to_use)
 
-                        # Add each matrix to the total fluxmatrix
-                        for _fmatrix, _iter in results:
-                            fluxMatrix = fluxMatrix + _fmatrix.todense().A
-                            pbar.update(1)
-                            pbar.refresh()
-
-                        # Try to free up some memory used by Ray for these objects
-                        # See: https://github.com/ray-project/ray/issues/15058
-                        # I was running into issues with objects spilling from the object store during fluxmatrix
-                        #   calculation. None of the individual calculations should really get that big, so maybe
-                        #   something wasn't getting freed from memory when it should've.
-                        del finished
-                        del results
-
-                log.info("Fluxmatrices all obtained")
-                # del model_id
-                del task_ids
-
-                # Write the H5. Can't do this per-iteration, because we're not guaranteed to be going sequentially now
-
-                nI = len(iters_to_use)
-                dsetP = f[dsetName]
-                dsetP[:] = fluxMatrix / nI
-                dsetP.attrs["iter"] = nI
-
-            f.close()
-
-            # Normalize the flux matrix by the number of iterations that it was calculated with
-            fluxMatrix = fluxMatrix / nI
-
-        # If this datafile DOES contain a fluxMatrix entry...
-        # HACK: This explicitly never runs now, but keep it around in case we decide to re-add this later.
-        # TODO: Update this to work with the specific iterations
-        elif fluxmatrix_exists_in_h5:
-
-            log.info("Fluxmatrix already exists in h5 file, loading saved.")
-
-            # Load the existing fluxMatrix
-            dsetP = f[dsetName]
-            fluxMatrix = dsetP[:]
-            nIter = dsetP.attrs["iter"]
-            # f.close()
-            nI = 1
-
-            # If the flux matrix was calculated at an earlier iteration than the current/requested last iteration, then
-            #   recalculate it and update it.
-            # TODO: Check if first_iter changed too? That's not stored anywhere
-
-            #  For now, just always overwrite any saved data.
-            # if nIter < last_iter:
-            if True:
-                log.warning(f"Ignoring any saved fluxmatrix in {fileName}.h5")
-                for iS in range(nIter, last_iter + 1):
-                    fluxMatrixI = self.get_iter_fluxMatrix(iS)
-                    fluxMatrix = fluxMatrix + fluxMatrixI
-                    nI = nI + 1
-                    # f = h5py.File(fileName + ".h5", "a")
-                    dsetP = f[dsetName]
-                    dsetP[:] = fluxMatrix / nI
-                    dsetP.attrs["iter"] = iS
-                    # f.close()
-                    sys.stdout.write("getting fluxMatrix iter: " + str(iS) + "\n")
-                f.close()
-                fluxMatrix = fluxMatrix / nI
-
-        f.close()
+        # Normalize the flux matrix by the number of iterations that it was calculated with
+        fluxMatrix = fluxMatrix / nI
 
         # Update state with the new, updated, or loaded from file fluxMatrix.
         self.fluxMatrixRaw = fluxMatrix
@@ -576,8 +379,6 @@ class FluxMatrixMixin:
             if "states_to_keep" in args.keys():
                 self.organize_aggregated(use_ray=use_ray, **args)
                 return
-
-            # self.organize_aggregated(use_ray, **args)
 
             fmatrix = self.fluxMatrixRaw.copy()
             # Add recycling to avoid detecting the target as a sink
@@ -666,9 +467,7 @@ class FluxMatrixMixin:
         good_clusters = np.ones(self.n_clusters + 2)
 
         cluster_pcoord_centers = np.zeros((self.n_clusters + 2, self.pcoord_ndim))
-        # cluster_pcoord_centers[indTargetCluster]=self.target_rmsd
         cluster_pcoord_centers[target_cluster_index] = self.target_bin_center
-        # cluster_pcoord_centers[indBasisCluster]=self.get_reference_rmsd(self.basis_coords)
         cluster_pcoord_centers[basis_cluster_index] = self.basis_bin_center
 
         # Just initialize this to some positive nonzero value to kick off the while loop
