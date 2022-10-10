@@ -5,6 +5,10 @@ import tqdm.auto as tqdm
 from msm_we._logging import log
 from msm_we.utils import inverse_iteration, is_connected
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from msm_we import modelWE
+
 
 class AnalysisMixin:
 
@@ -13,7 +17,7 @@ class AnalysisMixin:
     lagtime = None
     JtargetSS = None
 
-    def get_Tmatrix(self):
+    def get_Tmatrix(self: 'modelWE'):
         """
         Compute the transition matrix from the flux matrix.
         Corrects the "target" states to be true sink states.
@@ -71,7 +75,7 @@ class AnalysisMixin:
 
         self.Tmatrix = tmatrix
 
-    def get_eqTmatrix(self):
+    def get_eqTmatrix(self: 'modelWE'):
         Mt = self.fluxMatrix.copy()
         n = np.shape(Mt)[0]
         indSpace = np.arange(n).astype(int)
@@ -87,7 +91,7 @@ class AnalysisMixin:
                 Mt[iR, iR] = 1.0
         self.Tmatrix = Mt
 
-    def get_steady_state(self, flux_fractional_convergence=1e-4, max_iters=10):
+    def get_steady_state(self: 'modelWE', flux_fractional_convergence=1e-4, max_iters=10):
         """ "
         Get the steady-state distribution for the transition matrix.
         Uses scipy eigensolver to obtain an initial guess, then refines that using inverse iteration.
@@ -181,7 +185,7 @@ class AnalysisMixin:
         log.info("Done with steady-state estimation.")
         self.pSS = last_pSS
 
-    def get_steady_state_algebraic(self, max_iters=1000, check_negative=True, set=True):
+    def get_steady_state_algebraic(self: 'modelWE', max_iters=1000, check_negative=True, set=True):
         """
         Compute the steady-state distribution as the eigenvectors of the transition matrix.
 
@@ -270,7 +274,7 @@ class AnalysisMixin:
         else:
             return pSS
 
-    def get_steady_state_matrixpowers(self, conv):
+    def get_steady_state_matrixpowers(self: 'modelWE', conv):
         """
         Compute the steady-state distribution using the matrix power method.
 
@@ -303,7 +307,7 @@ class AnalysisMixin:
                 sys.stdout.write("N=" + str(N) + " dconv: " + str(dconv) + "\n")
                 self.pSS = pSS.copy()
 
-    def get_steady_state_target_flux(self, pSS=None, _set=True):
+    def get_steady_state_target_flux(self: 'modelWE', pSS=None, _set=True):
         """
         Get the total flux into the target state(s).
 
@@ -372,7 +376,7 @@ class AnalysisMixin:
         else:
             return Jt / lagtime
 
-    def get_flux(self):
+    def get_flux(self: 'modelWE'):
         """
         Get the measured flux (i.e. from the flux matrix) into the target.
         """
@@ -393,7 +397,7 @@ class AnalysisMixin:
             J[i] = JR - JF
             self.J = J
 
-    def get_flux_committor(self):
+    def get_flux_committor(self: 'modelWE'):
         """
         Get the flux binned according to committors
 
@@ -426,7 +430,7 @@ class AnalysisMixin:
             self.Jq = J.squeeze() / self.tau
             # sys.stdout.write("%s " % i)
 
-    def evolve_target_flux(self):
+    def evolve_target_flux(self: 'modelWE'):
         Mss = self.Tmatrix
         probTransient = self.probTransient
         nT = np.shape(probTransient)[0]
@@ -450,7 +454,7 @@ class AnalysisMixin:
         self.Jtarget = Jtarget / self.lagtime
         self.JtargetTimes = JtargetTimes
 
-    def get_committor(self, conv=1e-5):
+    def get_committor(self: 'modelWE', conv=1e-5):
         """
         Iteratively obtain an estimate of the committor.
 
@@ -532,7 +536,7 @@ class AnalysisMixin:
         self.q = q.squeeze()
 
     # TODO: This should probably just be a call to get_committor, followed by self.q = 1 - self.q
-    def get_backwards_committor(self, conv):
+    def get_backwards_committor(self: 'modelWE', conv):
         Mt = self.fluxMatrix.copy()
         nR = np.shape(Mt)
         sM = np.sum(Mt, 1)

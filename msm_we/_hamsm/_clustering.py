@@ -12,6 +12,9 @@ from msm_we.stratified_clustering import StratifiedClusters
 from msm_we.utils import find_connected_sets
 from msm_we._logging import log
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from msm_we import modelWE
 
 # If you implement a custom bin mapper that should work with stratified clustering, you can add it to this set
 #   after importing msm_we
@@ -33,7 +36,7 @@ class ClusteringMixin:
     cluster_structures = None
     cluster_structure_weights = None
 
-    def do_clustering(self, arg):
+    def do_clustering(self: 'modelWE', arg):
 
         kmeans_model, iters_to_use, cluster_args, processCoordinates = arg
 
@@ -77,7 +80,7 @@ class ClusteringMixin:
 
         return kmeans_model, used_iters
 
-    def do_discretization(self, arg):
+    def do_discretization(self: 'modelWE', arg):
 
         kmeans_model, iteration, processCoordinates = arg
 
@@ -105,7 +108,7 @@ class ClusteringMixin:
         return dtrajs, used_iters
 
     @ray.remote
-    def do_ray_discretization(model, kmeans_model, iteration, processCoordinates):
+    def do_ray_discretization(model: 'modelWE', kmeans_model, iteration, processCoordinates):
 
         # model_id, kmeans_model_id, iteration, processCoordinates_id = arg
 
@@ -133,7 +136,7 @@ class ClusteringMixin:
         return dtrajs, 1, iteration
 
     def cluster_coordinates(
-        self,
+        self: 'modelWE',
         n_clusters,
         streaming=False,
         first_cluster_iter=None,
@@ -186,7 +189,7 @@ class ClusteringMixin:
             self.post_cluster_model = deepcopy(self)
 
     def cluster_aggregated(
-        self,
+        self: 'modelWE',
         n_clusters,
         streaming=False,
         first_cluster_iter=None,
@@ -515,7 +518,7 @@ class ClusteringMixin:
         # self.clusters.save(self.clusterFile, save_streaming_chain=True, overwrite=True)
 
     def cluster_stratified(
-        self,
+        self: 'modelWE',
         n_clusters,
         streaming=True,
         first_cluster_iter=None,
@@ -725,7 +728,7 @@ class ClusteringMixin:
 
         self.launch_ray_discretization()
 
-    def do_stratified_clustering(self, arg):
+    def do_stratified_clustering(self: 'modelWE', arg):
         """
         Perform the full-stratified clustering.
 
@@ -898,7 +901,7 @@ class ClusteringMixin:
 
         return kmeans_models, used_iters, unique_bins, unfilled_bins
 
-    def organize_stratified(self, use_ray=True):
+    def organize_stratified(self: 'modelWE', use_ray=True):
         """
         Alternative to organize_fluxMatrix, for stratified clustering.
 
@@ -1114,7 +1117,7 @@ class ClusteringMixin:
             len(connected_sets[start_cleaning_idx:]) == 0
         ), "Still not clean after cleaning!"
 
-    def launch_ray_discretization(self):
+    def launch_ray_discretization(self: 'modelWE'):
         """
         Apply discretization in parallel, through Ray
 
@@ -1213,7 +1216,7 @@ class ClusteringMixin:
 
     @ray.remote
     def do_stratified_ray_discretization(
-        model, kmeans_model, iteration, processCoordinates
+        model: 'modelWE', kmeans_model, iteration, processCoordinates
     ):
 
         # model_id, kmeans_model_id, iteration, processCoordinates_id = arg
@@ -1365,7 +1368,7 @@ class ClusteringMixin:
 
         return closest
 
-    def update_cluster_structures(self, build_pcoord_cache=False):
+    def update_cluster_structures(self: 'modelWE', build_pcoord_cache=False):
         """
         Find structures (i.e. sets of coordinates) corresponding to each clusters.
 
@@ -1486,7 +1489,7 @@ class ClusteringMixin:
         log.debug("Cluster structure mapping completed.")
         log.debug(f"Cluster keys are {cluster_structures.keys()}")
 
-    def get_cluster_centers(self):
+    def get_cluster_centers(self: 'modelWE'):
         """
         Standalone method to obtain average pcoords of all segments in each cluster.
 

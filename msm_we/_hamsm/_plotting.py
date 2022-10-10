@@ -2,6 +2,10 @@ from matplotlib import pyplot as plt
 import numpy as np
 from msm_we._logging import log
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from msm_we import modelWE
+
 # Using the tkinter backend makes matplotlib run better on a cluster, maybe?
 # import matplotlib
 # matplotlib.use("TkAgg")
@@ -9,7 +13,7 @@ from msm_we._logging import log
 
 class PlottingMixin:
     def plot_flux_committor_pcoordcolor(
-        self,
+        self: 'modelWE',
         nwin=1,
         ax=None,
         pcoord_to_use=0,
@@ -88,7 +92,7 @@ class PlottingMixin:
         return ax, lines
 
     def plot_flux_committor(
-        self,
+        self: 'modelWE',
         nwin=1,
         ax=None,
         save=False,
@@ -214,7 +218,7 @@ class PlottingMixin:
         return ax
 
     def plot_flux(
-        self,
+        self: 'modelWE',
         custom_name=None,
         ax=None,
         save=False,
@@ -350,7 +354,7 @@ class PlottingMixin:
 
         return ax
 
-    def plot_committor(self):
+    def plot_committor(self: 'modelWE'):
         fig = plt.figure(figsize=(8, 6))
         plt.scatter(self.targetRMSD_centers[:, 0], self.q, s=15, c="black")
         plt.yscale("log")

@@ -7,13 +7,16 @@ import multiprocessing as mp
 from msm_we.utils import find_connected_sets
 from msm_we._logging import log
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from msm_we import modelWE
 
 class FluxMatrixMixin:
 
     fluxMatrixRaw = None
     fluxMatrix = None
 
-    def get_iter_fluxMatrix(self, n_iter):
+    def get_iter_fluxMatrix(self: 'modelWE', n_iter):
 
         self.load_iter_data(n_iter)
         parent_pcoords = self.pcoord0List.copy()
@@ -159,7 +162,7 @@ class FluxMatrixMixin:
         return fluxMatrix
 
     def get_fluxMatrix(
-        self,
+        self: 'modelWE',
         n_lag,
         first_iter=1,
         last_iter=None,
@@ -333,7 +336,8 @@ class FluxMatrixMixin:
         # Update state with the new, updated, or loaded from file fluxMatrix.
         self.fluxMatrixRaw = fluxMatrix
 
-    def organize_fluxMatrix(self, use_ray=False, **args):
+    def organize_fluxMatrix(
+        self: 'modelWE', use_ray=False, **args):
         """
         This cleaning step removes all clusters that aren't in the largest connected set, then rediscretizes all the
         trajectories according to the new reduced set of clusters.
@@ -404,7 +408,7 @@ class FluxMatrixMixin:
             )
 
     def organize_aggregated(
-        self, use_ray=False, do_cleaning=True, states_to_keep=None, rediscretize=True
+        self: 'modelWE', use_ray=False, do_cleaning=True, states_to_keep=None, rediscretize=True
     ):
         """
         Do some cleaning on the flux matrix, and update state with the cleaned flux matrix.

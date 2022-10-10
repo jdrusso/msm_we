@@ -5,6 +5,10 @@ import mdtraj as md
 import tqdm.auto as tqdm
 from msm_we._logging import log
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from msm_we import modelWE
+
 
 class DataMixin:
 
@@ -41,7 +45,7 @@ class DataMixin:
 
     coordsExist = None
 
-    def get_transition_data(self, n_lag):
+    def get_transition_data(self: 'modelWE', n_lag):
         """
         This function analyzes pairs of coordinates at the current iteration, set by :code:`self.n_iter`, and at some
             lag in the past, :code:`self.n_iter - n_lag`.
@@ -247,7 +251,7 @@ class DataMixin:
         self.transitionWeights = transitionWeights
         self.departureWeights = departureWeights
 
-    def get_transition_data_lag0(self):
+    def get_transition_data_lag0(self: 'modelWE'):
         """
         Get coordinate pairs at the beginning and end of this iteration.
 
@@ -315,7 +319,7 @@ class DataMixin:
         self.transitionWeights = transitionWeights
         self.departureWeights = departureWeights
 
-    def get_seg_histories(self, n_hist):
+    def get_seg_histories(self: 'modelWE', n_hist):
         """
         **TODO: What does this do exactly?**
 
@@ -416,7 +420,7 @@ class DataMixin:
         #   weight histories and segment histories go in reverse order,
         #   so final current iter is first of 0 index
 
-    def collect_iter_coordinates(self):  # grab coordinates from WE traj_segs folder
+    def collect_iter_coordinates(self: 'modelWE'):  # grab coordinates from WE traj_segs folder
         """
         Goes through the generated trajectory segments, and adds data from the segments to an H5 file.
 
@@ -522,7 +526,7 @@ class DataMixin:
                 )
                 log.error(e)
 
-    def get_iter_coordinates(self, iteration):
+    def get_iter_coordinates(self: 'modelWE', iteration):
         """
         Return the valid coordinates for a certain iteration
 
@@ -548,7 +552,7 @@ class DataMixin:
 
         return iter_coords
 
-    def load_iter_coordinates(self):
+    def load_iter_coordinates(self: 'modelWE'):
         """
 
         Returns
@@ -603,7 +607,7 @@ class DataMixin:
 
         self.cur_iter_coords = cur_iter_coords
 
-    def load_iter_coordinates0(self):  # get iteration initial coordinates
+    def load_iter_coordinates0(self: 'modelWE'):  # get iteration initial coordinates
         coordList = np.full(
             (self.nSeg, self.nAtoms, self.coord_ndim), fill_value=np.nan
         )
@@ -630,7 +634,7 @@ class DataMixin:
             coordList[iS, :, :] = coord[self.segindList[iS], 0, :, :]
         self.cur_iter_coords = coordList
 
-    def get_coordinates(self, first_iter, last_iter):
+    def get_coordinates(self: 'modelWE', first_iter, last_iter):
         """
         Unused
 
@@ -660,7 +664,7 @@ class DataMixin:
                 coordSet = np.append(coordSet, self.cur_iter_coords, axis=0)
         self.all_coords = coordSet
 
-    def get_coordSet(self, last_iter, streaming=None):
+    def get_coordSet(self: 'modelWE', last_iter, streaming=None):
         """
         Loads all coordinates and progress coordinates into memory for later usage.
 
@@ -738,7 +742,7 @@ class DataMixin:
         self.first_iter = first_iter_cluster
         self.last_iter = last_iter
 
-    def get_traj_coordinates(self, from_iter, traj_length):
+    def get_traj_coordinates(self: 'modelWE', from_iter, traj_length):
         if traj_length > from_iter:
             traj_length = from_iter - 1
             sys.stdout.write(
@@ -784,7 +788,7 @@ class DataMixin:
         for iS in range(self.nSeg):
             self.trajSet[iS] = traj_iters[iS, last_index[iS] :, :, :]
 
-    def load_iter_data(self, n_iter: int):
+    def load_iter_data(self: 'modelWE', n_iter: int):
         """
         Update state with the data (including pcoord but not including coords) corresponding to an iteration.
 
@@ -911,7 +915,7 @@ class DataMixin:
         self.pcoord0List = pcoord0List
         self.pcoord1List = pcoord1List
 
-    def get_iterations(self):
+    def get_iterations(self: 'modelWE'):
         """
         Updates internal state with the maximum number of iterations, and the number of segments in each section.
 
@@ -972,7 +976,7 @@ class DataMixin:
         self.numSegments = numSegments
         self.maxIter = numSegments.size
 
-    def get_iterations_iters(self, first_iter: int, last_iter: int):
+    def get_iterations_iters(self: 'modelWE', first_iter: int, last_iter: int):
         """
         Updates internal state with the maximum number of iterations, and the number of segments in each section.
 
