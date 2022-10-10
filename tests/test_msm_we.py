@@ -178,18 +178,24 @@ def load_model(relative_path, regenerate_coords=False, compressed=False):
             model = pickle.load(model_file)
 
     if regenerate_coords:
-        # When loading from a pickle, some of the PCA parameters are nuked, so regenerate them.
+        # When loading from a pickle, some of the PCA parameters are cleared, so regenerate them.
         # model.coordinates.estimate(model.processCoordinates(model.all_coords))
         pass
 
-    # Patch paths in filelist. As constructed, they're
-    old_paths = model.fileList
-    new_paths = []
-    for path in old_paths:
-        relative_path = "/".join(path.split("/")[-3:])
-        absolute_path = os.path.join(BASE_PATH, relative_path)
-        new_paths.append(absolute_path)
-    model.fileList = new_paths
+    # Patch paths in filelist. As constructed, they're relative paths, from another directory.
+    #   This splits off the /restartXX/runYY/west.h5 part and re-writes the paths relative to the tests.
+    models = [model]
+    if hasattr(model, 'pre_discretization_model') and model.pre_discretization_model is not None:
+        models.append(model.pre_discretization_model)
+    for _model in models:
+        old_paths = _model.fileList
+        new_paths = []
+        for path in old_paths:
+            # The -3 indexing pulls out 'some_long_path / restartXX/runYY/west.h5'
+            relative_path = "/".join(path.split("/")[-3:])
+            absolute_path = os.path.join(BASE_PATH, relative_path)
+            new_paths.append(absolute_path)
+        _model.fileList = new_paths
 
     return model
 
@@ -316,6 +322,9 @@ def test_streaming_stratified_clustering(
 
     loaded_model.dimReduce()
 
+    assert loaded_model.pre_discretization_model.fileList == [os.path.join(BASE_PATH, 'reference/1000ns_ntl9/west.h5')]
+    assert loaded_model.fileList == [os.path.join(BASE_PATH, 'reference/1000ns_ntl9/west.h5')]
+
     # Do the clustering
     loaded_model.cluster_coordinates(
         modelParams["n_cluster_centers"],
@@ -352,6 +361,9 @@ def test_get_flux_matrix(
     This is an xfail for now, with an explicit timeout, because the subprocess calls
     may not execute on the Github Actions CI runner
     """
+
+    assert clustered_model.pre_discretization_model.fileList == [os.path.join(BASE_PATH, 'reference/1000ns_ntl9/west.h5')]
+    assert clustered_model.fileList == [os.path.join(BASE_PATH, 'reference/1000ns_ntl9/west.h5')]
 
     clustered_model.get_fluxMatrix(n_lag=0)
 
@@ -397,13 +409,13 @@ def test_get_steady_state_target_flux(organized_model, JtargetSS):
     assert np.isclose(organized_model.JtargetSS, JtargetSS)
 
 
-def test_get_cluster_structures(completed_model, ref_cluster_structures):
+def test_get_cluster_structures(organized_model, ref_cluster_structures):
     """
     Tests obtaining the library of structures in each MSM bin.
     """
 
-    completed_model.update_cluster_structures()
-    cluster_structures = completed_model.cluster_structures
+    organized_model.update_cluster_structures()
+    cluster_structures = organized_model.cluster_structures
 
     # Just check one bin, otherwise the ref file is huge
     assert (np.array(ref_cluster_structures) == np.array(cluster_structures[10])).all()
