@@ -111,11 +111,12 @@ def test_streaming_stratified_clustering(
     # Make sure the clusters are what they should be
     # Be a little flexible here, because the PCA has *very* minor differences in outputs, so the cluster centers
     #   will vary by a little more.
-    assert np.isclose(
+    assert np.allclose(
         loaded_model.clusters.cluster_models[3].cluster_centers_,
         clustered_model.clusters.cluster_models[3].cluster_centers_,
-        atol=1e-4,
-    ).all()
+        atol=1e-3,
+        rtol=1e-2
+    )
 
 
 @pytest.mark.xfail(
