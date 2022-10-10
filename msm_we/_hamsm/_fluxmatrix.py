@@ -13,26 +13,6 @@ class FluxMatrixMixin:
     fluxMatrixRaw = None
     fluxMatrix = None
 
-    @ray.remote
-    def get_iter_fluxMatrix_ray(model, processCoordinates, n_iter):
-        """
-        TODO
-        ----
-        Refactor this so it doesn't need to take the ENTIRE model as an input. That serialization/deserialization is
-        painful and unnecessary.
-
-        Really, in the main loop, I can just pull out the data (pcoord lists + transition weights) for this iteration
-            and feed it directly in.
-        """
-
-        self = model
-
-        iter_fluxmatrix = self.get_iter_fluxMatrix(n_iter)
-
-        del self
-
-        return iter_fluxmatrix, n_iter
-
     def get_iter_fluxMatrix(self, n_iter):
 
         self.load_iter_data(n_iter)
