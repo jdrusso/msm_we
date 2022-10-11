@@ -23,4 +23,5 @@ dependencies:
  - pip
  - pip:
    - ray
+   - synd
    - .
