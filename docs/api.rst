@@ -6,13 +6,16 @@ Documentation
 .. autosummary::
    :nosignatures:
 
-   msm_we
+   msm_we.modelWE
    msm_we.optimization
-   msm_we.westpa_plugins
    msm_we.fpt
    msm_we.ensembles
    msm_we.nmm
    msm_we.utils
+   msm_we.westpa_plugins.augmentation_driver
+   msm_we.westpa_plugins.hamsm_driver
+   msm_we.westpa_plugins.restart_driver
+   msm_we.westpa_plugins.optimization_driver
 
 haMSM model building and analysis (msm_we.modelWE)
 ---------------------------------------------------------
@@ -21,29 +24,29 @@ haMSM model building and analysis (msm_we.modelWE)
 Construction
 ______________
 
-.. autofunction:: msm_we.modelWE.build_analyze_model
-.. autofunction:: msm_we.modelWE.initialize
-.. autofunction:: msm_we.modelWE.get_coordSet
-.. autofunction:: msm_we.modelWE.dimReduce
-.. autofunction:: msm_we.modelWE.cluster_coordinates
-.. autofunction:: msm_we.modelWE.get_fluxMatrix
-.. autofunction:: msm_we.modelWE.organize_fluxMatrix
-.. autofunction:: msm_we.modelWE.do_block_validation
+.. automethod:: msm_we.modelWE.build_analyze_model
+.. automethod:: msm_we.modelWE.initialize
+.. automethod:: msm_we.modelWE.get_coordSet
+.. automethod:: msm_we.modelWE.dimReduce
+.. automethod:: msm_we.modelWE.cluster_coordinates
+.. automethod:: msm_we.modelWE.get_fluxMatrix
+.. automethod:: msm_we.modelWE.organize_fluxMatrix
+.. automethod:: msm_we.modelWE.do_block_validation
 
 Analysis
 ________
-.. autofunction:: msm_we.modelWE.get_Tmatrix
-.. autofunction:: msm_we.modelWE.get_steady_state
-.. autofunction:: msm_we.modelWE.get_steady_state_target_flux
-.. autofunction:: msm_we.modelWE.get_committor
-.. autofunction:: msm_we.modelWE.get_flux
-.. autofunction:: msm_we.modelWE.get_cluster_centers
+.. automethod:: msm_we.modelWE.get_Tmatrix
+.. automethod:: msm_we.modelWE.get_steady_state
+.. automethod:: msm_we.modelWE.get_steady_state_target_flux
+.. automethod:: msm_we.modelWE.get_committor
+.. automethod:: msm_we.modelWE.get_flux
+.. automethod:: msm_we.modelWE.get_cluster_centers
 
 Plotting
 ________
-.. autofunction:: msm_we.modelWE.plot_flux
-.. autofunction:: msm_we.modelWE.plot_flux_committor
-.. autofunction:: msm_we.modelWE.plot_flux_committor_pcoordcolor
+.. automethod:: msm_we.modelWE.plot_flux
+.. automethod:: msm_we.modelWE.plot_flux_committor
+.. automethod:: msm_we.modelWE.plot_flux_committor_pcoordcolor
 
 
 Optimization (msm_we.optimization)
@@ -56,17 +59,18 @@ Optimization (msm_we.optimization)
 WESTPA Plugins (msm_we.westpa_plugins)
 ---------------------------------------------------------
 
-.. autoclass:: msm_we.westpa_plugins.augmentation_driver.MDAugmentationDriver
-   :members:
+.. automodule:: msm_we.westpa_plugins.augmentation_driver
+   :members: MDAugmentationDriver
 
-.. autoclass:: msm_we.westpa_plugins.hamsm_driver.HAMSMDriver
-   :members:
+.. automodule:: msm_we.westpa_plugins.hamsm_driver
+   :members: HAMSMDriver
 
-.. autoclass:: msm_we.westpa_plugins.restart_driver.RestartDriver
-   :members:
 
-.. autoclass:: msm_we.westpa_plugins.optimization_driver.OptimizationDriver
-   :members:
+.. automodule:: msm_we.westpa_plugins.restart_driver
+   :members: RestartDriver
+
+.. automodule:: msm_we.westpa_plugins.optimization_driver
+   :members: OptimizationDriver
 
 FPT Calculations
 ----------------
