@@ -1,0 +1,79 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - "gh_actions_dev"
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+
+# Or top-level:
+defaults:
+  run:
+    shell: bash -l {0}
+    
+jobs:
+  test:
+    name: Test on Linux, Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9"]
+        experimental: [false]
+        include:
+          - python-version: "3.7"
+            experimental: true
+          #- python-version: "3.10"
+          #  experimental: true
+    continue-on-error: ${{ matrix.experimental }}
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 2
+
+    - name: Additional info about the build
+      shell: bash
+      run: |
+        uname -a
+        df -h
+        ulimit -a
+        
+    - name: Install Conda environment with Micromamba
+      uses: mamba-org/provision-with-micromamba@main
+      with:
+        cache-env: true
+        environment-file: environment.yml
+        extra-specs: |
+          python=${{ matrix.python-version }}
+
+
+    - name: Install package
+      run: |
+        conda info --all
+        python -m pip install .[tests]
+        conda list
+        
+        
+    - name: Run tests
+      if: matrix.python-version != '3.9'
+      run: |
+        pytest -v --color=yes --capture=no --log-cli-level INFO
+    
+    - name: Install coverage
+      if: matrix.python-version == '3.9'
+      run: pip install pytest-cov
+    - name: Run tests with coverage
+      if: matrix.python-version == '3.9'
+      run: |
+        pytest --cov -v --color=yes --capture=no --log-cli-level INFO
+    - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.9'
+      run: |
+        curl -Os https://uploader.codecov.io/latest/linux/codecov
+        chmod +x codecov
+        ./codecov
+        

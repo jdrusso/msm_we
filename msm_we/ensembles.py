@@ -1,4 +1,6 @@
 """
+Implements Ensemble class for managing trajectories
+
 Adapted from the original NMpathAnalysis package,
 https://github.com/ZuckermanLab/NMpathAnalysis
 """
@@ -14,14 +16,22 @@ from msm_we.fpt import DirectFPT, NonMarkovFPT
 
 
 class Ensemble:
-    """ Define a base class to store a list of space-continuous trajectories
+    """Define a base class to store a list of space-continuous trajectories
 
-     e.g.: [ trajectory1, trajectory2,...], each trajectory is just a matrix
-    where each row is a snapshot, and each column represents the evolution
-    of the corresponding variable.
+    e.g.: [ trajectory1, trajectory2,...], each trajectory is just a matrix
+       where each row is a snapshot, and each column represents the evolution
+       of the corresponding variable.
     """
 
-    def __init__(self, trajectories=None, verbose=False, dtype="float32", discrete=False, lag_time=1, **kwargs):
+    def __init__(
+        self,
+        trajectories=None,
+        verbose=False,
+        dtype="float32",
+        discrete=False,
+        lag_time=1,
+        **kwargs
+    ):
         """Initialize an object of Ensemble class"""
         super().__init__(**kwargs)
         self.dtype = dtype
@@ -46,7 +56,10 @@ class Ensemble:
                 n_snapshots, n_variables = get_shape(element)
 
                 if n_variables != _n_variables:
-                    raise Exception("Error: All the trajectories must have the same " "number of variables")
+                    raise Exception(
+                        "Error: All the trajectories must have the same "
+                        "number of variables"
+                    )
 
             self.n_variables = _n_variables
             self.trajectories = trajectories
@@ -55,7 +68,10 @@ class Ensemble:
             traj_length /= n_trajs  # Average
 
             if verbose:
-                print("Read {} ({}-dimensional) trajectories of " "average length {}.".format(n_trajs, n_variables, traj_length))
+                print(
+                    "Read {} ({}-dimensional) trajectories of "
+                    "average length {}.".format(n_trajs, n_variables, traj_length)
+                )
 
     def add_trajectory(self, trajectory):
         """Add a single trajectory to the ensemble"""
@@ -71,7 +87,10 @@ class Ensemble:
                 print(self)
         else:
             if self.n_variables != _n_variables:
-                raise Exception("All the trajectories in the same ensemble must " "have the same number of variables")
+                raise Exception(
+                    "All the trajectories in the same ensemble must "
+                    "have the same number of variables"
+                )
             else:
                 self.trajectories.append(trajectory)
                 if self.verbose:
@@ -89,8 +108,12 @@ class Ensemble:
         return (
             "\n"
             + feature
-            + "{} with {} ({}-dimensional) trajectories".format(self.__class__.__name__, self.__len__(), self.n_variables)
-            + "\nTotal number of snapshots: {}".format(sum([len(traj) for traj in self]))
+            + "{} with {} ({}-dimensional) trajectories".format(
+                self.__class__.__name__, self.__len__(), self.n_variables
+            )
+            + "\nTotal number of snapshots: {}".format(
+                sum([len(traj) for traj in self])
+            )
         )
 
     def __add__(self, other):
@@ -113,13 +136,21 @@ class Ensemble:
     def empirical_mfpts(self, stateA, stateB):
         """Calculate mean first passage time using direct counting method"""
         return DirectFPT.mean_fpts(
-            self.trajectories, stateA, stateB, discrete=self.discrete, n_variables=self.n_variables, lag_time=self._lag_time,
+            self.trajectories,
+            stateA,
+            stateB,
+            discrete=self.discrete,
+            n_variables=self.n_variables,
+            lag_time=self._lag_time,
         )
 
     def _count_matrix(self, n_states=None, map_function=None):
         """Built the count matrix"""
         if (map_function is None) or (n_states is None):
-            raise Exception("The number of states and a map function " "have to be given as argument")
+            raise Exception(
+                "The number of states and a map function "
+                "have to be given as argument"
+            )
 
         count_matrix = np.zeros((n_states, n_states))
 
@@ -175,10 +206,18 @@ class Ensemble:
 
 
 class PathEnsemble(Ensemble):
-    """ Derive a class to store trajectories for path analysis"""
+    """Derive a class to store trajectories for path analysis"""
 
     def __init__(
-        self, trajectories=None, verbose=False, dtype="float32", discrete=False, lag_time=1, stateA=None, stateB=None, **kwargs
+        self,
+        trajectories=None,
+        verbose=False,
+        dtype="float32",
+        discrete=False,
+        lag_time=1,
+        stateA=None,
+        stateB=None,
+        **kwargs
     ):
         super().__init__(trajectories, verbose, dtype, discrete, lag_time, **kwargs)
 
@@ -192,7 +231,13 @@ class PathEnsemble(Ensemble):
 
     @classmethod
     def from_ensemble(
-        cls, ensemble, stateA=None, stateB=None, map_function=None, discrete=False, dtype="float32",
+        cls,
+        ensemble,
+        stateA=None,
+        stateB=None,
+        map_function=None,
+        discrete=False,
+        dtype="float32",
     ):
         """Build a PathEnsemble from an ensemble object or a set of trajectories"""
 
@@ -244,7 +289,13 @@ class PathEnsemble(Ensemble):
 
                 previous_color = color
 
-        return cls(list_of_pathsAB, stateA=stateA, stateB=stateB, dtype=dtype, discrete=discrete,)
+        return cls(
+            list_of_pathsAB,
+            stateA=stateA,
+            stateB=stateB,
+            dtype=dtype,
+            discrete=discrete,
+        )
 
     def cluster(self, distance_metric, n_cluster=10, method="K-means"):
         raise NotImplementedError("Not implemented yet")
@@ -253,7 +304,15 @@ class PathEnsemble(Ensemble):
 class DiscreteEnsemble(Ensemble):
     """Define a base class to store a list of space-discrete trajectories"""
 
-    def __init__(self, trajectories=None, verbose=False, dtype="int32", discrete=True, lag_time=1, **kwargs):
+    def __init__(
+        self,
+        trajectories=None,
+        verbose=False,
+        dtype="int32",
+        discrete=True,
+        lag_time=1,
+        **kwargs
+    ):
         """Initialize an object of Discrete Ensemble"""
         super().__init__(trajectories, verbose, dtype, discrete, lag_time, **kwargs)
         if (self.n_variables != 1) and (self.n_variables != 0):
@@ -277,7 +336,9 @@ class DiscreteEnsemble(Ensemble):
             for traj in ens.trajectories:
                 d_traj = np.array([], dtype=dtype)
                 for snapshot in traj:
-                    d_traj = np.append(d_traj, np.array([map_function(snapshot)]), axis=0)
+                    d_traj = np.append(
+                        d_traj, np.array([map_function(snapshot)]), axis=0
+                    )
                 discrete_trajs_list.append(d_traj)
             return cls(discrete_trajs_list)
         else:
@@ -290,7 +351,9 @@ class DiscreteEnsemble(Ensemble):
             return cls([d_traj])
 
     @classmethod
-    def from_transition_matrix(cls, transition_matrix, sim_length=None, initial_state=0):
+    def from_transition_matrix(
+        cls, transition_matrix, sim_length=None, initial_state=0
+    ):
         """Generates a DiscreteEnsemble from the transition matrix"""
         if sim_length is None:
             raise Exception("The simulation length must be given")
@@ -305,7 +368,9 @@ class DiscreteEnsemble(Ensemble):
         discrete_traj = [initial_state]
 
         for i in range(sim_length):
-            next_state = weighted_choice([k for k in range(n_states)], transition_matrix[current_state, :])
+            next_state = weighted_choice(
+                [k for k in range(n_states)], transition_matrix[current_state, :]
+            )
             discrete_traj.append(next_state)
             current_state = next_state
 
@@ -316,14 +381,30 @@ class DiscretePathEnsemble(PathEnsemble, DiscreteEnsemble):
     """Derive a class to store a list of discrete trajectories for path analysis"""
 
     def __init__(
-        self, trajectories=None, verbose=False, dtype="int32", discrete=True, lag_time=1, stateA=None, stateB=None, **kwargs
+        self,
+        trajectories=None,
+        verbose=False,
+        dtype="int32",
+        discrete=True,
+        lag_time=1,
+        stateA=None,
+        stateB=None,
+        **kwargs
     ):
 
-        super().__init__(trajectories, verbose, dtype, discrete, lag_time, stateA, stateB, **kwargs)
+        super().__init__(
+            trajectories, verbose, dtype, discrete, lag_time, stateA, stateB, **kwargs
+        )
 
     @classmethod
     def from_transition_matrix(
-        cls, transition_matrix, stateA=None, stateB=None, n_paths=1000, ini_pops=None, max_iters=1000000000,
+        cls,
+        transition_matrix,
+        stateA=None,
+        stateB=None,
+        n_paths=1000,
+        ini_pops=None,
+        max_iters=1000000000,
     ):
         """
         Construct a path ensemble from a transition matrix
@@ -339,7 +420,6 @@ class DiscretePathEnsemble(PathEnsemble, DiscreteEnsemble):
                     initial state used to generate the path
 
                     possible values:
-                    ----------------
                     a) None
                     Use a uniform distribution over the states in stateA
                     c) list
@@ -364,11 +444,16 @@ class DiscretePathEnsemble(PathEnsemble, DiscreteEnsemble):
             path = [current_state]
 
             for j in range(max_iters):
-                next_state = weighted_choice([k for k in range(n_states)], transition_matrix[current_state, :])
+                next_state = weighted_choice(
+                    [k for k in range(n_states)], transition_matrix[current_state, :]
+                )
                 path += [next_state]
                 current_state = next_state
                 if j + 1 == max_iters:
-                    print("\nWARNING: max iteration reached when generating " "the path ensemble, consider to increase max_iters")
+                    print(
+                        "\nWARNING: max iteration reached when generating "
+                        "the path ensemble, consider to increase max_iters"
+                    )
                 if current_state in stateB:
                     break
 
@@ -380,7 +465,9 @@ class DiscretePathEnsemble(PathEnsemble, DiscreteEnsemble):
     @classmethod
     def from_ensemble(cls, ensemble, stateA, stateB, map_function=None):
         """Build a DiscreteEnsemble from an ensemble object or a set of trajectories"""
-        ens = PathEnsemble.from_ensemble(ensemble, stateA, stateB, map_function, discrete=True, dtype="int32")
+        ens = PathEnsemble.from_ensemble(
+            ensemble, stateA, stateB, map_function, discrete=True, dtype="int32"
+        )
         return cls(ens.trajectories, stateA=stateA, stateB=stateB)
 
     def nm_mfpt(self, ini_probs=None, n_states=None):
@@ -389,7 +476,9 @@ class DiscretePathEnsemble(PathEnsemble, DiscreteEnsemble):
         ini_state = list(self.stateA)
         final_state = sorted(list(self.stateB))
 
-        return NonMarkovFPT.directional_mfpt(t_matrix, ini_state, final_state, ini_probs)
+        return NonMarkovFPT.directional_mfpt(
+            t_matrix, ini_state, final_state, ini_probs
+        )
 
     def _fundamental_sequences(self, transition_matrix, symmetric=True):
         """Divide/classify the path ensemble into fundamental sequences"""
@@ -398,7 +487,9 @@ class DiscretePathEnsemble(PathEnsemble, DiscreteEnsemble):
 
         for path in self.trajectories:
             if symmetric:
-                cmatrix = self._connectivity_matrix(path, transition_matrix * transition_matrix.T)
+                cmatrix = self._connectivity_matrix(
+                    path, transition_matrix * transition_matrix.T
+                )
             else:
                 cmatrix = self._connectivity_matrix(path, transition_matrix)
 
@@ -428,7 +519,9 @@ class DiscretePathEnsemble(PathEnsemble, DiscreteEnsemble):
             new_fs_list.append(key)
             weights.append(value / float(tot_count))
 
-        reversed_sorted_weights, reversed_sorted_new_fs_list = reverse_sort_lists(weights, new_fs_list)
+        reversed_sorted_weights, reversed_sorted_new_fs_list = reverse_sort_lists(
+            weights, new_fs_list
+        )
 
         return reversed_sorted_new_fs_list, reversed_sorted_weights, tot_count
 

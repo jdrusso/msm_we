@@ -4,14 +4,26 @@
 
 from setuptools import setup, find_packages
 
-with open("README.rst") as readme_file:
-    readme = readme_file.read()
+#with open("README.rst") as readme_file:
+#    readme = readme_file.read()
 
-with open("HISTORY.rst") as history_file:
-    history = history_file.read()
+#with open("HISTORY.rst") as history_file:
+#    history = history_file.read()
 
 # WESTPA-2.0 with westpa.analysis is not yet in Conda
-requirements = ["westpa>=v2.0.dev1"]
+#requirements = ["westpa>=v2.0b5"]
+requirements = [
+    "scikit-learn>=0.24,<1.1",
+    "scipy>=1.5",
+    "numpy>=1.16.5",
+    "mdtraj>=1.9",
+    "ray>=1.0",
+    "h5py>=3.1",
+    "tqdm",
+    "rich",
+    "toml",
+    "matplotlib"
+]
 
 setup_requirements = [
     "pytest-runner",
@@ -43,7 +55,7 @@ setup(
     entry_points={"console_scripts": ["msm_we=msm_we.cli:main"]},
     install_requires=requirements,
     license="MIT license",
-    long_description=readme + "\n\n" + history,
+#    long_description=readme + "\n\n" + history,
     include_package_data=True,
     keywords="msm_we",
     name="msm_we",
@@ -53,6 +65,6 @@ setup(
     tests_require=test_requirements,
     extras_require=EXTRAS_REQUIRE,
     url="https://github.com/jdrusso/msm_we",
-    version="0.1.0",
+    version="0.1.27",
     zip_safe=False,
 )

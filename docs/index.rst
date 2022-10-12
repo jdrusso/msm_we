@@ -1,24 +1,16 @@
 Welcome to msm_we's documentation!
 ======================================
 
-
-Test change
-
-
-This is a package for doing history-augmented MSM (haMSM) analysis on weighted ensemble trajectories.
-
-Weighted ensemble data produced from simulations with recycling boundary conditions are naturally in a directional
-ensemble.
-This means that a history label can be assigned to every trajectory.
-
+.. include:: readme.rst
 
 .. toctree::
    :maxdepth: 1
    :caption: Contents:
 
    readme
-   api
    usage
+   examples
+   api
    code_todos
    authors
    history

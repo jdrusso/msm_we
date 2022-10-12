@@ -17,7 +17,11 @@ dependencies:
  - sphinx_rtd_theme
  - tqdm
  - scipy
+ - westpa
+ - nbsphinx
+ - mdanalysis
  - pip
  - pip:
    - ray
+   - synd
    - .

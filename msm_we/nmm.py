@@ -1,4 +1,6 @@
 """
+"Non-Markovian" trajectory analysis
+
 Adapted from the original NMpathAnalysis package,
 https://github.com/ZuckermanLab/NMpathAnalysis
 """
@@ -165,7 +167,9 @@ class NonMarkovModel(DiscreteEnsemble):
         self.markov_tmatrix = markov_tmatrix
 
     @classmethod
-    def from_nm_tmatrix(cls, transition_matrix, stateA, stateB, sim_length=None, initial_state=0):
+    def from_nm_tmatrix(
+        cls, transition_matrix, stateA, stateB, sim_length=None, initial_state=0
+    ):
         """Generates a discrete ensemble from the transition matrix"""
         if sim_length is None:
             raise Exception("The simulation length must be given")
@@ -180,7 +184,9 @@ class NonMarkovModel(DiscreteEnsemble):
         discrete_traj = [initial_state // 2]
 
         for i in range(sim_length):
-            next_state = weighted_choice([k for k in range(n_states)], transition_matrix[current_state, :])
+            next_state = weighted_choice(
+                [k for k in range(n_states)], transition_matrix[current_state, :]
+            )
             discrete_traj.append(next_state // 2)
             current_state = next_state
 
@@ -197,15 +203,23 @@ class NonMarkovModel(DiscreteEnsemble):
 
     def mfpts(self):
         if self.markovian:
-            return MarkovFPT.mean_fpts(self.markov_tmatrix, self.stateA, self.stateB, lag_time=self._lag_time)
+            return MarkovFPT.mean_fpts(
+                self.markov_tmatrix, self.stateA, self.stateB, lag_time=self._lag_time
+            )
         else:
-            return NonMarkovFPT.mean_fpts(self.nm_tmatrix, self.stateA, self.stateB, lag_time=self._lag_time)
+            return NonMarkovFPT.mean_fpts(
+                self.nm_tmatrix, self.stateA, self.stateB, lag_time=self._lag_time
+            )
 
     def empirical_mfpts(self):
-        return DirectFPT.mean_fpts(self.trajectories, self.stateA, self.stateB, lag_time=self._lag_time)
+        return DirectFPT.mean_fpts(
+            self.trajectories, self.stateA, self.stateB, lag_time=self._lag_time
+        )
 
     def empirical_fpts(self):
-        return DirectFPT.fpts(self.trajectories, self.stateA, self.stateB, lag_time=self._lag_time)
+        return DirectFPT.fpts(
+            self.trajectories, self.stateA, self.stateB, lag_time=self._lag_time
+        )
 
     def populations(self):
         # In this case the results are going to be the same
@@ -287,7 +301,9 @@ class NonMarkovModel(DiscreteEnsemble):
         for i in range(0, 2 * self.n_states, 2):
             for j in range(2 * self.n_states):
                 if j // 2 in self.stateB:
-                    distrib_on_B[self.stateB.index(j // 2)] += labeled_pops[i] * t_matrix[i, j]
+                    distrib_on_B[self.stateB.index(j // 2)] += (
+                        labeled_pops[i] * t_matrix[i, j]
+                    )
         return distrib_on_B
 
     def fluxBA_distribution_on_A(self):
@@ -301,7 +317,9 @@ class NonMarkovModel(DiscreteEnsemble):
         for i in range(1, 2 * self.n_states + 1, 2):
             for j in range(2 * self.n_states):
                 if j // 2 in self.stateA:
-                    distrib_on_A[self.stateA.index(j // 2)] += labeled_pops[i] * t_matrix[i, j]
+                    distrib_on_A[self.stateA.index(j // 2)] += (
+                        labeled_pops[i] * t_matrix[i, j]
+                    )
         return distrib_on_A
 
     def fpt_distrib_AB(self, max_x=1000, dt=1):
@@ -349,7 +367,9 @@ class NonMarkovModel(DiscreteEnsemble):
 
         for dt in times:
             if dt % self.lag_time != 0:
-                raise ValueError("The times given should be " "multiple of the lag time")
+                raise ValueError(
+                    "The times given should be " "multiple of the lag time"
+                )
             n = int(dt / self.lag_time)
             pops_eq = self.populations()
 
@@ -401,7 +421,9 @@ class NonMarkovModel(DiscreteEnsemble):
 
         return ens.weighted_fundamental_sequences(tmatrix_for_classification, symmetric)
 
-    def weighted_FS(self, tmatrix_for_classification=None, n_paths=1000, symmetric=True):
+    def weighted_FS(
+        self, tmatrix_for_classification=None, n_paths=1000, symmetric=True
+    ):
         if tmatrix_for_classification is None:
             tmatrix_for_classification = self.markov_tmatrix
 
@@ -410,7 +432,9 @@ class NonMarkovModel(DiscreteEnsemble):
         else:
             tmatrix_to_generate_paths = self.tmatrixAB()
 
-        ens = DiscretePathEnsemble.from_transition_matrix(tmatrix_to_generate_paths, self.stateA, self.stateB, n_paths)
+        ens = DiscretePathEnsemble.from_transition_matrix(
+            tmatrix_to_generate_paths, self.stateA, self.stateB, n_paths
+        )
 
         return ens.weighted_fundamental_sequences(tmatrix_for_classification, symmetric)
 
@@ -418,9 +442,21 @@ class NonMarkovModel(DiscreteEnsemble):
 class MarkovPlusColorModel(NonMarkovModel):
     """Define a class for analyzing MD trajectories using Markovian Plus Color Model"""
 
-    def __init__(self, trajectories, stateA, stateB, lag_time=1, clean_traj=False, sliding_window=True, hist_length=0, **kwargs):
+    def __init__(
+        self,
+        trajectories,
+        stateA,
+        stateB,
+        lag_time=1,
+        clean_traj=False,
+        sliding_window=True,
+        hist_length=0,
+        **kwargs
+    ):
         self.hist_length = hist_length
-        super().__init__(trajectories, stateA, stateB, lag_time, clean_traj, sliding_window, **kwargs)
+        super().__init__(
+            trajectories, stateA, stateB, lag_time, clean_traj, sliding_window, **kwargs
+        )
 
     def fit(self):
         """Fits the markov plus color model from a list of sequences"""
@@ -485,13 +521,27 @@ class MarkovPlusColorModel(NonMarkovModel):
                 elif prev_color == "B" and color == "B":
                     nm_tmatrix[2 * traj[i - lag] + 1, 2 * traj[i] + 1] += 1.0
                 elif prev_color == "U" and color == "B":
-                    temp_sum = fmatrix[2 * traj[i - lag], 2 * traj[i] + 1] + fmatrix[2 * traj[i - lag] + 1, 2 * traj[i] + 1]
-                    nm_tmatrix[2 * traj[i - lag], 2 * traj[i] + 1] += fmatrix[2 * traj[i - lag], 2 * traj[i] + 1] / temp_sum
-                    nm_tmatrix[2 * traj[i - lag] + 1, 2 * traj[i] + 1] += fmatrix[2 * traj[i - lag] + 1, 2 * traj[i] + 1] / temp_sum
+                    temp_sum = (
+                        fmatrix[2 * traj[i - lag], 2 * traj[i] + 1]
+                        + fmatrix[2 * traj[i - lag] + 1, 2 * traj[i] + 1]
+                    )
+                    nm_tmatrix[2 * traj[i - lag], 2 * traj[i] + 1] += (
+                        fmatrix[2 * traj[i - lag], 2 * traj[i] + 1] / temp_sum
+                    )
+                    nm_tmatrix[2 * traj[i - lag] + 1, 2 * traj[i] + 1] += (
+                        fmatrix[2 * traj[i - lag] + 1, 2 * traj[i] + 1] / temp_sum
+                    )
                 elif prev_color == "U" and color == "A":
-                    temp_sum = fmatrix[2 * traj[i - lag], 2 * traj[i]] + fmatrix[2 * traj[i - lag] + 1, 2 * traj[i]]
-                    nm_tmatrix[2 * traj[i - lag]][2 * traj[i]] += fmatrix[2 * traj[i - lag], 2 * traj[i]] / temp_sum
-                    nm_tmatrix[2 * traj[i - lag] + 1][2 * traj[i]] += fmatrix[2 * traj[i - lag] + 1, 2 * traj[i]] / temp_sum
+                    temp_sum = (
+                        fmatrix[2 * traj[i - lag], 2 * traj[i]]
+                        + fmatrix[2 * traj[i - lag] + 1, 2 * traj[i]]
+                    )
+                    nm_tmatrix[2 * traj[i - lag]][2 * traj[i]] += (
+                        fmatrix[2 * traj[i - lag], 2 * traj[i]] / temp_sum
+                    )
+                    nm_tmatrix[2 * traj[i - lag] + 1][2 * traj[i]] += (
+                        fmatrix[2 * traj[i - lag] + 1, 2 * traj[i]] / temp_sum
+                    )
 
                 elif prev_color == "U" and color == "U":
                     temp_sum = (
@@ -501,10 +551,18 @@ class MarkovPlusColorModel(NonMarkovModel):
                         + fmatrix[2 * traj[i - lag] + 1, 2 * traj[i]]
                     )
 
-                    nm_tmatrix[2 * traj[i - lag], 2 * traj[i] + 1] += fmatrix[2 * traj[i - lag], 2 * traj[i] + 1] / temp_sum
-                    nm_tmatrix[2 * traj[i - lag] + 1][2 * traj[i] + 1] += fmatrix[2 * traj[i - lag] + 1, 2 * traj[i] + 1] / temp_sum
-                    nm_tmatrix[2 * traj[i - lag]][2 * traj[i]] += fmatrix[2 * traj[i - lag], 2 * traj[i]] / temp_sum
-                    nm_tmatrix[2 * traj[i - lag] + 1][2 * traj[i]] += fmatrix[2 * traj[i - lag] + 1, 2 * traj[i]] / temp_sum
+                    nm_tmatrix[2 * traj[i - lag], 2 * traj[i] + 1] += (
+                        fmatrix[2 * traj[i - lag], 2 * traj[i] + 1] / temp_sum
+                    )
+                    nm_tmatrix[2 * traj[i - lag] + 1][2 * traj[i] + 1] += (
+                        fmatrix[2 * traj[i - lag] + 1, 2 * traj[i] + 1] / temp_sum
+                    )
+                    nm_tmatrix[2 * traj[i - lag]][2 * traj[i]] += (
+                        fmatrix[2 * traj[i - lag], 2 * traj[i]] / temp_sum
+                    )
+                    nm_tmatrix[2 * traj[i - lag] + 1][2 * traj[i]] += (
+                        fmatrix[2 * traj[i - lag] + 1, 2 * traj[i]] / temp_sum
+                    )
 
         self.nm_cmatrix = nm_tmatrix  # not normalized, it is like count matrix
 
@@ -514,5 +572,7 @@ class MarkovPlusColorModel(NonMarkovModel):
 
     def populations(self):
         return NotImplementedError(
-            "You should use a regular Markov model or " "a non-Markovian model for estimating " "populations"
+            "You should use a regular Markov model or "
+            "a non-Markovian model for estimating "
+            "populations"
         )
