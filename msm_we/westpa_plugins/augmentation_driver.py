@@ -61,7 +61,7 @@ class H5AugmentationDriver:
         # We construct the path to the per-iteration H5 file, using the link already existing in iter_XX/trajectories.
         # This is a relative path, to make it more robust to moving the data.
         self.data_manager.we_h5file[auxcoord_dataset] = h5py.SoftLink(
-            path=f'{iter_group_name}/trajectories/coordinates'
+            path=f'{iter_group_name}/trajectories/sorted_segment_trajectories'
         )
 
 
