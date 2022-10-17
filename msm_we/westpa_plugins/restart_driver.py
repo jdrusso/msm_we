@@ -941,8 +941,66 @@ class RestartDriver(HAMSMDriver):
                     # Multiscale Model Sim 18, 646–673 (2020).
                     structure_weight = seg_we_weight * (bin_prob / msm_bin_we_weight)
 
-                    iteration, seg_id, h5_file = model.structure_iteration_segments[msm_bin_idx][struct_idx]
-                    structure_filename = f'hdf:{h5_file}:{iteration}:{seg_id}'
+                    # If we're using the HDF5 framework, we can just link segments to their structures in that
+                    if self.data_manager.store_h5:
+
+                        iteration, seg_id, h5_file = model.structure_iteration_segments[msm_bin_idx][struct_idx]
+                        structure_filename = f'hdf:{h5_file}:{iteration}:{seg_id}'
+
+                    # Otherwise, we have to actually write structures to disk
+                    else:
+
+                        topology = model.reference_structure.topology
+
+                        try:
+                            angles = model.reference_structure.unitcell_angles[0]
+                            lengths = model.reference_structure.unitcell_lengths[0] * 10
+                        # This throws typeerror if reference_structure.unitcell_angles is None, or AttributeError
+                        #   if reference_structure.unitcell_angles doesn't exist.
+                        except (TypeError, AttributeError):
+                            angles, lengths = None, None
+
+                        coords = structure * 10  # Correct units
+
+                        structure_filename = (
+                            f"{struct_directory}/bin{msm_bin_idx}_"
+                            f"struct{struct_idx}.{STRUCT_EXTENSIONS[self.struct_filetype]}"
+                        )
+
+                        with self.struct_filetype(
+                            structure_filename, "w"
+                        ) as struct_file:
+
+                            # Write the structure file
+                            if self.struct_filetype is md.formats.PDBTrajectoryFile:
+                                struct_file.write(
+                                    coords,
+                                    topology,
+                                    modelIndex=1,
+                                    unitcell_angles=angles,
+                                    unitcell_lengths=lengths,
+                                )
+
+                            elif self.struct_filetype is md.formats.AmberRestartFile:
+                                # AmberRestartFile takes slightly differently named keyword args
+                                struct_file.write(
+                                    coords,
+                                    time=None,
+                                    cell_angles=angles,
+                                    cell_lengths=lengths,
+                                )
+
+                            else:
+                                # Otherwise, YOLO just hope all the positional arguments are in the right place
+                                log.warning(
+                                    f"This output filetype ({self.struct_filetype}) is probably supported, "
+                                    f"but not explicitly handled."
+                                    " You should ensure that it takes argument as (coords, topology)"
+                                )
+                                struct_file.write(coords, topology)
+                                raise Exception(
+                                    "Don't know what extension to use for this filetype"
+                                )
 
                     total_bin_weights[-1] += structure_weight
                     total_weight += structure_weight
