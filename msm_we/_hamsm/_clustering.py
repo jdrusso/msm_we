@@ -23,7 +23,6 @@ SUPPORTED_MAPPERS = {RectilinearBinMapper, VoronoiBinMapper}
 
 
 class ClusteringMixin:
-
     n_clusters = None
     clusters = None
     clusterFile = None
@@ -110,7 +109,7 @@ class ClusteringMixin:
 
     @ray.remote
     def do_ray_discretization(
-        model: "modelWE", kmeans_model, iteration, processCoordinates
+            model: "modelWE", kmeans_model, iteration, processCoordinates
     ):
 
         # model_id, kmeans_model_id, iteration, processCoordinates_id = arg
@@ -139,15 +138,15 @@ class ClusteringMixin:
         return dtrajs, 1, iteration
 
     def cluster_coordinates(
-        self: "modelWE",
-        n_clusters,
-        streaming=False,
-        first_cluster_iter=None,
-        use_ray=False,
-        stratified=True,
-        iters_to_use=None,
-        store_validation_model=False,
-        **_cluster_args,
+            self: "modelWE",
+            n_clusters,
+            streaming=False,
+            first_cluster_iter=None,
+            use_ray=False,
+            stratified=True,
+            iters_to_use=None,
+            store_validation_model=False,
+            **_cluster_args,
     ):
 
         self.clustering_method = None
@@ -192,13 +191,13 @@ class ClusteringMixin:
             self.post_cluster_model = deepcopy(self)
 
     def cluster_aggregated(
-        self: "modelWE",
-        n_clusters,
-        streaming=False,
-        first_cluster_iter=None,
-        use_ray=False,
-        iters_to_use=None,
-        **_cluster_args,
+            self: "modelWE",
+            n_clusters,
+            streaming=False,
+            first_cluster_iter=None,
+            use_ray=False,
+            iters_to_use=None,
+            **_cluster_args,
     ):
         """
         Use k-means to cluster coordinates into `n_clusters` cluster centers, and saves the resulting cluster object
@@ -318,7 +317,7 @@ class ClusteringMixin:
 
                 extra_iters_used = 0
                 for iter_idx, iteration in enumerate(
-                    tqdm.tqdm(iters_to_use, desc="Clustering")
+                        tqdm.tqdm(iters_to_use, desc="Clustering")
                 ):
 
                     if extra_iters_used > 0:
@@ -327,7 +326,7 @@ class ClusteringMixin:
                         continue
 
                     with concurrent.futures.ProcessPoolExecutor(
-                        max_workers=1, mp_context=mp.get_context("fork")
+                            max_workers=1, mp_context=mp.get_context("fork")
                     ) as executor:
                         cluster_model, extra_iters_used = executor.submit(
                             self.do_clustering,
@@ -358,7 +357,7 @@ class ClusteringMixin:
             # continued = False
             extra_iters_used = 0
             for iter_idx, iteration in enumerate(
-                tqdm.tqdm(iters_to_use, desc="Clustering")
+                    tqdm.tqdm(iters_to_use, desc="Clustering")
             ):
 
                 if extra_iters_used > 0:
@@ -367,7 +366,7 @@ class ClusteringMixin:
                     continue
 
                 with concurrent.futures.ProcessPoolExecutor(
-                    max_workers=1, mp_context=mp.get_context("fork")
+                        max_workers=1, mp_context=mp.get_context("fork")
                 ) as executor:
                     cluster_model, extra_iters_used = executor.submit(
                         self.do_clustering,
@@ -387,7 +386,7 @@ class ClusteringMixin:
             # If we're not using Ray, then calculate serially
             if not use_ray:
                 for iteration in tqdm.tqdm(
-                    range(1, self.maxIter), desc="Discretization"
+                        range(1, self.maxIter), desc="Discretization"
                 ):
 
                     if extra_iters_used > 0:
@@ -396,7 +395,7 @@ class ClusteringMixin:
                         continue
 
                     with concurrent.futures.ProcessPoolExecutor(
-                        max_workers=1, mp_context=mp.get_context("fork")
+                            max_workers=1, mp_context=mp.get_context("fork")
                     ) as executor:
                         dtrajs, extra_iters_used = executor.submit(
                             self.do_discretization,
@@ -420,9 +419,8 @@ class ClusteringMixin:
 
                 # max_inflight = 50
                 for iteration in tqdm.tqdm(
-                    range(1, self.maxIter), desc="Submitting discretization tasks"
+                        range(1, self.maxIter), desc="Submitting discretization tasks"
                 ):
-
                     # if len(task_ids) > max_inflight:
                     #
                     #     # The number that need to be ready before we can submit more
@@ -440,7 +438,7 @@ class ClusteringMixin:
                 # Do these in bigger batches, dtrajs aren't very big
 
                 with tqdm.tqdm(
-                    total=len(task_ids), desc="Retrieving discretized trajectories"
+                        total=len(task_ids), desc="Retrieving discretized trajectories"
                 ) as pbar:
                     while task_ids:
                         result_batch_size = 50
@@ -465,9 +463,9 @@ class ClusteringMixin:
             raise NotImplementedError("VAMP + streaming clustering is not supported.")
 
         elif (
-            self.dimReduceMethod == "pca"
-            or self.dimReduceMethod == "vamp"
-            and not streaming
+                self.dimReduceMethod == "pca"
+                or self.dimReduceMethod == "vamp"
+                and not streaming
         ):
 
             if self.dimReduceMethod == "pca":
@@ -503,14 +501,14 @@ class ClusteringMixin:
                 ]
 
         self.clusterFile = (
-            self.modelName
-            + "_clusters_s"
-            + str(self.first_iter)
-            + "_e"
-            + str(self.last_iter)
-            + "_nC"
-            + str(self.n_clusters)
-            + ".h5"
+                self.modelName
+                + "_clusters_s"
+                + str(self.first_iter)
+                + "_e"
+                + str(self.last_iter)
+                + "_nC"
+                + str(self.n_clusters)
+                + ".h5"
         )
 
         # self.dtrajs = self.clusters.dtrajs
@@ -521,15 +519,15 @@ class ClusteringMixin:
         # self.clusters.save(self.clusterFile, save_streaming_chain=True, overwrite=True)
 
     def cluster_stratified(
-        self: "modelWE",
-        n_clusters,
-        streaming=True,
-        first_cluster_iter=None,
-        use_ray=True,
-        bin_iteration=2,
-        iters_to_use=None,
-        user_bin_mapper=None,
-        **_cluster_args,
+            self: "modelWE",
+            n_clusters,
+            streaming=True,
+            first_cluster_iter=None,
+            use_ray=True,
+            bin_iteration=2,
+            iters_to_use=None,
+            user_bin_mapper=None,
+            **_cluster_args,
     ):
         """
         Perform full-stratified clustering, enforcing independent clustering for trajectories within each WE bin.
@@ -653,7 +651,7 @@ class ClusteringMixin:
         all_filled_bins = set()
         all_unfilled_bins = set()
         for iter_idx, iteration in enumerate(
-            tqdm.tqdm(iters_to_use, desc="Clustering")
+                tqdm.tqdm(iters_to_use, desc="Clustering")
         ):
 
             if extra_iters_used > 0:
@@ -664,7 +662,7 @@ class ClusteringMixin:
             ignored_bins = []
 
             with concurrent.futures.ProcessPoolExecutor(
-                max_workers=1, mp_context=mp.get_context("fork")
+                    max_workers=1, mp_context=mp.get_context("fork")
             ) as executor:
 
                 try:
@@ -795,7 +793,6 @@ class ClusteringMixin:
 
                 # Find the nearest non-empty bin
                 for unfilled_bin in unfilled_bins:
-
                     nearest_filled_bin = self.find_nearest_bin(
                         bin_mapper, unfilled_bin, list(filled_bins)
                     )
@@ -814,7 +811,7 @@ class ClusteringMixin:
 
             if used_iters > -1:
                 log.debug(
-                    f"Still missing segs in bin {unique_bins[counts < min_coords]}. Pulled {used_iters+1} extra iter"
+                    f"Still missing segs in bin {unique_bins[counts < min_coords]}. Pulled {used_iters + 1} extra iter"
                 )
                 log.debug(f"Had {list(zip(unique_bins, counts))}, need {min_coords}")
 
@@ -847,12 +844,12 @@ class ClusteringMixin:
             pcoord_array = np.array(pcoords)
             # seg_weight_array = np.array(seg_weights)
             assert (
-                pcoord_array.shape[0] == iter_coords.shape[0]
+                    pcoord_array.shape[0] == iter_coords.shape[0]
             ), f"{pcoord_array.shape}, {iter_coords.shape}"
 
             if self.use_weights_in_clustering:
                 assert (
-                    seg_weights.shape[0] == seg_weights.shape[0]
+                        seg_weights.shape[0] == seg_weights.shape[0]
                 ), f"{seg_weights.shape}, {iter_coords.shape}"
 
             # Ignore any segments that are in the basis or target
@@ -982,7 +979,7 @@ class ClusteringMixin:
             # clusters_in_bin = range(offset, offset + self.clusters.n_clusters_per_bin)
             n_clusters_in_bin = 0
             if hasattr(
-                self.clusters.cluster_models[consecutive_index], "cluster_centers_"
+                    self.clusters.cluster_models[consecutive_index], "cluster_centers_"
             ):
                 n_clusters_in_bin = len(
                     self.clusters.cluster_models[consecutive_index].cluster_centers_
@@ -1038,7 +1035,7 @@ class ClusteringMixin:
         log.debug(f"n_clusters is now {self.n_clusters}")
 
         assert (
-            self.n_clusters > 1
+                self.n_clusters > 1
         ), "All clusters would be cleaned! You probably need more data, fewer clusters, or both."
 
         # If a WE bin was completely emptied of cluster centers, map it to the nearest non-empty bin
@@ -1050,7 +1047,6 @@ class ClusteringMixin:
             log.warning(f"All clusters were cleaned from bins {empty_we_bins}")
 
         for empty_we_bin in empty_we_bins:
-
             # Find the nearest non-empty bin
             nearest_populated_bin = self.find_nearest_bin(
                 self.clusters.bin_mapper, empty_we_bin, populated_we_bins
@@ -1117,7 +1113,7 @@ class ClusteringMixin:
             f"After cleaning, shape is {fmatrix.shape} and disconnected sets are: {connected_sets[1:]}"
         )
         assert (
-            len(connected_sets[start_cleaning_idx:]) == 0
+                len(connected_sets[start_cleaning_idx:]) == 0
         ), "Still not clean after cleaning!"
 
     def launch_ray_discretization(self: "modelWE"):
@@ -1156,9 +1152,8 @@ class ClusteringMixin:
 
         # max_inflight = 50
         for iteration in tqdm.tqdm(
-            range(1, self.maxIter), desc="Submitting discretization tasks"
+                range(1, self.maxIter), desc="Submitting discretization tasks"
         ):
-
             _id = self.do_stratified_ray_discretization.remote(
                 model_id,
                 cluster_model_id,
@@ -1175,7 +1170,7 @@ class ClusteringMixin:
         # Do these in bigger batches, dtrajs aren't very big
 
         with tqdm.tqdm(
-            total=len(task_ids), desc="Retrieving discretized trajectories"
+                total=len(task_ids), desc="Retrieving discretized trajectories"
         ) as pbar:
             while task_ids:
                 result_batch_size = 50
@@ -1188,13 +1183,12 @@ class ClusteringMixin:
                 results = ray.get(finished)
 
                 for (
-                    (parent_dtraj, child_dtraj),
-                    _,
-                    iteration,
-                    target_bins,
-                    basis_bins,
+                        (parent_dtraj, child_dtraj),
+                        _,
+                        iteration,
+                        target_bins,
+                        basis_bins,
                 ) in results:
-
                     self.clusters.target_bins.update(target_bins)
                     self.clusters.basis_bins.update(basis_bins)
 
@@ -1219,7 +1213,7 @@ class ClusteringMixin:
 
     @ray.remote
     def do_stratified_ray_discretization(
-        model: "modelWE", kmeans_model, iteration, processCoordinates
+            model: "modelWE", kmeans_model, iteration, processCoordinates
     ):
 
         # model_id, kmeans_model_id, iteration, processCoordinates_id = arg
@@ -1396,6 +1390,9 @@ class ClusteringMixin:
         cluster_structures = dict()
         cluster_structure_weights = dict()
 
+        # This can be used to map a structure in a cluster to its west.h5/iteration/segment_id
+        structure_iteration_segments = dict()
+
         # Move this elsewhere, WE segment weights are useful to have outside of this
         all_seg_weights = np.full(int(sum(self.numSegments)), fill_value=None)
 
@@ -1422,7 +1419,7 @@ class ClusteringMixin:
 
             assert None not in iter_weights, f"None in iter {_iter}, {iter_weights}"
 
-            all_seg_weights[i : i + num_segs_in_iter] = iter_weights
+            all_seg_weights[i: i + num_segs_in_iter] = iter_weights
 
             i += num_segs_in_iter
 
@@ -1448,27 +1445,32 @@ class ClusteringMixin:
                 # This *should* trip if there was no data for this segments
                 except IndexError:
                     log.error(
-                        f"Tried to get dtraj for seg {_seg} at iteration {iteration-1}"
+                        f"Tried to get dtraj for seg {_seg} at iteration {iteration - 1}"
                     )
                     continue
 
                 if cluster_idx in self.removed_clusters:
-
                     raise Exception(
                         "This dtraj point was in a removed cluster -- this should never happen!"
                     )
                     # log.debug(f"Skipping cluster {cluster_idx}")
                     # continue
 
+                # TODO: Replace this with .setdefault()
                 if cluster_idx not in cluster_structures.keys():
                     cluster_structures[cluster_idx] = []
                     cluster_structure_weights[cluster_idx] = []
-
-
+                    structure_iteration_segments[cluster_idx] = []
 
                 seg_coords = iter_coords[_seg]
                 cluster_structures[cluster_idx].append(seg_coords)
                 cluster_structure_weights[cluster_idx].append(all_seg_weights[seg_idx])
+
+                segment_id = self.segindList[_seg]
+                segment_west_h5 = self.fileList[self.westList[_seg]]
+                structure_iteration_segments[cluster_idx].append([iteration,
+                                                                  segment_id,
+                                                                  segment_west_h5])
 
                 if build_pcoord_cache:
                     cluster_cache = pcoord_cache.setdefault(cluster_idx, [])
@@ -1488,6 +1490,7 @@ class ClusteringMixin:
         self.cluster_structures = cluster_structures
         self.cluster_structure_weights = cluster_structure_weights
         self.pcoord_cache = pcoord_cache
+        self.structure_iteration_segments = structure_iteration_segments
 
         log.debug("Cluster structure mapping completed.")
         log.debug(f"Cluster keys are {cluster_structures.keys()}")
