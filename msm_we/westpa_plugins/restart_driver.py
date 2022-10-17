@@ -216,16 +216,6 @@ class RestartDriver(HAMSMDriver):
             "priority", 100
         )  # I think a big number is lower priority...
 
-        # If it's being used with SynD, the full coordinates must be specified for start-state generation.
-        # TODO: Find a more efficient way to do this than explicitly constructing the inverse dictionary.
-        self.synd_full_coord_map_path = plugin_config.get(
-            "synd_full_coord_map_path", None
-        )
-        if self.synd_full_coord_map_path is not None:
-
-            with open(self.synd_full_coord_map_path, "rb") as infile:
-                self.synd_full_coord_map = pickle.load(infile)
-
         sim_manager.register_callback(
             sim_manager.finalize_run, self.prepare_new_we, self.priority
         )
@@ -934,20 +924,6 @@ class RestartDriver(HAMSMDriver):
                 # Write each structure to disk. Loop over each structure within a bin.
                 msm_bin_we_weight_tracker = 0
 
-                if self.synd_full_coord_map_path is not None:
-                    import hashlib
-
-                    # Here, we have a bunch of structures that, if we're using SynD, we need to be able to map back to
-                    #   discrete states.
-                    # Maybe that's another feature to add to SynD, but in the meantime, we can do the following...
-                    # We can't make a dictionary mapping structures to discrete states, because lists and arrays aren't
-                    #   hashable. But, we can explicitly hash the structures, then use that.
-                    # There's probably a better way of uniquely representing structures, but this will do for now.
-                    self.reverse_coord_map = {
-                        hashlib.md5(v).hexdigest(): k
-                        for k, v in self.synd_full_coord_map.items()
-                    }
-
                 for struct_idx, structure in enumerate(structures):
 
                     # One structure per segment
@@ -961,83 +937,18 @@ class RestartDriver(HAMSMDriver):
                     # Multiscale Model Sim 18, 646–673 (2020).
                     structure_weight = seg_we_weight * (bin_prob / msm_bin_we_weight)
 
-                    if False and self.synd_full_coord_map_path is not None:
-                        # If we're using SynD, the basis state isn't a structure but a discrete index.
+                    iteration, seg_id, h5_file = model.structure_iteration_segments[msm_bin_idx][struct_idx]
+                    structure_filename = f'hdf:{h5_file}:{iteration}:{seg_id}'
 
-                        structure_index = self.reverse_coord_map[
-                            hashlib.md5(structure).hexdigest()
-                        ]
-                        fp.write(
-                            f"b{msm_bin_idx}_s{struct_idx} {structure_weight} {structure_index}\n"
-                        )
-                        seg_idx += 1
+                    total_bin_weights[-1] += structure_weight
+                    total_weight += structure_weight
 
-                    else:
-
-                        # structure_filename = (
-                        #     f"{struct_directory}/bin{msm_bin_idx}_"
-                        #     f"struct{struct_idx}.{STRUCT_EXTENSIONS[self.struct_filetype]}"
-                        # )
-                        print(f"Trying to obtain segment {seg_idx} for MSM bin {msm_bin_idx}")
-                        iteration, seg_id, h5_file = model.structure_iteration_segments[msm_bin_idx][struct_idx]
-                        structure_filename = f'hdf:{h5_file}:{iteration}:{seg_id}'
-
-                        total_bin_weights[-1] += structure_weight
-                        total_weight += structure_weight
-
-                        # topology = model.reference_structure.topology
-                        #
-                        # try:
-                        #     angles = model.reference_structure.unitcell_angles[0]
-                        #     lengths = model.reference_structure.unitcell_lengths[0] * 10
-                        # # This throws typeerror if reference_structure.unitcell_angles is None, or AttributeError
-                        # #   if reference_structure.unitcell_angles doesn't exist.
-                        # except (TypeError, AttributeError):
-                        #     angles, lengths = None, None
-                        #
-                        # coords = structure * 10  # Correct units
-                        #
-                        # with self.struct_filetype(
-                        #     structure_filename, "w"
-                        # ) as struct_file:
-                        #
-                        #     # Write the structure file
-                        #     if self.struct_filetype is md.formats.PDBTrajectoryFile:
-                        #         struct_file.write(
-                        #             coords,
-                        #             topology,
-                        #             modelIndex=1,
-                        #             unitcell_angles=angles,
-                        #             unitcell_lengths=lengths,
-                        #         )
-                        #
-                        #     elif self.struct_filetype is md.formats.AmberRestartFile:
-                        #         # AmberRestartFile takes slightly differently named keyword args
-                        #         struct_file.write(
-                        #             coords,
-                        #             time=None,
-                        #             cell_angles=angles,
-                        #             cell_lengths=lengths,
-                        #         )
-                        #
-                        #     else:
-                        #         # Otherwise, YOLO just hope all the positional arguments are in the right place
-                        #         log.warning(
-                        #             f"This output filetype ({self.struct_filetype}) is probably supported, "
-                        #             f"but not explicitly handled."
-                        #             " You should ensure that it takes argument as (coords, topology)"
-                        #         )
-                        #         struct_file.write(coords, topology)
-                        #         raise Exception(
-                        #             "Don't know what extension to use for this filetype"
-                        #         )
-
-                        # Add this start-state to the start-states file
-                        # This path is relative to WEST_SIM_ROOT
-                        fp.write(
-                            f"b{msm_bin_idx}_s{struct_idx} {structure_weight} {structure_filename}\n"
-                        )
-                        seg_idx += 1
+                    # Add this start-state to the start-states file
+                    # This path is relative to WEST_SIM_ROOT
+                    fp.write(
+                        f"b{msm_bin_idx}_s{struct_idx} {structure_weight} {structure_filename}\n"
+                    )
+                    seg_idx += 1
 
                 # log.info(f"WE weight ({msm_bin_we_weight_tracker:.5e} / {msm_bin_we_weight:.5e})")
 
