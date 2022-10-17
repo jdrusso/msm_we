@@ -261,7 +261,10 @@ class DimensionalityReductionMixin:
             if last_iter is None:
                 last_iter = self.maxIter
 
-            for iteration in range(first_iter, last_iter, fine_stride):
+            for iteration in tqdm.tqdm(
+                    range(first_iter, last_iter, fine_stride),
+                    desc=f"Loading data for {self.dimReduceMethod.upper()}"
+            ):
 
                 # iter_coords = self.get_iter_coordinates(iteration)
                 self.load_iter_data(iteration)
