@@ -583,6 +583,10 @@ class RestartDriver(HAMSMDriver):
             old_path = data_folder
 
             # If you're doing an extension, this will be a symlink. So no need to copy, just unlink it and move on
+            # TODO: This overwrite is really obnoxious if you're restarting after a crash during haMSM building.
+            #   At that point, traj_segs will be empty, restartXX/runYY/traj_segs will be populated, and restart.dat
+            #   will indicate the restart is not yet completed. So when you try to start it after the crash, it
+            #   clobbers restartXX/runYY/traj_segs with the empty traj_segs.
             if doing_extension and os.path.islink(old_path):
                 log.debug("Unlinking symlink")
                 os.unlink(old_path)
