@@ -606,7 +606,7 @@ class DataMixin:
 
                 else:
                     coords = dset
-                    log.info(f"Attempting to obtain coordinates from west_file {west_file}, iteration {self.n_iter}")
+                    log.debug(f"Attempting to obtain coordinates from west_file {west_file}, iteration {self.n_iter}")
                     # TODO: This should probably generically be -1, not 1, to deal with variable-length augmentation.
                     assert cur_iter_coords.shape[1] > 1, "Augmented coords only have 1 point in them -- " \
                                                          "need at least start & end for transitions"
