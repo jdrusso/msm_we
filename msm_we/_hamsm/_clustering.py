@@ -657,6 +657,7 @@ class ClusteringMixin:
 
         with ProgressBar(progress_bar) as progress_bar:
             task = progress_bar.add_task(description="Clustering", total=len(iters_to_use), completed=0)
+
             for iter_idx, iteration in enumerate(
                     iters_to_use
             ):
@@ -666,48 +667,50 @@ class ClusteringMixin:
                     log.debug(f"Already processed  iter  {iteration}")
                     continue
 
-            ignored_bins = []
-            filled_bins = []
+                ignored_bins = []
+                with concurrent.futures.ProcessPoolExecutor(
+                        max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
 
-            with concurrent.futures.ProcessPoolExecutor(
-                    max_workers=1, mp_context=mp.get_context("fork")
-            ) as executor:
-
-                try:
-                    (
-                        stratified_clusters,
-                        extra_iters_used,
-                        filled_bins,
-                        unfilled_bins,
-                    ) = executor.submit(
-                        self.do_stratified_clustering,
-                        [
-                            self,
+                    try:
+                        (
                             stratified_clusters,
-                            iters_to_use[iter_idx:],
-                            self.processCoordinates,
-                            ignored_bins,
-                        ],
-                    ).result()
+                            extra_iters_used,
+                            filled_bins,
+                            unfilled_bins,
+                        ) = executor.submit(
+                            self.do_stratified_clustering,
+                            [
+                                self,
+                                stratified_clusters,
+                                iters_to_use[iter_idx:],
+                                self.processCoordinates,
+                                ignored_bins,
+                            ],
+                        ).result()
+
+                    except AssertionError as e:
+                        # If we succeeded in passing this loop at least once, then all our bins have *something* in them.
+                        # TODO: The better way to handle this is as long as you've clustered something, you can do piecemeal
+                        #   (i.e. don't have to populate every bin after the first time)
+                        if iter_idx == 0:
+                            log.info(
+                                f"Failed with {iter_idx} + {extra_iters_used} vs len {(len(iters_to_use))}"
+                            )
+                            raise e
+                        else:
+                            log.info(
+                                "Clustering couldn't use last iteration, not all bins filled."
+                            )
+
+                    else:
+                        log.debug(f"Clustering just completed with filled bins {filled_bins}, unfilled bins {unfilled_bins},"
+                                 f" and extra iters {extra_iters_used}")
+                        
+                    all_filled_bins.update(filled_bins)
+                    all_unfilled_bins.update(unfilled_bins)
 
                     progress_bar.update(task, advance=1 + extra_iters_used)
-
-                except AssertionError as e:
-                    # If we succeeded in passing this loop at least once, then all our bins have *something* in them.
-                    # TODO: The better way to handle this is as long as you've clustered something, you can do piecemeal
-                    #   (i.e. don't have to populate every bin after the first time)
-                    if iter_idx == 0:
-                        log.info(
-                            f"Failed with {iter_idx} + {extra_iters_used} vs len {(len(iters_to_use))}"
-                        )
-                        raise e
-                    else:
-                        log.info(
-                            "Clustering couldn't use last iteration, not all bins filled."
-                        )
-
-                all_filled_bins.update(filled_bins)
-                all_unfilled_bins.update(unfilled_bins)
 
         # all_filled_bins holds every bin that was clustered in
         # all_unfilled_bins holds any bin that was ever attempted, but unfilled
