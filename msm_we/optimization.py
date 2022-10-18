@@ -13,7 +13,7 @@ from .stratified_clustering import StratifiedClusters
 
 
 def solve_discrepancy(tmatrix, pi, B):
-    """
+    r"""
     Given a transition matrix, solves for the discrepancy function.
 
     The Poisson equation for the discrepancy function is
@@ -98,6 +98,9 @@ def get_uniform_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bins
     Weighted ensemble: Recent mathematical developments. Arxiv (2022).
 
     """
+    assert (
+        n_desired_we_bins > 2
+    ), f"Target number of WE bins for optimization is too few -- got {n_desired_we_bins}"
 
     # The last two elements of this are the basis and target states respectively
     pi_v = steady_state * variance
@@ -135,6 +138,10 @@ def get_clustered_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bi
     Weighted ensemble: Recent mathematical developments. Arxiv (2022).
 
     """
+
+    assert (
+        n_desired_we_bins > 2
+    ), f"Target number of WE bins for optimization is too few -- got {n_desired_we_bins}"
 
     # The last two elements of this are the basis and target states respectively
     pi_v = steady_state * variance

@@ -56,10 +56,10 @@ class DimensionalityReductionMixin:
 
         # TODO: This list should not be stored here, this should be a class attribute or something
         if (
-                self.dimReduceMethod == "none"
-                or self.dimReduceMethod == "pca"
-                or self.dimReduceMethod == "vamp"
-                or self.dimReduceMethod == "tica"
+            self.dimReduceMethod == "none"
+            or self.dimReduceMethod == "pca"
+            or self.dimReduceMethod == "vamp"
+            or self.dimReduceMethod == "tica"
         ):
             coords = self.processCoordinates(coords)
             coords = self.coordinates.transform(coords)
@@ -109,15 +109,15 @@ class DimensionalityReductionMixin:
         return ipca, used_iters
 
     def dimReduce(
-            self: "modelWE",
-            first_iter=1,
-            first_rough_iter=None,
-            last_iter=None,
-            rough_stride=10,
-            fine_stride=1,
-            variance_cutoff=0.95,
-            use_weights=True,
-            progress_bar=None
+        self: "modelWE",
+        first_iter=1,
+        first_rough_iter=None,
+        last_iter=None,
+        rough_stride=10,
+        fine_stride=1,
+        variance_cutoff=0.95,
+        use_weights=True,
+        progress_bar=None,
     ):
         """
         Dimensionality reduction using the scheme specified in initialization.
@@ -138,7 +138,6 @@ class DimensionalityReductionMixin:
         """
 
         log.debug(f"Running dimensionality reduction -- method: {self.dimReduceMethod}")
-
 
         # log.debug(self.coordSet)
         if self.dimReduceMethod == "pca":
@@ -166,7 +165,9 @@ class DimensionalityReductionMixin:
                 rough_iters = range(first_rough_iter, last_iter, rough_stride)
 
             with ProgressBar(progress_bar) as progress_bar:
-                task = progress_bar.add_task(description="Initial iPCA", total=len(rough_iters))
+                task = progress_bar.add_task(
+                    description="Initial iPCA", total=len(rough_iters)
+                )
 
                 for iteration in rough_iters:
                     # TODO: Allow  chunking here so you don't have  to  go 1  by  1, but N by N
@@ -178,19 +179,20 @@ class DimensionalityReductionMixin:
                     #   usage. But here, the memory being used by the main thread (and therefore being copied here) isn't
                     #   that great -- the memory issue stems from it not being freed up between successive calls.
                     with concurrent.futures.ProcessPoolExecutor(
-                            max_workers=1, mp_context=mp.get_context("fork")
+                        max_workers=1, mp_context=mp.get_context("fork")
                     ) as executor:
                         rough_ipca = executor.submit(
-                            self.do_pca, [rough_ipca, iteration, self.processCoordinates]
+                            self.do_pca,
+                            [rough_ipca, iteration, self.processCoordinates],
                         ).result()
 
                     progress_bar.update(task, advance=1)
 
             components_for_var = (
-                    np.argmax(
-                        np.cumsum(rough_ipca.explained_variance_ratio_) > variance_cutoff
-                    )
-                    + 1
+                np.argmax(
+                    np.cumsum(rough_ipca.explained_variance_ratio_) > variance_cutoff
+                )
+                + 1
             )
             log.debug(f"Keeping {components_for_var} components")
             components_for_var = min(
@@ -203,7 +205,9 @@ class DimensionalityReductionMixin:
             extra_iters_used = 0
             iterations = range(first_iter, last_iter, fine_stride)
             with ProgressBar(progress_bar) as progress_bar:
-                task = progress_bar.add_task(total=len(iterations), completed=0, description="iPCA")
+                task = progress_bar.add_task(
+                    total=len(iterations), completed=0, description="iPCA"
+                )
 
                 for iteration in iterations:
 
@@ -221,11 +225,16 @@ class DimensionalityReductionMixin:
                     # In fact, I first moved partial_fit alone to a subprocess, but that didn't help. The issue isn't
                     #   partial_fit, it's actually loading the coords.
                     with concurrent.futures.ProcessPoolExecutor(
-                            max_workers=1, mp_context=mp.get_context("fork")
+                        max_workers=1, mp_context=mp.get_context("fork")
                     ) as executor:
                         ipca, extra_iters_used = executor.submit(
                             self.do_full_pca,
-                            [ipca, iteration, self.processCoordinates, components_for_var],
+                            [
+                                ipca,
+                                iteration,
+                                self.processCoordinates,
+                                components_for_var,
+                            ],
                         ).result()
 
                     progress_bar.advance(task, 1 + extra_iters_used)
@@ -271,9 +280,11 @@ class DimensionalityReductionMixin:
 
             iterations = range(first_iter, last_iter, fine_stride)
             with ProgressBar(progress_bar) as progress_bar:
-                task = progress_bar.add_task(total=len(iterations),
-                                                     completed=0,
-                                                     description=f"Loading data for {self.dimReduceMethod.upper()}")
+                task = progress_bar.add_task(
+                    total=len(iterations),
+                    completed=0,
+                    description=f"Loading data for {self.dimReduceMethod.upper()}",
+                )
                 for iteration in range(first_iter, last_iter, fine_stride):
                     # iter_coords = self.get_iter_coordinates(iteration)
                     self.load_iter_data(iteration)
