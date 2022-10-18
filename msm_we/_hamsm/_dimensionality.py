@@ -1,10 +1,10 @@
 from sklearn.decomposition import IncrementalPCA as iPCA
 import concurrent
 import multiprocessing as mp
-import tqdm.auto as tqdm
 import numpy as np
 from deeptime.decomposition import TICA, VAMP
 from msm_we._logging import log
+from rich.progress import Progress
 
 from typing import TYPE_CHECKING
 
@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 
 class DimensionalityReductionMixin:
-
     dimReduceMethod = None
     """str: Dimensionality reduction method. Must be one of "pca", "vamp", or "none" (**NOT** NoneType)"""
 
@@ -58,10 +57,10 @@ class DimensionalityReductionMixin:
 
         # TODO: This list should not be stored here, this should be a class attribute or something
         if (
-            self.dimReduceMethod == "none"
-            or self.dimReduceMethod == "pca"
-            or self.dimReduceMethod == "vamp"
-            or self.dimReduceMethod == "tica"
+                self.dimReduceMethod == "none"
+                or self.dimReduceMethod == "pca"
+                or self.dimReduceMethod == "vamp"
+                or self.dimReduceMethod == "tica"
         ):
             coords = self.processCoordinates(coords)
             coords = self.coordinates.transform(coords)
@@ -111,14 +110,15 @@ class DimensionalityReductionMixin:
         return ipca, used_iters
 
     def dimReduce(
-        self: "modelWE",
-        first_iter=1,
-        first_rough_iter=None,
-        last_iter=None,
-        rough_stride=10,
-        fine_stride=1,
-        variance_cutoff=0.95,
-        use_weights=True,
+            self: "modelWE",
+            first_iter=1,
+            first_rough_iter=None,
+            last_iter=None,
+            rough_stride=10,
+            fine_stride=1,
+            variance_cutoff=0.95,
+            use_weights=True,
+            progress_bar=Progress()
     ):
         """
         Dimensionality reduction using the scheme specified in initialization.
@@ -165,8 +165,9 @@ class DimensionalityReductionMixin:
             else:
                 rough_iters = range(first_rough_iter, last_iter, rough_stride)
 
-            for iteration in tqdm.tqdm(rough_iters, desc="Initial iPCA"):
+            task = progress_bar.add_task(description="Initial iPCA", total=len(rough_iters))
 
+            for iteration in rough_iters:
                 # TODO: Allow  chunking here so you don't have  to  go 1  by  1, but N by N
                 # If you don't use 'fork' context here, this will break in Jupyter.
                 # That's because processCoordinates is monkey-patched in. With 'spawn' (i.e. without fork), the module
@@ -176,17 +177,19 @@ class DimensionalityReductionMixin:
                 #   usage. But here, the memory being used by the main thread (and therefore being copied here) isn't
                 #   that great -- the memory issue stems from it not being freed up between successive calls.
                 with concurrent.futures.ProcessPoolExecutor(
-                    max_workers=1, mp_context=mp.get_context("fork")
+                        max_workers=1, mp_context=mp.get_context("fork")
                 ) as executor:
                     rough_ipca = executor.submit(
                         self.do_pca, [rough_ipca, iteration, self.processCoordinates]
                     ).result()
 
+                progress_bar.advance(task, 1)
+
             components_for_var = (
-                np.argmax(
-                    np.cumsum(rough_ipca.explained_variance_ratio_) > variance_cutoff
-                )
-                + 1
+                    np.argmax(
+                        np.cumsum(rough_ipca.explained_variance_ratio_) > variance_cutoff
+                    )
+                    + 1
             )
             log.debug(f"Keeping {components_for_var} components")
             components_for_var = min(
@@ -197,9 +200,10 @@ class DimensionalityReductionMixin:
             ipca = iPCA(n_components=components_for_var)
 
             extra_iters_used = 0
-            for iteration in tqdm.tqdm(
-                range(first_iter, last_iter, fine_stride), desc="iPCA"
-            ):
+            iterations = range(first_iter, last_iter, fine_stride)
+            task = progress_bar.add_task(total=len(iterations), completed=0, description="iPCA")
+
+            for iteration in iterations:
 
                 if extra_iters_used > 0:
                     extra_iters_used -= 1
@@ -215,12 +219,14 @@ class DimensionalityReductionMixin:
                 # In fact, I first moved partial_fit alone to a subprocess, but that didn't help. The issue isn't
                 #   partial_fit, it's actually loading the coords.
                 with concurrent.futures.ProcessPoolExecutor(
-                    max_workers=1, mp_context=mp.get_context("fork")
+                        max_workers=1, mp_context=mp.get_context("fork")
                 ) as executor:
                     ipca, extra_iters_used = executor.submit(
                         self.do_full_pca,
                         [ipca, iteration, self.processCoordinates, components_for_var],
                     ).result()
+
+                progress_bar.advance(task, 1 + extra_iters_used)
 
             self.coordinates = ipca
             self.ndim = components_for_var
@@ -261,11 +267,11 @@ class DimensionalityReductionMixin:
             if last_iter is None:
                 last_iter = self.maxIter
 
-            for iteration in tqdm.tqdm(
-                    range(first_iter, last_iter, fine_stride),
-                    desc=f"Loading data for {self.dimReduceMethod.upper()}"
-            ):
-
+            iterations = range(first_iter, last_iter, fine_stride)
+            task = progress_bar.add_task(total=len(iterations),
+                                                 completed=0,
+                                                 description=f"Loading data for {self.dimReduceMethod.upper()}")
+            for iteration in range(first_iter, last_iter, fine_stride):
                 # iter_coords = self.get_iter_coordinates(iteration)
                 self.load_iter_data(iteration)
                 self.get_transition_data_lag0()
@@ -282,6 +288,8 @@ class DimensionalityReductionMixin:
                 trajs_start.extend(processed_start)
                 trajs_end.extend(processed_end)
                 weights.extend(self.weightList)
+
+                progress_bar.advance(task, 1)
 
             weights = np.array(weights)
 

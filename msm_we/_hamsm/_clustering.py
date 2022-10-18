@@ -5,6 +5,7 @@ from copy import deepcopy
 import ray
 import concurrent
 import tqdm.auto as tqdm
+from rich.progress import Progress
 import multiprocessing as mp
 from westpa import analysis
 from westpa.core.binning import RectilinearBinMapper, VoronoiBinMapper
@@ -139,15 +140,16 @@ class ClusteringMixin:
         return dtrajs, 1, iteration
 
     def cluster_coordinates(
-        self: "modelWE",
-        n_clusters,
-        streaming=False,
-        first_cluster_iter=None,
-        use_ray=False,
-        stratified=True,
-        iters_to_use=None,
-        store_validation_model=False,
-        **_cluster_args,
+            self: "modelWE",
+            n_clusters,
+            streaming=False,
+            first_cluster_iter=None,
+            use_ray=False,
+            stratified=True,
+            iters_to_use=None,
+            store_validation_model=False,
+            progress_bar=Progress(),
+            **_cluster_args,
     ):
 
         self.clustering_method = None
@@ -167,6 +169,7 @@ class ClusteringMixin:
                 first_cluster_iter=first_cluster_iter,
                 use_ray=use_ray,
                 iters_to_use=iters_to_use,
+                progress_bar=progress_bar,
                 **_cluster_args,
             )
 
@@ -521,15 +524,16 @@ class ClusteringMixin:
         # self.clusters.save(self.clusterFile, save_streaming_chain=True, overwrite=True)
 
     def cluster_stratified(
-        self: "modelWE",
-        n_clusters,
-        streaming=True,
-        first_cluster_iter=None,
-        use_ray=True,
-        bin_iteration=2,
-        iters_to_use=None,
-        user_bin_mapper=None,
-        **_cluster_args,
+            self: "modelWE",
+            n_clusters,
+            streaming=True,
+            first_cluster_iter=None,
+            use_ray=True,
+            bin_iteration=2,
+            iters_to_use=None,
+            user_bin_mapper=None,
+            progress_bar=Progress(),
+            **_cluster_args,
     ):
         """
         Perform full-stratified clustering, enforcing independent clustering for trajectories within each WE bin.
@@ -652,8 +656,9 @@ class ClusteringMixin:
         extra_iters_used = 0
         all_filled_bins = set()
         all_unfilled_bins = set()
+        task = progress_bar.add_task(description="Clustering", total=len(iters_to_use), completed=0)
         for iter_idx, iteration in enumerate(
-            tqdm.tqdm(iters_to_use, desc="Clustering")
+                iters_to_use
         ):
 
             if extra_iters_used > 0:
@@ -683,6 +688,8 @@ class ClusteringMixin:
                             ignored_bins,
                         ],
                     ).result()
+
+                    progress_bar.advance(task, 1 + extra_iters_used)
 
                 except AssertionError as e:
                     # If we succeeded in passing this loop at least once, then all our bins have *something* in them.
@@ -1120,7 +1127,7 @@ class ClusteringMixin:
             len(connected_sets[start_cleaning_idx:]) == 0
         ), "Still not clean after cleaning!"
 
-    def launch_ray_discretization(self: "modelWE"):
+    def launch_ray_discretization(self: "modelWE", progress_bar=Progress()):
         """
         Apply discretization in parallel, through Ray
 
@@ -1155,10 +1162,8 @@ class ClusteringMixin:
         process_coordinates_id = ray.put(self.processCoordinates)
 
         # max_inflight = 50
-        for iteration in tqdm.tqdm(
-            range(1, self.maxIter), desc="Submitting discretization tasks"
-        ):
-
+        submit_task = progress_bar.add_task(description="Submitting discretization tasks", total=self.maxIter-1)
+        for iteration in range(1, self.maxIter):
             _id = self.do_stratified_ray_discretization.remote(
                 model_id,
                 cluster_model_id,
@@ -1167,6 +1172,7 @@ class ClusteringMixin:
                 # self, self.clusters, iteration, self.processCoordinates
             )
             task_ids.append(_id)
+            progress_bar.advance(submit_task, 1)
 
         # As they're completed, add them to dtrajs
         dtrajs = [None] * (self.maxIter - 1)
@@ -1174,39 +1180,38 @@ class ClusteringMixin:
 
         # Do these in bigger batches, dtrajs aren't very big
 
-        with tqdm.tqdm(
-            total=len(task_ids), desc="Retrieving discretized trajectories"
-        ) as pbar:
-            while task_ids:
-                result_batch_size = 50
-                result_batch_size = min(result_batch_size, len(task_ids))
+        # with tqdm.tqdm(
+        #         total=len(task_ids), desc="Retrieving discretized trajectories"
+        # ) as pbar:
+        retrieve_task = progress_bar.add_task(description="Retrieving discretized trajectories", total=len(task_ids))
+        while task_ids:
+            result_batch_size = 50
+            result_batch_size = min(result_batch_size, len(task_ids))
 
-                # Returns the first ObjectRef that is ready, with a 20s timeout
-                finished, task_ids = ray.wait(
-                    task_ids, num_returns=result_batch_size, timeout=20
-                )
-                results = ray.get(finished)
+            # Returns the first ObjectRef that is ready, with a 20s timeout
+            finished, task_ids = ray.wait(
+                task_ids, num_returns=result_batch_size, timeout=20
+            )
+            results = ray.get(finished)
 
-                for (
+            for (
                     (parent_dtraj, child_dtraj),
                     _,
                     iteration,
                     target_bins,
                     basis_bins,
-                ) in results:
+            ) in results:
+                self.clusters.target_bins.update(target_bins)
+                self.clusters.basis_bins.update(basis_bins)
 
-                    self.clusters.target_bins.update(target_bins)
-                    self.clusters.basis_bins.update(basis_bins)
+                dtrajs[iteration - 1] = child_dtraj
 
-                    dtrajs[iteration - 1] = child_dtraj
+                pair_dtrajs[iteration - 1] = list(zip(parent_dtraj, child_dtraj))
 
-                    pair_dtrajs[iteration - 1] = list(zip(parent_dtraj, child_dtraj))
+                progress_bar.advance(retrieve_task, 1)
 
-                    pbar.update(1)
-                    pbar.refresh()
-
-                del results
-                del finished
+            del results
+            del finished
         del model_id
         del cluster_model_id
 
