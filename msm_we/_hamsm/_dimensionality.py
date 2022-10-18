@@ -3,8 +3,7 @@ import concurrent
 import multiprocessing as mp
 import numpy as np
 from deeptime.decomposition import TICA, VAMP
-from msm_we._logging import log
-from rich.progress import Progress
+from msm_we._logging import log, ProgressBar
 
 from typing import TYPE_CHECKING
 
@@ -118,7 +117,7 @@ class DimensionalityReductionMixin:
             fine_stride=1,
             variance_cutoff=0.95,
             use_weights=True,
-            progress_bar=Progress()
+            progress_bar=None
     ):
         """
         Dimensionality reduction using the scheme specified in initialization.
@@ -139,6 +138,7 @@ class DimensionalityReductionMixin:
         """
 
         log.debug(f"Running dimensionality reduction -- method: {self.dimReduceMethod}")
+
 
         # log.debug(self.coordSet)
         if self.dimReduceMethod == "pca":
@@ -165,25 +165,26 @@ class DimensionalityReductionMixin:
             else:
                 rough_iters = range(first_rough_iter, last_iter, rough_stride)
 
-            task = progress_bar.add_task(description="Initial iPCA", total=len(rough_iters))
+            with ProgressBar(progress_bar) as progress_bar:
+                task = progress_bar.add_task(description="Initial iPCA", total=len(rough_iters))
 
-            for iteration in rough_iters:
-                # TODO: Allow  chunking here so you don't have  to  go 1  by  1, but N by N
-                # If you don't use 'fork' context here, this will break in Jupyter.
-                # That's because processCoordinates is monkey-patched in. With 'spawn' (i.e. without fork), the module
-                #   is re-imported in the child process. In the reimported  module, processCoordinates is undefined.
-                # With 'fork', it preserves the monkey-patched version.
-                # Additionally, 'fork' is a little faster than  spawn. Ironically, that's usually at the cost  of memory
-                #   usage. But here, the memory being used by the main thread (and therefore being copied here) isn't
-                #   that great -- the memory issue stems from it not being freed up between successive calls.
-                with concurrent.futures.ProcessPoolExecutor(
-                        max_workers=1, mp_context=mp.get_context("fork")
-                ) as executor:
-                    rough_ipca = executor.submit(
-                        self.do_pca, [rough_ipca, iteration, self.processCoordinates]
-                    ).result()
+                for iteration in rough_iters:
+                    # TODO: Allow  chunking here so you don't have  to  go 1  by  1, but N by N
+                    # If you don't use 'fork' context here, this will break in Jupyter.
+                    # That's because processCoordinates is monkey-patched in. With 'spawn' (i.e. without fork), the module
+                    #   is re-imported in the child process. In the reimported  module, processCoordinates is undefined.
+                    # With 'fork', it preserves the monkey-patched version.
+                    # Additionally, 'fork' is a little faster than  spawn. Ironically, that's usually at the cost  of memory
+                    #   usage. But here, the memory being used by the main thread (and therefore being copied here) isn't
+                    #   that great -- the memory issue stems from it not being freed up between successive calls.
+                    with concurrent.futures.ProcessPoolExecutor(
+                            max_workers=1, mp_context=mp.get_context("fork")
+                    ) as executor:
+                        rough_ipca = executor.submit(
+                            self.do_pca, [rough_ipca, iteration, self.processCoordinates]
+                        ).result()
 
-                progress_bar.advance(task, 1)
+                    progress_bar.update(task, advance=1)
 
             components_for_var = (
                     np.argmax(
@@ -201,32 +202,33 @@ class DimensionalityReductionMixin:
 
             extra_iters_used = 0
             iterations = range(first_iter, last_iter, fine_stride)
-            task = progress_bar.add_task(total=len(iterations), completed=0, description="iPCA")
+            with ProgressBar(progress_bar) as progress_bar:
+                task = progress_bar.add_task(total=len(iterations), completed=0, description="iPCA")
 
-            for iteration in iterations:
+                for iteration in iterations:
 
-                if extra_iters_used > 0:
-                    extra_iters_used -= 1
-                    log.debug(f"Already processed  iter  {iteration}")
-                    continue
+                    if extra_iters_used > 0:
+                        extra_iters_used -= 1
+                        log.debug(f"Already processed  iter  {iteration}")
+                        continue
 
-                # Try some stuff to help memory management. I think  a lot of memory is not being explicitly released
-                #   here when I'm looping, because I can watch my swap usage steadily grow while it's running this loop.
-                # https://stackoverflow.com/questions/1316767/how-can-i-explicitly-free-memory-in-python has some good
-                #   details  on how memory may be freed by Python, but not necessarily recognized  as free by the OS.
-                # One "guaranteed" way to free  memory back to the OS that's been released by Python is to do  the memory
-                #   intensive operation  in a subprocess. So, maybe I need to do my partial fit in a subprocess.
-                # In fact, I first moved partial_fit alone to a subprocess, but that didn't help. The issue isn't
-                #   partial_fit, it's actually loading the coords.
-                with concurrent.futures.ProcessPoolExecutor(
-                        max_workers=1, mp_context=mp.get_context("fork")
-                ) as executor:
-                    ipca, extra_iters_used = executor.submit(
-                        self.do_full_pca,
-                        [ipca, iteration, self.processCoordinates, components_for_var],
-                    ).result()
+                    # Try some stuff to help memory management. I think  a lot of memory is not being explicitly released
+                    #   here when I'm looping, because I can watch my swap usage steadily grow while it's running this loop.
+                    # https://stackoverflow.com/questions/1316767/how-can-i-explicitly-free-memory-in-python has some good
+                    #   details  on how memory may be freed by Python, but not necessarily recognized  as free by the OS.
+                    # One "guaranteed" way to free  memory back to the OS that's been released by Python is to do  the memory
+                    #   intensive operation  in a subprocess. So, maybe I need to do my partial fit in a subprocess.
+                    # In fact, I first moved partial_fit alone to a subprocess, but that didn't help. The issue isn't
+                    #   partial_fit, it's actually loading the coords.
+                    with concurrent.futures.ProcessPoolExecutor(
+                            max_workers=1, mp_context=mp.get_context("fork")
+                    ) as executor:
+                        ipca, extra_iters_used = executor.submit(
+                            self.do_full_pca,
+                            [ipca, iteration, self.processCoordinates, components_for_var],
+                        ).result()
 
-                progress_bar.advance(task, 1 + extra_iters_used)
+                    progress_bar.advance(task, 1 + extra_iters_used)
 
             self.coordinates = ipca
             self.ndim = components_for_var
@@ -268,28 +270,29 @@ class DimensionalityReductionMixin:
                 last_iter = self.maxIter
 
             iterations = range(first_iter, last_iter, fine_stride)
-            task = progress_bar.add_task(total=len(iterations),
-                                                 completed=0,
-                                                 description=f"Loading data for {self.dimReduceMethod.upper()}")
-            for iteration in range(first_iter, last_iter, fine_stride):
-                # iter_coords = self.get_iter_coordinates(iteration)
-                self.load_iter_data(iteration)
-                self.get_transition_data_lag0()
+            with ProgressBar(progress_bar) as progress_bar:
+                task = progress_bar.add_task(total=len(iterations),
+                                                     completed=0,
+                                                     description=f"Loading data for {self.dimReduceMethod.upper()}")
+                for iteration in range(first_iter, last_iter, fine_stride):
+                    # iter_coords = self.get_iter_coordinates(iteration)
+                    self.load_iter_data(iteration)
+                    self.get_transition_data_lag0()
 
-                coords_from = self.coordPairList[:, :, :, 0]
-                coords_to = self.coordPairList[:, :, :, 1]
+                    coords_from = self.coordPairList[:, :, :, 0]
+                    coords_to = self.coordPairList[:, :, :, 1]
 
-                # If  no good coords in this iteration, skip it
-                # if iter_coords.shape[0] == 0:
-                #     continue
+                    # If  no good coords in this iteration, skip it
+                    # if iter_coords.shape[0] == 0:
+                    #     continue
 
-                processed_start = self.processCoordinates(coords_from)
-                processed_end = self.processCoordinates(coords_to)
-                trajs_start.extend(processed_start)
-                trajs_end.extend(processed_end)
-                weights.extend(self.weightList)
+                    processed_start = self.processCoordinates(coords_from)
+                    processed_end = self.processCoordinates(coords_to)
+                    trajs_start.extend(processed_start)
+                    trajs_end.extend(processed_end)
+                    weights.extend(self.weightList)
 
-                progress_bar.advance(task, 1)
+                    progress_bar.update(task, advance=1)
 
             weights = np.array(weights)
 
