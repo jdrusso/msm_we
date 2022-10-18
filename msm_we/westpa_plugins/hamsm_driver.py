@@ -60,6 +60,10 @@ class HAMSMDriver:
         #   with data from multiple runs.
         self.h5file_paths = [self.data_manager.we_h5filename]
 
+        self.dimreduce_use_weights = self.plugin_config.get(
+            "dimreduce_use_weights", True
+        )
+
     def construct_hamsm(self):
         """
         Build an haMSM, for use with later plugins. The final constructed haMSM is stored on the data manager.
@@ -98,7 +102,7 @@ class HAMSMDriver:
             n_clusters=clusters_per_stratum,
             tau=tau,
             ray_kwargs=ray_kwargs,
-            step_kwargs={},
+            step_kwargs={"dimReduce": {"use_weights": self.dimreduce_use_weights}},
             # For some reason if I don't specify fluxmatrix_iters, after the first time around
             # it'll keep using the arguments from the first time...
             # That's really alarming?
