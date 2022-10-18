@@ -31,7 +31,7 @@ from ._hamsm import PlottingMixin
 from ._hamsm import AnalysisMixin
 from ._hamsm import DataMixin
 from ._hamsm import FluxMatrixMixin
-from ._logging import log
+from ._logging import log, DefaultProgress
 
 
 class modelWE(
@@ -673,7 +673,7 @@ class modelWE(
 
         """
 
-        progress_bar = Progress()
+        progress_bar = DefaultProgress()
         table = self.new_table()
 
         renderable_group = Group(table, progress_bar)
