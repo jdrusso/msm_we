@@ -299,6 +299,7 @@ class FluxMatrixMixin:
 
                     task_ids.append(_id)
                     progress_bar.update(submit_task, advance=1)
+                progress_bar.update(submit_task, visible=False)
 
                 # Wait for them to complete
                 # Process results as they're ready, instead of in submission order
