@@ -335,7 +335,7 @@ class OptimizationDriver:
         """
 
         # TODO: Replace this with propagator.get_pcoord
-        self.propagator.synd_model._backmapper = new_pcoord_map.get
+        self.propagator.synd_model._backmappers["default"] = new_pcoord_map.get
         new_pcoord_dim = new_pcoord_map.get(0).shape[0]
 
         westpa.rc.pstatus(f"New pcoord dimensionality is {new_pcoord_dim}")
