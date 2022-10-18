@@ -185,7 +185,7 @@ class AnalysisMixin:
         assert (last_pSS >= 0).all(), "Negative elements in pSS"
         assert last_flux >= 0, "Negative flux estimate from this pSS"
 
-        log.info("Done with steady-state estimation.")
+        log.debug("Done with steady-state estimation.")
         self.pSS = last_pSS
 
     def get_steady_state_algebraic(

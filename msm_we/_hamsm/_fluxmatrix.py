@@ -1,11 +1,10 @@
 import numpy as np
 import ray
 from scipy.sparse import coo_matrix
-import tqdm.auto as tqdm
 import concurrent
 import multiprocessing as mp
 from msm_we.utils import find_connected_sets
-from msm_we._logging import log
+from msm_we._logging import log, ProgressBar
 
 from typing import TYPE_CHECKING
 
@@ -171,6 +170,7 @@ class FluxMatrixMixin:
         iters_to_use=None,
         use_ray=False,
         result_batch_size=5,
+        progress_bar=None
     ):
         """
         Compute the matrix of fluxes at a given lag time, for a range of iterations.
@@ -236,24 +236,25 @@ class FluxMatrixMixin:
         # FIXME: Duplicated code
         # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
         if not use_ray:
-            for iS in tqdm.tqdm(
-                iters_to_use,
-                desc="Constructing flux matrix",
-            ):
-                log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
+            with ProgressBar(progress_bar) as progress_bar:
+                task = progress_bar.add_task(description="Constructing flux matrix", total=len(iters_to_use))
 
-                with concurrent.futures.ProcessPoolExecutor(
-                    max_workers=1, mp_context=mp.get_context("fork")
-                ) as executor:
-                    fluxMatrixI = executor.submit(
-                        self.get_iter_fluxMatrix,
-                        iS,
-                    ).result()
+                for iS in iters_to_use:
+                    log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
 
-                fluxMatrix = fluxMatrix + fluxMatrixI
-                nI = nI + 1
+                    with concurrent.futures.ProcessPoolExecutor(
+                        max_workers=1, mp_context=mp.get_context("fork")
+                    ) as executor:
+                        fluxMatrixI = executor.submit(
+                            self.get_iter_fluxMatrix,
+                            iS,
+                        ).result()
 
-                log.debug(f"Completed flux matrix for iter {iS}")
+                    fluxMatrix = fluxMatrix + fluxMatrixI
+                    nI = nI + 1
+
+                    log.debug(f"Completed flux matrix for iter {iS}")
+                    progress_bar.update(task, advance=1)
 
         # If we're running through Ray..
         else:
@@ -264,43 +265,41 @@ class FluxMatrixMixin:
             # Submit all the tasks for iteration fluxmatrix calculations
             task_ids = []
 
-            for iteration in tqdm.tqdm(
-                iters_to_use,
-                desc="Submitting fluxmatrix tasks",
-            ):
+            with ProgressBar(progress_bar) as progress_bar:
+                submit_task = progress_bar.add_task(description="Submitting fluxmatrix tasks", total=len(iters_to_use))
+                for iteration in iters_to_use:
 
-                self.load_iter_data(iteration)
-                parent_pcoords = self.pcoord0List.copy()
-                child_pcoords = self.pcoord1List.copy()
+                    self.load_iter_data(iteration)
+                    parent_pcoords = self.pcoord0List.copy()
+                    child_pcoords = self.pcoord1List.copy()
 
-                ind_end_in_target = np.where(self.is_WE_target(child_pcoords))
-                ind_start_in_basis = np.where(self.is_WE_basis(parent_pcoords))
-                ind_end_in_basis = np.where(self.is_WE_basis(child_pcoords))
+                    ind_end_in_target = np.where(self.is_WE_target(child_pcoords))
+                    ind_start_in_basis = np.where(self.is_WE_basis(parent_pcoords))
+                    ind_end_in_basis = np.where(self.is_WE_basis(child_pcoords))
 
-                self.get_transition_data_lag0()
-                transition_weights = self.transitionWeights.copy()
+                    self.get_transition_data_lag0()
+                    transition_weights = self.transitionWeights.copy()
 
-                index_pairs = np.array(self.pair_dtrajs[iteration - 1])
+                    index_pairs = np.array(self.pair_dtrajs[iteration - 1])
 
-                _id = self.build_flux_matrix_remote.remote(
-                    self.n_clusters,
-                    index_pairs,
-                    ind_start_in_basis,
-                    ind_end_in_basis,
-                    ind_end_in_target,
-                    transition_weights,
-                    iteration,
-                )
+                    _id = self.build_flux_matrix_remote.remote(
+                        self.n_clusters,
+                        index_pairs,
+                        ind_start_in_basis,
+                        ind_end_in_basis,
+                        ind_end_in_target,
+                        transition_weights,
+                        iteration,
+                    )
 
-                task_ids.append(_id)
+                    task_ids.append(_id)
+                    progress_bar.update(submit_task, advance=1)
 
-            # Wait for them to complete
-            # Process results as they're ready, instead of in submission order
-            #  See: https://docs.ray.io/en/latest/ray-design-patterns/submission-order.html
-            # Additionally, this batches rather than getting them all at once, or one by one.
-            with tqdm.tqdm(
-                total=len(iters_to_use), desc="Retrieving flux matrices"
-            ) as pbar:
+                # Wait for them to complete
+                # Process results as they're ready, instead of in submission order
+                #  See: https://docs.ray.io/en/latest/ray-design-patterns/submission-order.html
+                # Additionally, this batches rather than getting them all at once, or one by one.
+                retrieve_task = progress_bar.add_task(description="Retrieving fluxmatrix tasks", total=len(iters_to_use))
                 while task_ids:
                     result_batch_size = min(result_batch_size, len(task_ids))
                     log.debug(
@@ -317,8 +316,7 @@ class FluxMatrixMixin:
                     # Add each matrix to the total fluxmatrix
                     for _fmatrix, _iter in results:
                         fluxMatrix = fluxMatrix + _fmatrix.todense().A
-                        pbar.update(1)
-                        pbar.refresh()
+                        progress_bar.update(retrieve_task, advance=1)
 
                     # Try to free up some memory used by Ray for these objects
                     # See: https://github.com/ray-project/ray/issues/15058
@@ -328,7 +326,7 @@ class FluxMatrixMixin:
                     del finished
                     del results
 
-            log.info("Fluxmatrices all obtained")
+            log.debug("Fluxmatrices all obtained")
             del task_ids
             nI = len(iters_to_use)
 
@@ -338,7 +336,7 @@ class FluxMatrixMixin:
         # Update state with the new, updated, or loaded from file fluxMatrix.
         self.fluxMatrixRaw = fluxMatrix
 
-    def organize_fluxMatrix(self: "modelWE", use_ray=False, **args):
+    def organize_fluxMatrix(self: "modelWE", use_ray=False, progress_bar=None, **args):
         """
         This cleaning step removes all clusters that aren't in the largest connected set, then rediscretizes all the
         trajectories according to the new reduced set of clusters.
@@ -354,7 +352,7 @@ class FluxMatrixMixin:
             self.clustering_method = "aggregated"
 
         if self.clustering_method == "stratified":
-            self.organize_stratified(use_ray)
+            self.organize_stratified(use_ray, progress_bar)
 
             # TODO: Respect do_cleaning=False for blockwise stratified
 
@@ -441,6 +439,9 @@ class FluxMatrixMixin:
         ----
         Break this up into find_traps() and clean_traps(list_of_traps).
         """
+
+        # I don't think this should be used any more... Check to be sure
+        raise DeprecationWarning("organize_aggregated() is not maintained, results may be unexpected!")
 
         original_fluxmatrix = self.fluxMatrixRaw.copy()
 
@@ -635,6 +636,7 @@ class FluxMatrixMixin:
 
         if rediscretize and not use_ray:
             extra_iters_used = 0
+
             for iteration in tqdm.tqdm(
                 range(first_iter, last_iter), desc="Post-cleaning rediscretization"
             ):

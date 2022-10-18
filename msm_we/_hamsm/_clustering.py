@@ -5,12 +5,13 @@ from copy import deepcopy
 import ray
 import concurrent
 import tqdm.auto as tqdm
+from rich.progress import Progress
 import multiprocessing as mp
 from westpa import analysis
 from westpa.core.binning import RectilinearBinMapper, VoronoiBinMapper
 from msm_we.stratified_clustering import StratifiedClusters
 from msm_we.utils import find_connected_sets
-from msm_we._logging import log
+from msm_we._logging import log, ProgressBar
 
 from typing import TYPE_CHECKING
 
@@ -146,6 +147,7 @@ class ClusteringMixin:
             stratified=True,
             iters_to_use=None,
             store_validation_model=False,
+            progress_bar=None,
             **_cluster_args,
     ):
 
@@ -158,7 +160,7 @@ class ClusteringMixin:
         )
 
         if stratified:
-            log.info("Beginning stratified clustering.")
+            log.debug("Beginning stratified clustering.")
             self.clustering_method = "stratified"
             self.cluster_stratified(
                 n_clusters=n_clusters,
@@ -166,6 +168,7 @@ class ClusteringMixin:
                 first_cluster_iter=first_cluster_iter,
                 use_ray=use_ray,
                 iters_to_use=iters_to_use,
+                progress_bar=progress_bar,
                 **_cluster_args,
             )
 
@@ -527,6 +530,7 @@ class ClusteringMixin:
             bin_iteration=2,
             iters_to_use=None,
             user_bin_mapper=None,
+            progress_bar=None,
             **_cluster_args,
     ):
         """
@@ -577,11 +581,11 @@ class ClusteringMixin:
             log.info("Loading user-specified bin mapper for stratified clustering.")
             bin_mapper = user_bin_mapper
         else:
-            log.info(
+            log.debug(
                 f"Obtaining bin definitions from iteration {bin_iteration} in file {self.fileList[0]}"
             )
             iteration = analysis.Run(self.fileList[0]).iteration(bin_iteration)
-            log.info("Loading pickled bin mapper from H5 for stratified clustering...")
+            log.debug("Loading pickled bin mapper from H5 for stratified clustering...")
             bin_mapper = iteration.bin_mapper
 
             # Problem: I need a consistent set of bins, and some bin mappers may not return that! Some may re-calculate bins
@@ -650,54 +654,62 @@ class ClusteringMixin:
         extra_iters_used = 0
         all_filled_bins = set()
         all_unfilled_bins = set()
-        for iter_idx, iteration in enumerate(
-                tqdm.tqdm(iters_to_use, desc="Clustering")
-        ):
 
-            if extra_iters_used > 0:
-                extra_iters_used -= 1
-                log.debug(f"Already processed  iter  {iteration}")
-                continue
+        with ProgressBar(progress_bar) as progress_bar:
+            task = progress_bar.add_task(description="Clustering", total=len(iters_to_use), completed=0)
+            for iter_idx, iteration in enumerate(
+                    iters_to_use
+            ):
+
+                if extra_iters_used > 0:
+                    extra_iters_used -= 1
+                    log.debug(f"Already processed  iter  {iteration}")
+                    continue
 
             ignored_bins = []
-
             with concurrent.futures.ProcessPoolExecutor(
                     max_workers=1, mp_context=mp.get_context("fork")
             ) as executor:
 
-                try:
-                    (
-                        stratified_clusters,
-                        extra_iters_used,
-                        filled_bins,
-                        unfilled_bins,
-                    ) = executor.submit(
-                        self.do_stratified_clustering,
-                        [
-                            self,
+                with concurrent.futures.ProcessPoolExecutor(
+                        max_workers=1, mp_context=mp.get_context("fork")
+                ) as executor:
+
+                    try:
+                        (
                             stratified_clusters,
-                            iters_to_use[iter_idx:],
-                            self.processCoordinates,
-                            ignored_bins,
-                        ],
-                    ).result()
+                            extra_iters_used,
+                            filled_bins,
+                            unfilled_bins,
+                        ) = executor.submit(
+                            self.do_stratified_clustering,
+                            [
+                                self,
+                                stratified_clusters,
+                                iters_to_use[iter_idx:],
+                                self.processCoordinates,
+                                ignored_bins,
+                            ],
+                        ).result()
 
-                except AssertionError as e:
-                    # If we succeeded in passing this loop at least once, then all our bins have *something* in them.
-                    # TODO: The better way to handle this is as long as you've clustered something, you can do piecemeal
-                    #   (i.e. don't have to populate every bin after the first time)
-                    if iter_idx == 0:
-                        log.info(
-                            f"Failed with {iter_idx} + {extra_iters_used} vs len {(len(iters_to_use))}"
-                        )
-                        raise e
-                    else:
-                        log.info(
-                            "Clustering couldn't use last iteration, not all bins filled."
-                        )
+                        progress_bar.update(task, advance=1 + extra_iters_used)
 
-                all_filled_bins.update(filled_bins)
-                all_unfilled_bins.update(unfilled_bins)
+                    except AssertionError as e:
+                        # If we succeeded in passing this loop at least once, then all our bins have *something* in them.
+                        # TODO: The better way to handle this is as long as you've clustered something, you can do piecemeal
+                        #   (i.e. don't have to populate every bin after the first time)
+                        if iter_idx == 0:
+                            log.info(
+                                f"Failed with {iter_idx} + {extra_iters_used} vs len {(len(iters_to_use))}"
+                            )
+                            raise e
+                        else:
+                            log.info(
+                                "Clustering couldn't use last iteration, not all bins filled."
+                            )
+
+                    all_filled_bins.update(filled_bins)
+                    all_unfilled_bins.update(unfilled_bins)
 
         # all_filled_bins holds every bin that was clustered in
         # all_unfilled_bins holds any bin that was ever attempted, but unfilled
@@ -727,7 +739,7 @@ class ClusteringMixin:
 
         self.clusters.toggle = False
 
-        self.launch_ray_discretization()
+        self.launch_ray_discretization(progress_bar)
 
     def do_stratified_clustering(self: "modelWE", arg):
         """
@@ -901,7 +913,7 @@ class ClusteringMixin:
 
         return kmeans_models, used_iters, unique_bins, unfilled_bins
 
-    def organize_stratified(self: "modelWE", use_ray=True):
+    def organize_stratified(self: "modelWE", use_ray=True, progress_bar=None):
         """
         Alternative to organize_fluxMatrix, for stratified clustering.
 
@@ -1080,14 +1092,14 @@ class ClusteringMixin:
         # Now re-discretize
         self.clusters.toggle = False
         self.clusters.processing_from = False
-        self.launch_ray_discretization()
+        self.launch_ray_discretization(progress_bar=progress_bar)
 
         pcoord_sort_indices = self.get_cluster_centers()
 
         # And recalculate the flux matrix
         self.clusters.toggle = True
         self.clusters.processing_from = True
-        self.get_fluxMatrix(*self._fluxMatrixParams, use_ray=use_ray)
+        self.get_fluxMatrix(*self._fluxMatrixParams, use_ray=use_ray, progress_bar=progress_bar)
         self.clusters.processing_from = False
         self.clusters.toggle = False
 
@@ -1116,7 +1128,7 @@ class ClusteringMixin:
                 len(connected_sets[start_cleaning_idx:]) == 0
         ), "Still not clean after cleaning!"
 
-    def launch_ray_discretization(self: "modelWE"):
+    def launch_ray_discretization(self: "modelWE", progress_bar=None):
         """
         Apply discretization in parallel, through Ray
 
@@ -1139,7 +1151,7 @@ class ClusteringMixin:
         if self.pre_discretization_model is None:
             self.pre_discretization_model = deepcopy(self)
         else:
-            log.info("Using cached model for discretization")
+            log.debug("Using cached model for discretization")
 
         model_id = ray.put(self.pre_discretization_model)
 
@@ -1151,27 +1163,28 @@ class ClusteringMixin:
         process_coordinates_id = ray.put(self.processCoordinates)
 
         # max_inflight = 50
-        for iteration in tqdm.tqdm(
-                range(1, self.maxIter), desc="Submitting discretization tasks"
-        ):
-            _id = self.do_stratified_ray_discretization.remote(
-                model_id,
-                cluster_model_id,
-                iteration,
-                process_coordinates_id
-                # self, self.clusters, iteration, self.processCoordinates
-            )
-            task_ids.append(_id)
+        with ProgressBar(progress_bar) as progress_bar:
+            submit_task = progress_bar.add_task(description="Submitting discretization tasks", total=self.maxIter-1)
+            for iteration in range(1, self.maxIter):
+                _id = self.do_stratified_ray_discretization.remote(
+                    model_id,
+                    cluster_model_id,
+                    iteration,
+                    process_coordinates_id
+                    # self, self.clusters, iteration, self.processCoordinates
+                )
+                task_ids.append(_id)
+                progress_bar.update(submit_task, advance=1)
 
-        # As they're completed, add them to dtrajs
-        dtrajs = [None] * (self.maxIter - 1)
-        pair_dtrajs = [None, None] * (self.maxIter - 1)
 
-        # Do these in bigger batches, dtrajs aren't very big
+            # As they're completed, add them to dtrajs
+            dtrajs = [None] * (self.maxIter - 1)
+            pair_dtrajs = [None, None] * (self.maxIter - 1)
 
-        with tqdm.tqdm(
-                total=len(task_ids), desc="Retrieving discretized trajectories"
-        ) as pbar:
+            # Do these in bigger batches, dtrajs aren't very big
+
+            retrieve_task = progress_bar.add_task(description="Retrieving discretized trajectories", total=len(task_ids))
+
             while task_ids:
                 result_batch_size = 50
                 result_batch_size = min(result_batch_size, len(task_ids))
@@ -1196,8 +1209,7 @@ class ClusteringMixin:
 
                     pair_dtrajs[iteration - 1] = list(zip(parent_dtraj, child_dtraj))
 
-                    pbar.update(1)
-                    pbar.refresh()
+                    progress_bar.update(retrieve_task, advance=1)
 
                 del results
                 del finished
@@ -1209,7 +1221,7 @@ class ClusteringMixin:
 
         self.pair_dtrajs = [dtraj for dtraj in pair_dtrajs if dtraj is not None]
 
-        log.info("Discretization complete")
+        log.debug("Discretization complete")
 
     @ray.remote
     def do_stratified_ray_discretization(
