@@ -4,7 +4,6 @@ from __future__ import division, print_function
 __metaclass__ = type
 
 import numpy as np
-import rich
 import tqdm.auto as tqdm
 from functools import partialmethod
 import concurrent
@@ -13,7 +12,6 @@ from copy import deepcopy
 import mdtraj as md
 from rich.live import Live
 from rich.table import Table
-from rich.progress import Progress
 from rich.console import Group
 import ray
 from sklearn.utils._openmp_helpers import _openmp_effective_n_threads
@@ -75,9 +73,11 @@ class modelWE(
         #  However, oversubscribing causes very difficult to diagnose problems
         #  (like hanging during clustering / k-means fitting), and 1 seems to be safe.
         if not _openmp_effective_n_threads() == 1:
-            log.critical("Set $OMP_NUM_THREADS=1 for proper msm-we functionality! "
-                         "Other values may cause strange problems such as silent hanging during "
-                         "discretization or ray-parallel steps.")
+            log.critical(
+                "Set $OMP_NUM_THREADS=1 for proper msm-we functionality! "
+                "Other values may cause strange problems such as silent hanging during "
+                "discretization or ray-parallel steps."
+            )
 
         self.modelName = None
         """str: Name used for storing files"""
@@ -682,7 +682,9 @@ class modelWE(
         if use_ray:
             ray.shutdown()
 
-        with Live(renderable_group, refresh_per_second=10, auto_refresh=show_live_display) as live:
+        with Live(
+            renderable_group, refresh_per_second=10, auto_refresh=show_live_display
+        ) as live:
 
             # If live updating was disabled, write to the table once now. (Doesn't do anything if it was enabled)
             live.refresh()
@@ -757,7 +759,7 @@ class modelWE(
                 step=model.dimReduce,
                 kwargs={
                     "progress_bar": progress_bar,
-                    **step_kwargs.get("dimReduce", {})
+                    **step_kwargs.get("dimReduce", {}),
                 },
             )
 
@@ -811,7 +813,11 @@ class modelWE(
                 table,
                 step_idx,
                 step=model.organize_fluxMatrix,
-                kwargs={"use_ray": use_ray, "progress_bar": progress_bar, **step_kwargs.get("organize", {})},
+                kwargs={
+                    "use_ray": use_ray,
+                    "progress_bar": progress_bar,
+                    **step_kwargs.get("organize", {}),
+                },
             )
             final_clusters = model.fluxMatrix.shape[0]
             self.set_note(
@@ -872,7 +878,11 @@ class modelWE(
             live.refresh()
 
     def do_block_validation(
-        self, cross_validation_groups, cross_validation_blocks, use_ray=True, progress_bar=None
+        self,
+        cross_validation_groups,
+        cross_validation_blocks,
+        use_ray=True,
+        progress_bar=None,
     ):
         """
         One way to estimate the uncertainty of your model is to split your data into blocks, compute models over
@@ -949,7 +959,10 @@ class modelWE(
 
                 # Get the flux matrix
                 _model.get_fluxMatrix(
-                    0, iters_to_use=validation_iterations[group], use_ray=use_ray, progress_bar=progress_bar
+                    0,
+                    iters_to_use=validation_iterations[group],
+                    use_ray=use_ray,
+                    progress_bar=progress_bar,
                 )
 
                 # Clean it

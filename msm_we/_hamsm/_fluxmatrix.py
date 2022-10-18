@@ -5,6 +5,7 @@ import concurrent
 import multiprocessing as mp
 from msm_we.utils import find_connected_sets
 from msm_we._logging import log, ProgressBar
+import tqdm.auto as tqdm
 
 from typing import TYPE_CHECKING
 
@@ -170,7 +171,7 @@ class FluxMatrixMixin:
         iters_to_use=None,
         use_ray=False,
         result_batch_size=5,
-        progress_bar=None
+        progress_bar=None,
     ):
         """
         Compute the matrix of fluxes at a given lag time, for a range of iterations.
@@ -237,7 +238,9 @@ class FluxMatrixMixin:
         # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
         if not use_ray:
             with ProgressBar(progress_bar) as progress_bar:
-                task = progress_bar.add_task(description="Constructing flux matrix", total=len(iters_to_use))
+                task = progress_bar.add_task(
+                    description="Constructing flux matrix", total=len(iters_to_use)
+                )
 
                 for iS in iters_to_use:
                     log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
@@ -266,7 +269,9 @@ class FluxMatrixMixin:
             task_ids = []
 
             with ProgressBar(progress_bar) as progress_bar:
-                submit_task = progress_bar.add_task(description="Submitting fluxmatrix tasks", total=len(iters_to_use))
+                submit_task = progress_bar.add_task(
+                    description="Submitting fluxmatrix tasks", total=len(iters_to_use)
+                )
                 for iteration in iters_to_use:
 
                     self.load_iter_data(iteration)
@@ -299,7 +304,9 @@ class FluxMatrixMixin:
                 # Process results as they're ready, instead of in submission order
                 #  See: https://docs.ray.io/en/latest/ray-design-patterns/submission-order.html
                 # Additionally, this batches rather than getting them all at once, or one by one.
-                retrieve_task = progress_bar.add_task(description="Retrieving fluxmatrix tasks", total=len(iters_to_use))
+                retrieve_task = progress_bar.add_task(
+                    description="Retrieving fluxmatrix tasks", total=len(iters_to_use)
+                )
                 while task_ids:
                     result_batch_size = min(result_batch_size, len(task_ids))
                     log.debug(
@@ -441,7 +448,9 @@ class FluxMatrixMixin:
         """
 
         # I don't think this should be used any more... Check to be sure
-        raise DeprecationWarning("organize_aggregated() is not maintained, results may be unexpected!")
+        raise DeprecationWarning(
+            "organize_aggregated() is not maintained, results may be unexpected!"
+        )
 
         original_fluxmatrix = self.fluxMatrixRaw.copy()
 
