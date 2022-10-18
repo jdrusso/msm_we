@@ -736,7 +736,7 @@ class ClusteringMixin:
 
         self.clusters.toggle = False
 
-        self.launch_ray_discretization()
+        self.launch_ray_discretization(progress_bar)
 
     def do_stratified_clustering(self: "modelWE", arg):
         """
