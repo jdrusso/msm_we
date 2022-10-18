@@ -64,6 +64,10 @@ class HAMSMDriver:
             "dimreduce_use_weights", True
         )
 
+        self.cross_validation_groups = self.plugin_config.get(
+            "cross_validation_groups", 2
+        )
+
     def construct_hamsm(self):
         """
         Build an haMSM, for use with later plugins. The final constructed haMSM is stored on the data manager.
@@ -108,6 +112,7 @@ class HAMSMDriver:
             # That's really alarming?
             fluxmatrix_iters=[1, -1],
             allow_validation_failure=True,  # Don't fail if a validation model fails
+            cross_validation_groups=self.cross_validation_groups,
         )
 
         westpa.rc.pstatus(f"Storing built haMSM on {self.data_manager}")
