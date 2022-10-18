@@ -453,7 +453,7 @@ class modelWE(
         resources = ray.cluster_resources()
 
         try:
-            log.info(f"Using Ray cluster with {resources['CPU']} CPUs!")
+            log.debug(f"Using Ray cluster with {resources['CPU']} CPUs!")
         except KeyError as e:
             log.error(f"Total cluster resources were {resources}")
             log.error(f"However, available resources are {ray.available_resources()}")

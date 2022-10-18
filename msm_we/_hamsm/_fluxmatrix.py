@@ -4,8 +4,7 @@ from scipy.sparse import coo_matrix
 import concurrent
 import multiprocessing as mp
 from msm_we.utils import find_connected_sets
-from msm_we._logging import log
-from rich.progress import Progress
+from msm_we._logging import log, ProgressBar
 
 from typing import TYPE_CHECKING
 
@@ -171,7 +170,7 @@ class FluxMatrixMixin:
         iters_to_use=None,
         use_ray=False,
         result_batch_size=5,
-        progress_bar=Progress()
+        progress_bar=None
     ):
         """
         Compute the matrix of fluxes at a given lag time, for a range of iterations.
@@ -237,24 +236,25 @@ class FluxMatrixMixin:
         # FIXME: Duplicated code
         # The range is offset by 1 because you can't calculate fluxes for the 0th iteration
         if not use_ray:
-            task = progress_bar.add_task(description="Constructing flux matrix", total=len(iters_to_use))
+            with ProgressBar(progress_bar) as progress_bar:
+                task = progress_bar.add_task(description="Constructing flux matrix", total=len(iters_to_use))
 
-            for iS in iters_to_use:
-                log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
+                for iS in iters_to_use:
+                    log.debug("getting fluxMatrix iter: " + str(iS) + "\n")
 
-                with concurrent.futures.ProcessPoolExecutor(
-                    max_workers=1, mp_context=mp.get_context("fork")
-                ) as executor:
-                    fluxMatrixI = executor.submit(
-                        self.get_iter_fluxMatrix,
-                        iS,
-                    ).result()
+                    with concurrent.futures.ProcessPoolExecutor(
+                        max_workers=1, mp_context=mp.get_context("fork")
+                    ) as executor:
+                        fluxMatrixI = executor.submit(
+                            self.get_iter_fluxMatrix,
+                            iS,
+                        ).result()
 
-                fluxMatrix = fluxMatrix + fluxMatrixI
-                nI = nI + 1
+                    fluxMatrix = fluxMatrix + fluxMatrixI
+                    nI = nI + 1
 
-                log.debug(f"Completed flux matrix for iter {iS}")
-                progress_bar.advance(task)
+                    log.debug(f"Completed flux matrix for iter {iS}")
+                    progress_bar.update(task, advance=1)
 
         # If we're running through Ray..
         else:
@@ -265,65 +265,66 @@ class FluxMatrixMixin:
             # Submit all the tasks for iteration fluxmatrix calculations
             task_ids = []
 
-            submit_task = progress_bar.add_task(description="Submitting fluxmatrix tasks")
-            for iteration in iters_to_use:
+            with ProgressBar(progress_bar) as progress_bar:
+                submit_task = progress_bar.add_task(description="Submitting fluxmatrix tasks", total=len(iters_to_use))
+                for iteration in iters_to_use:
 
-                self.load_iter_data(iteration)
-                parent_pcoords = self.pcoord0List.copy()
-                child_pcoords = self.pcoord1List.copy()
+                    self.load_iter_data(iteration)
+                    parent_pcoords = self.pcoord0List.copy()
+                    child_pcoords = self.pcoord1List.copy()
 
-                ind_end_in_target = np.where(self.is_WE_target(child_pcoords))
-                ind_start_in_basis = np.where(self.is_WE_basis(parent_pcoords))
-                ind_end_in_basis = np.where(self.is_WE_basis(child_pcoords))
+                    ind_end_in_target = np.where(self.is_WE_target(child_pcoords))
+                    ind_start_in_basis = np.where(self.is_WE_basis(parent_pcoords))
+                    ind_end_in_basis = np.where(self.is_WE_basis(child_pcoords))
 
-                self.get_transition_data_lag0()
-                transition_weights = self.transitionWeights.copy()
+                    self.get_transition_data_lag0()
+                    transition_weights = self.transitionWeights.copy()
 
-                index_pairs = np.array(self.pair_dtrajs[iteration - 1])
+                    index_pairs = np.array(self.pair_dtrajs[iteration - 1])
 
-                _id = self.build_flux_matrix_remote.remote(
-                    self.n_clusters,
-                    index_pairs,
-                    ind_start_in_basis,
-                    ind_end_in_basis,
-                    ind_end_in_target,
-                    transition_weights,
-                    iteration,
-                )
+                    _id = self.build_flux_matrix_remote.remote(
+                        self.n_clusters,
+                        index_pairs,
+                        ind_start_in_basis,
+                        ind_end_in_basis,
+                        ind_end_in_target,
+                        transition_weights,
+                        iteration,
+                    )
 
-                task_ids.append(_id)
-                progress_bar.advance(submit_task)
+                    task_ids.append(_id)
+                    progress_bar.update(submit_task, advance=1)
 
-            # Wait for them to complete
-            # Process results as they're ready, instead of in submission order
-            #  See: https://docs.ray.io/en/latest/ray-design-patterns/submission-order.html
-            # Additionally, this batches rather than getting them all at once, or one by one.
-            retrieve_task = progress_bar.add_task(description="Retrieving fluxmatrix tasks")
-            while task_ids:
-                result_batch_size = min(result_batch_size, len(task_ids))
-                log.debug(
-                    f"Waiting for {result_batch_size} results ({len(task_ids)} total remain)"
-                )
+                # Wait for them to complete
+                # Process results as they're ready, instead of in submission order
+                #  See: https://docs.ray.io/en/latest/ray-design-patterns/submission-order.html
+                # Additionally, this batches rather than getting them all at once, or one by one.
+                retrieve_task = progress_bar.add_task(description="Retrieving fluxmatrix tasks", total=len(iters_to_use))
+                while task_ids:
+                    result_batch_size = min(result_batch_size, len(task_ids))
+                    log.debug(
+                        f"Waiting for {result_batch_size} results ({len(task_ids)} total remain)"
+                    )
 
-                # Returns the first ObjectRefs that are ready, with a 60s timeout.
-                finished, task_ids = ray.wait(
-                    task_ids, num_returns=result_batch_size, timeout=20
-                )
-                results = ray.get(finished)
-                log.debug(f"Obtained {len(results)} results")
+                    # Returns the first ObjectRefs that are ready, with a 60s timeout.
+                    finished, task_ids = ray.wait(
+                        task_ids, num_returns=result_batch_size, timeout=20
+                    )
+                    results = ray.get(finished)
+                    log.debug(f"Obtained {len(results)} results")
 
-                # Add each matrix to the total fluxmatrix
-                for _fmatrix, _iter in results:
-                    fluxMatrix = fluxMatrix + _fmatrix.todense().A
-                    progress_bar.advance(retrieve_task)
+                    # Add each matrix to the total fluxmatrix
+                    for _fmatrix, _iter in results:
+                        fluxMatrix = fluxMatrix + _fmatrix.todense().A
+                        progress_bar.update(retrieve_task, advance=1)
 
-                # Try to free up some memory used by Ray for these objects
-                # See: https://github.com/ray-project/ray/issues/15058
-                # I was running into issues with objects spilling from the object store during fluxmatrix
-                #   calculation. None of the individual calculations should really get that big, so maybe
-                #   something wasn't getting freed from memory when it should've.
-                del finished
-                del results
+                    # Try to free up some memory used by Ray for these objects
+                    # See: https://github.com/ray-project/ray/issues/15058
+                    # I was running into issues with objects spilling from the object store during fluxmatrix
+                    #   calculation. None of the individual calculations should really get that big, so maybe
+                    #   something wasn't getting freed from memory when it should've.
+                    del finished
+                    del results
 
             log.debug("Fluxmatrices all obtained")
             del task_ids
