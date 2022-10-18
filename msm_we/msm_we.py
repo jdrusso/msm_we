@@ -811,7 +811,7 @@ class modelWE(
                 table,
                 step_idx,
                 step=model.organize_fluxMatrix,
-                kwargs={"use_ray": use_ray, **step_kwargs.get("organize", {})},
+                kwargs={"use_ray": use_ray, "progress_bar": progress_bar, **step_kwargs.get("organize", {})},
             )
             final_clusters = model.fluxMatrix.shape[0]
             self.set_note(

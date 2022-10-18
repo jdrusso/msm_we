@@ -336,7 +336,7 @@ class FluxMatrixMixin:
         # Update state with the new, updated, or loaded from file fluxMatrix.
         self.fluxMatrixRaw = fluxMatrix
 
-    def organize_fluxMatrix(self: "modelWE", use_ray=False, **args):
+    def organize_fluxMatrix(self: "modelWE", use_ray=False, progress_bar=None, **args):
         """
         This cleaning step removes all clusters that aren't in the largest connected set, then rediscretizes all the
         trajectories according to the new reduced set of clusters.
@@ -352,7 +352,7 @@ class FluxMatrixMixin:
             self.clustering_method = "aggregated"
 
         if self.clustering_method == "stratified":
-            self.organize_stratified(use_ray)
+            self.organize_stratified(use_ray, progress_bar)
 
             # TODO: Respect do_cleaning=False for blockwise stratified
 

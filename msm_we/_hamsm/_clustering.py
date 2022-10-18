@@ -910,7 +910,7 @@ class ClusteringMixin:
 
         return kmeans_models, used_iters, unique_bins, unfilled_bins
 
-    def organize_stratified(self: "modelWE", use_ray=True):
+    def organize_stratified(self: "modelWE", use_ray=True, progress_bar=None):
         """
         Alternative to organize_fluxMatrix, for stratified clustering.
 
@@ -1089,14 +1089,14 @@ class ClusteringMixin:
         # Now re-discretize
         self.clusters.toggle = False
         self.clusters.processing_from = False
-        self.launch_ray_discretization()
+        self.launch_ray_discretization(progress_bar=progress_bar)
 
         pcoord_sort_indices = self.get_cluster_centers()
 
         # And recalculate the flux matrix
         self.clusters.toggle = True
         self.clusters.processing_from = True
-        self.get_fluxMatrix(*self._fluxMatrixParams, use_ray=use_ray)
+        self.get_fluxMatrix(*self._fluxMatrixParams, use_ray=use_ray, progress_bar=progress_bar)
         self.clusters.processing_from = False
         self.clusters.toggle = False
 
