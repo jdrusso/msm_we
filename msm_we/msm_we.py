@@ -848,6 +848,7 @@ class modelWE(
                             "cross_validation_groups": cross_validation_groups,
                             "cross_validation_blocks": cross_validation_blocks,
                             "use_ray": use_ray,
+                            "progress_bar": progress_bar,
                             **step_kwargs.get("block_validation", {}),
                         },
                     )
@@ -871,7 +872,7 @@ class modelWE(
             live.refresh()
 
     def do_block_validation(
-        self, cross_validation_groups, cross_validation_blocks, use_ray=True
+        self, cross_validation_groups, cross_validation_blocks, use_ray=True, progress_bar=None
     ):
         """
         One way to estimate the uncertainty of your model is to split your data into blocks, compute models over
@@ -948,11 +949,11 @@ class modelWE(
 
                 # Get the flux matrix
                 _model.get_fluxMatrix(
-                    0, iters_to_use=validation_iterations[group], use_ray=use_ray
+                    0, iters_to_use=validation_iterations[group], use_ray=use_ray, progress_bar=progress_bar
                 )
 
                 # Clean it
-                _model.organize_fluxMatrix(use_ray=use_ray)
+                _model.organize_fluxMatrix(use_ray=use_ray, progress_bar=progress_bar)
 
                 # Get tmatrix
                 _model.get_Tmatrix()
