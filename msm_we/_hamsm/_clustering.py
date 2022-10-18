@@ -160,7 +160,7 @@ class ClusteringMixin:
         )
 
         if stratified:
-            log.info("Beginning stratified clustering.")
+            log.debug("Beginning stratified clustering.")
             self.clustering_method = "stratified"
             self.cluster_stratified(
                 n_clusters=n_clusters,
@@ -581,11 +581,11 @@ class ClusteringMixin:
             log.info("Loading user-specified bin mapper for stratified clustering.")
             bin_mapper = user_bin_mapper
         else:
-            log.info(
+            log.debug(
                 f"Obtaining bin definitions from iteration {bin_iteration} in file {self.fileList[0]}"
             )
             iteration = analysis.Run(self.fileList[0]).iteration(bin_iteration)
-            log.info("Loading pickled bin mapper from H5 for stratified clustering...")
+            log.debug("Loading pickled bin mapper from H5 for stratified clustering...")
             bin_mapper = iteration.bin_mapper
 
             # Problem: I need a consistent set of bins, and some bin mappers may not return that! Some may re-calculate bins
@@ -1146,7 +1146,7 @@ class ClusteringMixin:
         if self.pre_discretization_model is None:
             self.pre_discretization_model = deepcopy(self)
         else:
-            log.info("Using cached model for discretization")
+            log.debug("Using cached model for discretization")
 
         model_id = ray.put(self.pre_discretization_model)
 
@@ -1216,7 +1216,7 @@ class ClusteringMixin:
 
         self.pair_dtrajs = [dtraj for dtraj in pair_dtrajs if dtraj is not None]
 
-        log.info("Discretization complete")
+        log.debug("Discretization complete")
 
     @ray.remote
     def do_stratified_ray_discretization(

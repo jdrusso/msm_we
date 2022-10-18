@@ -439,6 +439,9 @@ class FluxMatrixMixin:
         Break this up into find_traps() and clean_traps(list_of_traps).
         """
 
+        # I don't think this should be used any more... Check to be sure
+        raise DeprecationWarning("organize_aggregated() is not maintained, results may be unexpected!")
+
         original_fluxmatrix = self.fluxMatrixRaw.copy()
 
         log.debug("Cleaning flux matrix")
