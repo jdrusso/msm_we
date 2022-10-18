@@ -2,7 +2,7 @@ import h5py
 import numpy as np
 import sys
 import mdtraj as md
-import tqdm.auto as tqdm
+from rich.progress import Progress
 from msm_we._logging import log
 
 from typing import TYPE_CHECKING
@@ -671,7 +671,7 @@ class DataMixin:
                 coordSet = np.append(coordSet, self.cur_iter_coords, axis=0)
         self.all_coords = coordSet
 
-    def get_coordSet(self: "modelWE", last_iter, streaming=None):
+    def get_coordSet(self: "modelWE", last_iter, streaming=None, progress_bar=Progress()):
         """
         Loads all coordinates and progress coordinates into memory for later usage.
 
@@ -708,8 +708,12 @@ class DataMixin:
         last_seg_idx = total_segments
 
         # Update iterations N+1 -> 1
-        for i in tqdm.tqdm(range(last_iter, 0, -1), desc="Getting coordSet"):
+        # for i in tqdm.tqdm(range(last_iter, 0, -1), desc="Getting coordSet"):
+        from rich import progress
+        # for i in progress.track(range(last_iter, 0, -1), description="Getting coordSet", console=self.console):
+        task_id = progress_bar.add_task(total=last_iter, completed=0, description="Getting coordSet")
 
+        for i in range(last_iter, 0, -1):
             self.load_iter_data(i)
             self.load_iter_coordinates()
 
@@ -736,6 +740,7 @@ class DataMixin:
             ]
 
             last_seg_idx = first_seg_idx
+            progress_bar.advance(task_id, 1)
 
         # Set the coords, and pcoords
         if not streaming:

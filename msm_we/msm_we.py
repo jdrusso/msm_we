@@ -4,6 +4,7 @@ from __future__ import division, print_function
 __metaclass__ = type
 
 import numpy as np
+import rich
 import tqdm.auto as tqdm
 from functools import partialmethod
 import concurrent
@@ -12,6 +13,8 @@ from copy import deepcopy
 import mdtraj as md
 from rich.live import Live
 from rich.table import Table
+from rich.progress import Progress
+from rich.console import Group
 import ray
 from sklearn.utils._openmp_helpers import _openmp_effective_n_threads
 
@@ -134,6 +137,8 @@ class modelWE(
         self.pcoord_shape_warned = False
 
         self.pre_discretization_model = None
+
+        # self.progress_bar = Progress()
 
     def initialize(
         # self, fileSpecifier: str, refPDBfile: str, initPDBfile: str, modelName: str
@@ -668,13 +673,16 @@ class modelWE(
 
         """
 
+        progress_bar = Progress()
         table = self.new_table()
+
+        renderable_group = Group(table, progress_bar)
 
         # Clean up any existing Ray instances
         if use_ray:
             ray.shutdown()
 
-        with Live(table, refresh_per_second=4, auto_refresh=show_live_display) as live:
+        with Live(renderable_group, refresh_per_second=10, auto_refresh=show_live_display) as live:
 
             # If live updating was disabled, write to the table once now. (Doesn't do anything if it was enabled)
             live.refresh()
@@ -732,6 +740,9 @@ class modelWE(
                 step_idx,
                 step=model.get_coordSet,
                 args=[_max_coord_iter],
+                kwargs={
+                    "progress_bar": progress_bar,
+                },
             )
             self.set_note(
                 table, step_idx, f"Got coords for {_max_coord_iter} iterations"
@@ -744,7 +755,10 @@ class modelWE(
                 table,
                 step_idx,
                 step=model.dimReduce,
-                kwargs={**step_kwargs.get("dimReduce", {})},
+                kwargs={
+                    "progress_bar": progress_bar,
+                    **step_kwargs.get("dimReduce", {})
+                },
             )
 
             # # Clustering
@@ -759,6 +773,7 @@ class modelWE(
                     "use_ray": use_ray,
                     "stratified": stratified,
                     "store_validation_model": cross_validation_groups > 0,
+                    "progress_bar": progress_bar,
                     **step_kwargs.get("clustering", {}),
                 },
             )
@@ -778,6 +793,7 @@ class modelWE(
                     "last_iter": _fluxmatrix_iters[1],
                     "iters_to_use": fluxmatrix_iters_to_use,
                     "use_ray": use_ray,
+                    "progress_bar": progress_bar,
                     **step_kwargs.get("fluxmatrix", {}),
                 },
             )
