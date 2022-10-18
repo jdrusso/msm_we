@@ -666,7 +666,10 @@ class ClusteringMixin:
                     log.debug(f"Already processed  iter  {iteration}")
                     continue
 
-                ignored_bins = []
+            ignored_bins = []
+            with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=1, mp_context=mp.get_context("fork")
+            ) as executor:
 
                 with concurrent.futures.ProcessPoolExecutor(
                         max_workers=1, mp_context=mp.get_context("fork")
@@ -1173,16 +1176,15 @@ class ClusteringMixin:
                 task_ids.append(_id)
                 progress_bar.update(submit_task, advance=1)
 
+
             # As they're completed, add them to dtrajs
             dtrajs = [None] * (self.maxIter - 1)
             pair_dtrajs = [None, None] * (self.maxIter - 1)
 
             # Do these in bigger batches, dtrajs aren't very big
 
-            # with tqdm.tqdm(
-            #         total=len(task_ids), desc="Retrieving discretized trajectories"
-            # ) as pbar:
             retrieve_task = progress_bar.add_task(description="Retrieving discretized trajectories", total=len(task_ids))
+
             while task_ids:
                 result_batch_size = 50
                 result_batch_size = min(result_batch_size, len(task_ids))
