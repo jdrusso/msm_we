@@ -2,6 +2,67 @@ import numpy as np
 import westpa
 import mdtraj as md
 import os
+import h5py
+
+
+class H5AugmentationDriver:
+    """
+    WESTPA plugin for augmentation when using the HDF5 framework.
+
+    After each iteration, links iter_XXX/auxdata/coord to the appropriate coordinate dataset in iter_XXX.h5.
+
+    Paths to the per-iteration H5 files are stored relative to the west.h5 file in $WEST_SIM_ROOT, so it should
+    be possible to move west.h5 and the supporting iteration h5 files without breaking anything.
+
+    Can be used by including the following entries in your west.cfg::
+
+        west:
+            plugins:
+            - plugin: msm_we.westpa_plugins.augmentation_driver.MDAugmentationDriver
+
+    TODO
+    ----
+    Make a generic AugmentationDriver that loads the correct H5AugmentationDriver/MDAugmentationDriver
+    """
+
+    def __init__(self, sim_manager, plugin_config):
+        westpa.rc.pstatus("Initializing coordinate augmentation plugin")
+
+        if not sim_manager.work_manager.is_master:
+            westpa.rc.pstatus("Not running on the master process, skipping")
+            return
+
+        self.data_manager = sim_manager.data_manager
+        self.sim_manager = sim_manager
+
+        self.plugin_config = plugin_config
+
+        # Big number is low priority -- this should run before anything else
+        self.priority = plugin_config.get("priority", 1)
+
+        sim_manager.register_callback(
+            sim_manager.post_propagation, self.augment_coordinates, self.priority
+        )
+
+        # Explicitly check that the H5 framework is actually enabled
+        assert self.data_manager.store_h5, "H5 framework not enabled! Can't use the H5 framework augmentation driver."
+
+    def augment_coordinates(self):
+        """
+        After propagation completes in a WE iteration, this populates auxdata/coord with a link to the coordinates.
+        """
+
+        westpa.rc.pstatus("Performing augmentation")
+
+        iter_group_name = self.data_manager.get_iter_group(self.sim_manager.n_iter).name
+
+        auxcoord_dataset = f'{iter_group_name}/auxdata/coord'
+
+        # We construct the path to the per-iteration H5 file, using the link already existing in iter_XX/trajectories.
+        # This is a relative path, to make it more robust to moving the data.
+        self.data_manager.we_h5file[auxcoord_dataset] = h5py.SoftLink(
+            path=f'{iter_group_name}/trajectories/sorted_segment_trajectories'
+        )
 
 
 class MDAugmentationDriver:
