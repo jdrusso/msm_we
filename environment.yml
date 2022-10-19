@@ -20,6 +20,7 @@ dependencies:
  - westpa
  - nbsphinx
  - mdanalysis
+ - deeptime
  - pip
  - pip:
    - ray
