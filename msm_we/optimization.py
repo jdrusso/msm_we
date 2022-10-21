@@ -116,10 +116,12 @@ def get_uniform_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bins
     return bin_states
 
 
-def get_clustered_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bins):
+def get_clustered_mfpt_bins(
+    variance, discrepancy, steady_state, n_desired_we_bins, seed=None
+):
     """
-    Implements the MFPT-binning strategy described in [1], where bins are groups of microstates that are uniformly
-    spaced in the integral of pi * v
+    Implements the MFPT-binning strategy described in [1], where bins are groups of microstates that are obtained by
+     k-means clustering on the integral of pi * v
 
     Parameters
     ----------
@@ -131,6 +133,7 @@ def get_clustered_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bi
 
     Returns
     -------
+    An array where each element is the WE bin index assigned to an haMSM microstate.
 
     References
     ----------
@@ -149,7 +152,7 @@ def get_clustered_mfpt_bins(variance, discrepancy, steady_state, n_desired_we_bi
     pi_v_sort = np.argsort(discrepancy).squeeze()
     cumsum = np.cumsum(pi_v[pi_v_sort])
 
-    clusterer = KMeans(n_clusters=min(n_active_bins, len(cumsum)))
+    clusterer = KMeans(n_clusters=min(n_active_bins, len(cumsum)), random_state=seed)
 
     # we_bin_assignments = clusterer.fit_predict(pi_v.reshape(-1, 1))
     we_bin_assignments = clusterer.fit_predict(cumsum.reshape(-1, 1))
