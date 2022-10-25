@@ -132,7 +132,10 @@ def load_model(relative_path, regenerate_coords=False, compressed=False):
     # Patch paths in filelist. As constructed, they're relative paths, from another directory.
     #   This splits off the /restartXX/runYY/west.h5 part and re-writes the paths relative to the tests.
     models = [model]
-    if hasattr(model, 'pre_discretization_model') and model.pre_discretization_model is not None:
+    if (
+        hasattr(model, "pre_discretization_model")
+        and model.pre_discretization_model is not None
+    ):
         models.append(model.pre_discretization_model)
     for _model in models:
         old_paths = _model.fileList
@@ -147,7 +150,7 @@ def load_model(relative_path, regenerate_coords=False, compressed=False):
     return model
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def ray_cluster():
     ray.init()
     yield None
@@ -195,6 +198,30 @@ def JtargetSS():
 
 
 @pytest.fixture
+def discrepancy():
+    """
+    An initialized haMSM model.
+    """
+    return load_numeric("reference/1000ns_ntl9/models/discrepancy.npy")
+
+
+@pytest.fixture
+def variance():
+    """
+    An initialized haMSM model.
+    """
+    return load_numeric("reference/1000ns_ntl9/models/variance.npy")
+
+
+@pytest.fixture
+def ref_clustered_optimization():
+    """
+    An initialized haMSM model.
+    """
+    return load_numeric("reference/1000ns_ntl9/models/optimized_clustered_bins.npy")
+
+
+@pytest.fixture
 def cleanup_generated(generated_filename):
     """
     Fixture to automatically delete all generated h5 files in the root test directory.
@@ -209,6 +236,13 @@ def cleanup_generated(generated_filename):
     except FileNotFoundError:
         pass
 
+
+@pytest.fixture
+def RANDOM_SEED():
+    """Random seed for various stochastic estimators. Putting this as a fixture might be overkill.."""
+    return 42
+
+
 def decompress_pickle(file):
     """
     Convenience function for loading compressed pickles.
@@ -217,6 +251,7 @@ def decompress_pickle(file):
     data = bz2.BZ2File(file, "rb")
     data = cPickle.load(data)
     return data
+
 
 def load_numeric(relative_path):
     path = os.path.join(BASE_PATH, relative_path)

@@ -25,6 +25,7 @@ repos:
         exclude: > 
           (?x)(
               versioneer.py
+              | tests/conftest.py
               | _version.py
               | doc
           )
