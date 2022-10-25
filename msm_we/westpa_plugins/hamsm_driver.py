@@ -64,8 +64,16 @@ class HAMSMDriver:
             "dimreduce_use_weights", True
         )
 
+        self.dimreduce_var_cutoff = self.plugin_config.get(
+            "dimreduce_var_cutoff", None
+        )
+
         self.cross_validation_groups = self.plugin_config.get(
             "cross_validation_groups", 2
+        )
+
+        self.ray_kwargs = self.plugin_config.get(
+            "ray_kwargs", {}
         )
 
     def construct_hamsm(self):
@@ -94,6 +102,7 @@ class HAMSMDriver:
         self.data_manager.close_backing()
 
         ray_kwargs = {"num_cpus": self.plugin_config.get("num_cpus", None)}
+        ray_kwargs.update(self.ray_kwargs)
 
         model = msm_we.modelWE()
         model.build_analyze_model(
@@ -106,7 +115,7 @@ class HAMSMDriver:
             n_clusters=clusters_per_stratum,
             tau=tau,
             ray_kwargs=ray_kwargs,
-            step_kwargs={"dimReduce": {"use_weights": self.dimreduce_use_weights}},
+            step_kwargs={"dimReduce": {"use_weights": self.dimreduce_use_weights, "variance_cutoff": self.dimreduce_var_cutoff}},
             # For some reason if I don't specify fluxmatrix_iters, after the first time around
             # it'll keep using the arguments from the first time...
             # That's really alarming?
