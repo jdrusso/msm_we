@@ -5,9 +5,11 @@ on:
     branches:
       - "gh_actions_dev"
       - "main"
+      - "develop"
   pull_request:
     branches:
       - "main"
+      - "develop"
 
 # Or top-level:
 defaults:

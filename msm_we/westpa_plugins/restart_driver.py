@@ -216,16 +216,6 @@ class RestartDriver(HAMSMDriver):
             "priority", 100
         )  # I think a big number is lower priority...
 
-        # If it's being used with SynD, the full coordinates must be specified for start-state generation.
-        # TODO: Find a more efficient way to do this than explicitly constructing the inverse dictionary.
-        self.synd_full_coord_map_path = plugin_config.get(
-            "synd_full_coord_map_path", None
-        )
-        if self.synd_full_coord_map_path is not None:
-
-            with open(self.synd_full_coord_map_path, "rb") as infile:
-                self.synd_full_coord_map = pickle.load(infile)
-
         sim_manager.register_callback(
             sim_manager.finalize_run, self.prepare_new_we, self.priority
         )
@@ -593,6 +583,10 @@ class RestartDriver(HAMSMDriver):
             old_path = data_folder
 
             # If you're doing an extension, this will be a symlink. So no need to copy, just unlink it and move on
+            # TODO: This overwrite is really obnoxious if you're restarting after a crash during haMSM building.
+            #   At that point, traj_segs will be empty, restartXX/runYY/traj_segs will be populated, and restart.dat
+            #   will indicate the restart is not yet completed. So when you try to start it after the crash, it
+            #   clobbers restartXX/runYY/traj_segs with the empty traj_segs.
             if doing_extension and os.path.islink(old_path):
                 log.debug("Unlinking symlink")
                 os.unlink(old_path)
@@ -934,20 +928,6 @@ class RestartDriver(HAMSMDriver):
                 # Write each structure to disk. Loop over each structure within a bin.
                 msm_bin_we_weight_tracker = 0
 
-                if self.synd_full_coord_map_path is not None:
-                    import hashlib
-
-                    # Here, we have a bunch of structures that, if we're using SynD, we need to be able to map back to
-                    #   discrete states.
-                    # Maybe that's another feature to add to SynD, but in the meantime, we can do the following...
-                    # We can't make a dictionary mapping structures to discrete states, because lists and arrays aren't
-                    #   hashable. But, we can explicitly hash the structures, then use that.
-                    # There's probably a better way of uniquely representing structures, but this will do for now.
-                    self.reverse_coord_map = {
-                        hashlib.md5(v).hexdigest(): k
-                        for k, v in self.synd_full_coord_map.items()
-                    }
-
                 for struct_idx, structure in enumerate(structures):
 
                     # One structure per segment
@@ -961,26 +941,14 @@ class RestartDriver(HAMSMDriver):
                     # Multiscale Model Sim 18, 646–673 (2020).
                     structure_weight = seg_we_weight * (bin_prob / msm_bin_we_weight)
 
-                    if self.synd_full_coord_map_path is not None:
-                        # If we're using SynD, the basis state isn't a structure but a discrete index.
+                    # If we're using the HDF5 framework, we can just link segments to their structures in that
+                    if self.data_manager.store_h5:
 
-                        structure_index = self.reverse_coord_map[
-                            hashlib.md5(structure).hexdigest()
-                        ]
-                        fp.write(
-                            f"b{msm_bin_idx}_s{struct_idx} {structure_weight} {structure_index}\n"
-                        )
-                        seg_idx += 1
+                        iteration, seg_id, h5_file = model.structure_iteration_segments[msm_bin_idx][struct_idx]
+                        structure_filename = f'hdf:{h5_file}:{iteration}:{seg_id}'
 
+                    # Otherwise, we have to actually write structures to disk
                     else:
-
-                        structure_filename = (
-                            f"{struct_directory}/bin{msm_bin_idx}_"
-                            f"struct{struct_idx}.{STRUCT_EXTENSIONS[self.struct_filetype]}"
-                        )
-
-                        total_bin_weights[-1] += structure_weight
-                        total_weight += structure_weight
 
                         topology = model.reference_structure.topology
 
@@ -993,6 +961,11 @@ class RestartDriver(HAMSMDriver):
                             angles, lengths = None, None
 
                         coords = structure * 10  # Correct units
+
+                        structure_filename = (
+                            f"{struct_directory}/bin{msm_bin_idx}_"
+                            f"struct{struct_idx}.{STRUCT_EXTENSIONS[self.struct_filetype]}"
+                        )
 
                         with self.struct_filetype(
                             structure_filename, "w"
@@ -1029,12 +1002,15 @@ class RestartDriver(HAMSMDriver):
                                     "Don't know what extension to use for this filetype"
                                 )
 
-                        # Add this start-state to the start-states file
-                        # This path is relative to WEST_SIM_ROOT
-                        fp.write(
-                            f"b{msm_bin_idx}_s{struct_idx} {structure_weight} {structure_filename}\n"
-                        )
-                        seg_idx += 1
+                    total_bin_weights[-1] += structure_weight
+                    total_weight += structure_weight
+
+                    # Add this start-state to the start-states file
+                    # This path is relative to WEST_SIM_ROOT
+                    fp.write(
+                        f"b{msm_bin_idx}_s{struct_idx} {structure_weight} {structure_filename}\n"
+                    )
+                    seg_idx += 1
 
                 # log.info(f"WE weight ({msm_bin_we_weight_tracker:.5e} / {msm_bin_we_weight:.5e})")
 
