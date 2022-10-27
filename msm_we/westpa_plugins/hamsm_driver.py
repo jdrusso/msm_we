@@ -72,6 +72,10 @@ class HAMSMDriver:
             "cross_validation_groups", 2
         )
 
+        self.ray_address = self.plugin_config.get(
+            "ray_address", None
+        )
+
         self.ray_kwargs = self.plugin_config.get(
             "ray_kwargs", {}
         )
@@ -103,6 +107,9 @@ class HAMSMDriver:
 
         ray_kwargs = {"num_cpus": self.plugin_config.get("num_cpus", None)}
         ray_kwargs.update(self.ray_kwargs)
+
+        if self.ray_address is not None:
+            ray_kwargs.update({'address':self.ray_address})
 
         model = msm_we.modelWE()
         model.build_analyze_model(

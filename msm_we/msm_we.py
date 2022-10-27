@@ -701,10 +701,14 @@ class modelWE(
                 table.columns[1]._cells[0] = "Ray initialization"
                 table.columns[2]._cells[0] = ""
 
+                log.info(f"Initializing Ray cluster with keywords {ray_kwargs}")
+
                 self.do_step(table, step_idx, ray.init, kwargs=ray_kwargs)
                 self.set_note(
                     table, step_idx, f"{ray.available_resources()['CPU']} CPUs"
                 )
+
+                log.info(f"Initialized Ray with resources {ray.available_resources()}")
 
             # # Initialize model
             step_idx += 1
