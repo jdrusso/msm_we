@@ -60,6 +60,26 @@ class HAMSMDriver:
         #   with data from multiple runs.
         self.h5file_paths = [self.data_manager.we_h5filename]
 
+        self.dimreduce_use_weights = self.plugin_config.get(
+            "dimreduce_use_weights", True
+        )
+
+        self.dimreduce_var_cutoff = self.plugin_config.get(
+            "dimreduce_var_cutoff", None
+        )
+
+        self.cross_validation_groups = self.plugin_config.get(
+            "cross_validation_groups", 2
+        )
+
+        self.ray_address = self.plugin_config.get(
+            "ray_address", None
+        )
+
+        self.ray_kwargs = self.plugin_config.get(
+            "ray_kwargs", {}
+        )
+
     def construct_hamsm(self):
         """
         Build an haMSM, for use with later plugins. The final constructed haMSM is stored on the data manager.
@@ -86,6 +106,10 @@ class HAMSMDriver:
         self.data_manager.close_backing()
 
         ray_kwargs = {"num_cpus": self.plugin_config.get("num_cpus", None)}
+        ray_kwargs.update(self.ray_kwargs)
+
+        if self.ray_address is not None:
+            ray_kwargs.update({'address':self.ray_address})
 
         model = msm_we.modelWE()
         model.build_analyze_model(
@@ -98,12 +122,13 @@ class HAMSMDriver:
             n_clusters=clusters_per_stratum,
             tau=tau,
             ray_kwargs=ray_kwargs,
-            step_kwargs={},
+            step_kwargs={"dimReduce": {"use_weights": self.dimreduce_use_weights, "variance_cutoff": self.dimreduce_var_cutoff}},
             # For some reason if I don't specify fluxmatrix_iters, after the first time around
             # it'll keep using the arguments from the first time...
             # That's really alarming?
             fluxmatrix_iters=[1, -1],
             allow_validation_failure=True,  # Don't fail if a validation model fails
+            cross_validation_groups=self.cross_validation_groups,
         )
 
         westpa.rc.pstatus(f"Storing built haMSM on {self.data_manager}")

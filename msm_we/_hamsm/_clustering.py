@@ -1182,6 +1182,8 @@ class ClusteringMixin:
                 task_ids.append(_id)
                 progress_bar.update(submit_task, advance=1)
 
+            progress_bar.update(submit_task, visible=False)
+
             # As they're completed, add them to dtrajs
             dtrajs = [None] * (self.maxIter - 1)
             pair_dtrajs = [None, None] * (self.maxIter - 1)

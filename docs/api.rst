@@ -41,6 +41,7 @@ ________
 .. automethod:: msm_we.modelWE.get_committor
 .. automethod:: msm_we.modelWE.get_flux
 .. automethod:: msm_we.modelWE.get_cluster_centers
+.. automethod:: msm_we.modelWE.update_cluster_structures
 
 Plotting
 ________

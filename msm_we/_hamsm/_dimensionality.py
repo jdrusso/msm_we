@@ -2,6 +2,7 @@ from sklearn.decomposition import IncrementalPCA as iPCA
 import concurrent
 import multiprocessing as mp
 import numpy as np
+from sklearn.decomposition import PCA
 from deeptime.decomposition import TICA, VAMP
 from msm_we._logging import log, ProgressBar
 
@@ -10,10 +11,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from msm_we import modelWE
 
+SUPPORTED_METHODS = ["none", "pca", "vamp", "tica", "batch-pca"]
+
 
 class DimensionalityReductionMixin:
     dimReduceMethod = None
-    """str: Dimensionality reduction method. Must be one of "pca", "vamp", or "none" (**NOT** NoneType)"""
+    """str: Dimensionality reduction method. Must be one of _dimensionality.SUPPORTED_METHODS (**NOT** NoneType)"""
 
     vamp_lag = None
     vamp_dim = None
@@ -55,12 +58,8 @@ class DimensionalityReductionMixin:
         # log.debug("Reducing coordinates")
 
         # TODO: This list should not be stored here, this should be a class attribute or something
-        if (
-            self.dimReduceMethod == "none"
-            or self.dimReduceMethod == "pca"
-            or self.dimReduceMethod == "vamp"
-            or self.dimReduceMethod == "tica"
-        ):
+
+        if self.dimReduceMethod in SUPPORTED_METHODS:
             coords = self.processCoordinates(coords)
             coords = self.coordinates.transform(coords)
             return coords
@@ -178,6 +177,8 @@ class DimensionalityReductionMixin:
                     # Additionally, 'fork' is a little faster than  spawn. Ironically, that's usually at the cost  of memory
                     #   usage. But here, the memory being used by the main thread (and therefore being copied here) isn't
                     #   that great -- the memory issue stems from it not being freed up between successive calls.
+
+                    # TODO: This, and the call below to do_full_pca, both sometimes indefinitely hang.
                     with concurrent.futures.ProcessPoolExecutor(
                         max_workers=1, mp_context=mp.get_context("fork")
                     ) as executor:
@@ -242,30 +243,7 @@ class DimensionalityReductionMixin:
             self.coordinates = ipca
             self.ndim = components_for_var
 
-        # elif self.dimReduceMethod == "vamp":
-        #     # TODO: I  don't think trajSet is initialized by itself -- you need to manually call get_traj_coordinates
-        #     log.warning(
-        #         "VAMP dimensionality reduction requires you to *manually* call get_traj_coordinates first, "
-        #         "or self.trajSet will be all None. Make sure you've done that!"
-        #     )
-        #     raise NotImplementedError
-        #
-        #     ntraj = len(self.trajSet)
-        #     data = [None] * ntraj
-        #     for itraj in range(ntraj):
-        #         data[itraj] = self.processCoordinates(self.trajSet[itraj])
-        #     self.coordinates = coor.vamp(
-        #         data,
-        #         lag=self.vamp_lag,
-        #         dim=self.vamp_dim,
-        #         scaling=None,
-        #         right=False,
-        #         stride=1,
-        #         skip=0,
-        #     )
-        #     self.ndim = self.coordinates.dimension()
-
-        elif self.dimReduceMethod == "tica" or self.dimReduceMethod == "vamp":
+        elif self.dimReduceMethod in ["tica", "vamp", "batch-pca"]:
 
             # TODO: Streaming implementation, a la
             #  https://deeptime-ml.github.io/latest/api/generated/deeptime.decomposition.TICA.html#deeptime.decomposition.TICA.partial_fit
@@ -315,6 +293,8 @@ class DimensionalityReductionMixin:
                 self.coordinates = VAMP(
                     lagtime=1, var_cutoff=variance_cutoff, scaling="kinetic_map"
                 )
+            elif self.dimReduceMethod == "batch-pca":
+                self.coordinates = PCA(n_components=None)
 
             # self.coordinates.fit(trajs)
             log.info(f"Performing weighted {self.dimReduceMethod}")
@@ -325,17 +305,33 @@ class DimensionalityReductionMixin:
             if not use_weights or self.dimReduceMethod == "vamp":
                 weights = None
 
-            self.coordinates.fit_from_timeseries(
-                (np.array(trajs_start), np.array(trajs_end)), weights=weights
-            )
+            if self.dimReduceMethod in ["vamp", "tica"]:
+                self.coordinates.fit_from_timeseries(
+                    (np.array(trajs_start), np.array(trajs_end)), weights=weights
+                )
 
-            # Note: ndim is only used in one place, and it's a deprecated obsolete function
-            self.ndim = self.coordinates.model.output_dimension
+                # Note: ndim is only used in one place, and it's a deprecated obsolete function
+                self.ndim = self.coordinates.model.output_dimension
 
-            log.info(
-                f"Weighted {self.dimReduceMethod} will reduce "
-                f"{self.coordinates._model._instantaneous_coefficients.shape[0]} to {self.ndim} components."
-            )
+                log.info(
+                    f" {self.dimReduceMethod} will reduce "
+                    f"{self.coordinates._model._instantaneous_coefficients.shape[0]} to {self.ndim} components."
+                )
+
+            elif self.dimReduceMethod in ["batch-pca"]:
+
+                data_array = np.concatenate(
+                    [np.array(trajs_start), np.array(trajs_end)]
+                )
+                print(f"Attempting to fit PCA to array of shape {data_array.shape}")
+                self.coordinates.fit(data_array)
+
+                self.ndim = self.coordinates.n_components_
+
+                log.info(
+                    f" {self.dimReduceMethod} will reduce {self.coordinates.n_features_} "
+                    f"to {self.coordinates.n_components_} components."
+                )
 
         elif self.dimReduceMethod == "none":
             self.ndim = int(3 * self.nAtoms)
