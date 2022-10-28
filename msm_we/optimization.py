@@ -128,8 +128,7 @@ def get_clustered_mfpt_bins(
     variance, array-like: Variance function
     discrepancy, array-like: Discrepancy function
     steady_state, array-like: Steady-state distribution
-    n_desired_we_bins int: Number of WE macrobins to assign microstates to -- typically the total number of bins,
-        less any recycling or basis bins
+    n_desired_we_bins int: Number of WE macrobins, *including* any recycling or basis bins
 
     Returns
     -------
