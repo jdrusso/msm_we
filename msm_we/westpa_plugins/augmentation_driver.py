@@ -45,7 +45,9 @@ class H5AugmentationDriver:
         )
 
         # Explicitly check that the H5 framework is actually enabled
-        assert self.data_manager.store_h5, "H5 framework not enabled! Can't use the H5 framework augmentation driver."
+        assert (
+            self.data_manager.store_h5
+        ), "H5 framework not enabled! Can't use the H5 framework augmentation driver."
 
     def augment_coordinates(self):
         """
@@ -56,12 +58,12 @@ class H5AugmentationDriver:
 
         iter_group_name = self.data_manager.get_iter_group(self.sim_manager.n_iter).name
 
-        auxcoord_dataset = f'{iter_group_name}/auxdata/coord'
+        auxcoord_dataset = f"{iter_group_name}/auxdata/coord"
 
         # We construct the path to the per-iteration H5 file, using the link already existing in iter_XX/trajectories.
         # This is a relative path, to make it more robust to moving the data.
         self.data_manager.we_h5file[auxcoord_dataset] = h5py.SoftLink(
-            path=f'{iter_group_name}/trajectories/sorted_segment_trajectories'
+            path=f"{iter_group_name}/trajectories/sorted_segment_trajectories"
         )
 
 
@@ -146,9 +148,16 @@ class MDAugmentationDriver:
                 # If the parent was an i/bstate rather than a segment,
                 #   then load appropriate structure from the bstate/istate here
 
-                segment_istate = self.data_manager.get_segment_initial_states(
-                    [segment]
-                )[0]
+                try:
+                    segment_istate = self.data_manager.get_segment_initial_states(
+                        [segment]
+                    )[0]
+                except IndexError:
+                    # If you can't get the initial state, this may be a continuation from a previous run
+                    # TODO: Check and explicitly verify that augmentation has already been performed, before assuming
+                    #   it has been
+                    continue
+
                 bstate_id = segment_istate.basis_state_id
 
                 segment_bstate = self.data_manager.get_basis_states(
