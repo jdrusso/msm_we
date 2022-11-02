@@ -2,6 +2,7 @@ import h5py
 import logging
 import operator
 import numpy as np
+import hashlib
 
 import westpa
 from westpa.cli.core import w_init
@@ -219,6 +220,16 @@ class RestartDriver(HAMSMDriver):
         sim_manager.register_callback(
             sim_manager.finalize_run, self.prepare_new_we, self.priority
         )
+
+        # If it's being used with SynD, then we need to reference discrete state IDs instead of structure files in our
+        #   start-state definitions.
+        # TODO: Find a more efficient way to do this than explicitly constructing the inverse dictionary.
+        self.synd_full_coord_map_path = plugin_config.get(
+            "synd_full_coord_map_path", None
+        )
+        if self.synd_full_coord_map_path is not None:
+            with open(self.synd_full_coord_map_path, "rb") as infile:
+                self.synd_full_coord_map = pickle.load(infile)
 
         self.pcoord_cache = None
         self.model = None
@@ -488,14 +499,14 @@ class RestartDriver(HAMSMDriver):
                 # If it IS a start-state, then retrieve the pcoord from the cache
                 label = state.label
 
-                template = re.compile(r'^b(\d+)_s(\d+)$')
+                template = re.compile(r"^b(\d+)_s(\d+)$")
                 is_start_state = template.match(label)
 
                 if is_start_state:
 
                     # This is NOT the "segment index" as WESTPA describes it -- it's the index of this structure
                     #   among structures in this cluster.
-                    cluster_idx, cluster_seg_idx = re.findall(r'\d+', state.label)
+                    cluster_idx, cluster_seg_idx = re.findall(r"\d+", state.label)
                     cluster_idx = int(cluster_idx)
                     cluster_seg_idx = int(cluster_seg_idx)
 
@@ -928,6 +939,21 @@ class RestartDriver(HAMSMDriver):
                 # Write each structure to disk. Loop over each structure within a bin.
                 msm_bin_we_weight_tracker = 0
 
+                if self.synd_full_coord_map_path is not None:
+
+                    # Here, we have a bunch of structures that, if we're using SynD, we need to be able to map back to
+                    #   discrete states.
+                    # Maybe that's another feature to add to SynD, but in the meantime, we can do the following...
+                    # We can't make a dictionary mapping structures to discrete states, because lists and arrays aren't
+                    #   hashable. But, we can explicitly hash the structures, then use that.
+                    # There's probably a better way of uniquely representing structures, but this will do for now.
+
+                    self.reverse_coord_map = {}
+                    for state_id, structure in self.synd_full_coord_map.items():
+                        # Explicitly cash this to a float32, because dtype mismatch will give different hashes
+                        _hash = hashlib.md5(structure.astype(np.float32)).hexdigest()
+                        self.reverse_coord_map[_hash] = state_id
+
                 for struct_idx, structure in enumerate(structures):
 
                     # One structure per segment
@@ -941,11 +967,19 @@ class RestartDriver(HAMSMDriver):
                     # Multiscale Model Sim 18, 646–673 (2020).
                     structure_weight = seg_we_weight * (bin_prob / msm_bin_we_weight)
 
-                    # If we're using the HDF5 framework, we can just link segments to their structures in that
-                    if self.data_manager.store_h5:
+                    # If we're using synthetic dynamics, structures need to be integer state IDs
+                    if self.synd_full_coord_map_path is not None:
+                        _hash = hashlib.md5(structure.astype(np.float32)).hexdigest()
+                        structure_index = self.reverse_coord_map[_hash]
+                        structure_filename = f"{structure_index}"
 
-                        iteration, seg_id, h5_file = model.structure_iteration_segments[msm_bin_idx][struct_idx]
-                        structure_filename = f'hdf:{h5_file}:{iteration}:{seg_id}'
+                    # If we're using the HDF5 framework, we can just link segments to their structures in that
+                    elif self.data_manager.store_h5:
+
+                        iteration, seg_id, h5_file = model.structure_iteration_segments[
+                            msm_bin_idx
+                        ][struct_idx]
+                        structure_filename = f"hdf:{h5_file}:{iteration}:{seg_id}"
 
                     # Otherwise, we have to actually write structures to disk
                     else:
@@ -1106,7 +1140,6 @@ class RestartDriver(HAMSMDriver):
 
         with open(self.initialization_file, "w") as fp:
             json.dump(initialization_state, fp)
-
 
         westpa.rc.pstatus(
             f"\n\n"
