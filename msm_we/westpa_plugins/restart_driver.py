@@ -1066,7 +1066,12 @@ class RestartDriver(HAMSMDriver):
 
         bstates_str = ""
         for original_bstate in original_bstates:
-            orig_bstate_prob = original_bstate.probability
+            # We crush the original basis state probabilities here -- they'll be represented in the start-states
+            #   anyways, we mostly just need to provide them for recycling.
+            # As long as their relative weights (within the set of basis states) is unaffected, recycling will work
+            #   the same after this rescaling.
+            # By doing this, we ensure that start-states will dominate probabilities during initialization.
+            orig_bstate_prob = original_bstate.probability * 1e-10
             orig_bstate_label = original_bstate.label
             orig_bstate_aux = original_bstate.auxref
 
