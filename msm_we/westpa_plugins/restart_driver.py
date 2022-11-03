@@ -894,7 +894,7 @@ class RestartDriver(HAMSMDriver):
         # TODO: Don't explicitly write EVERY structure to disk, or this will be a nightmare for large runs.
         # However, for now, it's fine...
         log.debug("Writing structures")
-        # TODO: Include start states from previous runs
+        # TODO: Include start states from previous runs (this is done implicitly if using west.h5 from those runs)
         sstates_filename = f"{restart_directory}/startstates.txt"
         with open(sstates_filename, "w") as fp:
 
@@ -1067,10 +1067,13 @@ class RestartDriver(HAMSMDriver):
         bstates_str = ""
         for original_bstate in original_bstates:
             # We crush the original basis state probabilities here -- they'll be represented in the start-states
-            #   anyways, we mostly just need to provide them for recycling.
+            #   anyway, we mostly just need to provide them for recycling.
             # As long as their relative weights (within the set of basis states) is unaffected, recycling will work
             #   the same after this rescaling.
             # By doing this, we ensure that start-states will dominate probabilities during initialization.
+            # TODO: This is a little gross though, because if we hit the probability too much, we'll get issuers down
+            #   the line from floating point arithmetic. Maybe there's a better way to deprioritize basis-states
+            #   relative to start-states during initialization.
             orig_bstate_prob = original_bstate.probability * 1e-10
             orig_bstate_label = original_bstate.label
             orig_bstate_aux = original_bstate.auxref
