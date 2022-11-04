@@ -605,10 +605,14 @@ class DataMixin:
 
                 else:
                     coords = dset
-                    log.debug(f"Attempting to obtain coordinates from west_file {west_file}, iteration {self.n_iter}")
+                    log.debug(
+                        f"Attempting to obtain coordinates from west_file {west_file}, iteration {self.n_iter}"
+                    )
                     # TODO: This should probably generically be -1, not 1, to deal with variable-length augmentation.
-                    assert cur_iter_coords.shape[1] > 1, "Augmented coords only have 1 point in them -- " \
-                                                         "need at least start & end for transitions"
+                    assert cur_iter_coords.shape[1] > 1, (
+                        "Augmented coords only have 1 point in them -- "
+                        "need at least start & end for transitions"
+                    )
                     cur_iter_coords[segs_contained, :, :] = coords[:, -1, :, :]
 
         self.cur_iter_coords = cur_iter_coords
@@ -709,7 +713,9 @@ class DataMixin:
         # Update iterations N+1 -> 1
 
         with ProgressBar(progress_bar) as progress_bar:
-            task_id = progress_bar.add_task(total=last_iter, completed=0, description="Getting coordSet")
+            task_id = progress_bar.add_task(
+                total=last_iter, completed=0, description="Getting coordSet"
+            )
 
             for i in range(last_iter, 0, -1):
                 self.load_iter_data(i)

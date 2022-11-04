@@ -4,7 +4,6 @@ from __future__ import division, print_function
 __metaclass__ = type
 
 import numpy as np
-import rich
 import tqdm.auto as tqdm
 from functools import partialmethod
 import concurrent
@@ -13,7 +12,6 @@ from copy import deepcopy
 import mdtraj as md
 from rich.live import Live
 from rich.table import Table
-from rich.progress import Progress
 from rich.console import Group
 import ray
 from sklearn.utils._openmp_helpers import _openmp_effective_n_threads
@@ -31,7 +29,7 @@ from ._hamsm import PlottingMixin
 from ._hamsm import AnalysisMixin
 from ._hamsm import DataMixin
 from ._hamsm import FluxMatrixMixin
-from ._logging import log, DefaultProgress
+from ._logging import log, DefaultProgress, ProgressBar
 
 
 class modelWE(
@@ -75,9 +73,11 @@ class modelWE(
         #  However, oversubscribing causes very difficult to diagnose problems
         #  (like hanging during clustering / k-means fitting), and 1 seems to be safe.
         if not _openmp_effective_n_threads() == 1:
-            log.critical("Set $OMP_NUM_THREADS=1 for proper msm-we functionality! "
-                         "Other values may cause strange problems such as silent hanging during "
-                         "discretization or ray-parallel steps.")
+            log.critical(
+                "Set $OMP_NUM_THREADS=1 for proper msm-we functionality! "
+                "Other values may cause strange problems such as silent hanging during "
+                "discretization or ray-parallel steps."
+            )
 
         self.modelName = None
         """str: Name used for storing files"""
@@ -682,7 +682,9 @@ class modelWE(
         if use_ray:
             ray.shutdown()
 
-        with Live(renderable_group, refresh_per_second=10, auto_refresh=show_live_display) as live:
+        with Live(
+            renderable_group, refresh_per_second=10, auto_refresh=show_live_display
+        ) as live:
 
             # If live updating was disabled, write to the table once now. (Doesn't do anything if it was enabled)
             live.refresh()
@@ -699,10 +701,14 @@ class modelWE(
                 table.columns[1]._cells[0] = "Ray initialization"
                 table.columns[2]._cells[0] = ""
 
+                log.info(f"Initializing Ray cluster with keywords {ray_kwargs}")
+
                 self.do_step(table, step_idx, ray.init, kwargs=ray_kwargs)
                 self.set_note(
                     table, step_idx, f"{ray.available_resources()['CPU']} CPUs"
                 )
+
+                log.info(f"Initialized Ray with resources {ray.available_resources()}")
 
             # # Initialize model
             step_idx += 1
@@ -757,7 +763,7 @@ class modelWE(
                 step=model.dimReduce,
                 kwargs={
                     "progress_bar": progress_bar,
-                    **step_kwargs.get("dimReduce", {})
+                    **step_kwargs.get("dimReduce", {}),
                 },
             )
 
@@ -811,7 +817,11 @@ class modelWE(
                 table,
                 step_idx,
                 step=model.organize_fluxMatrix,
-                kwargs={"use_ray": use_ray, "progress_bar": progress_bar, **step_kwargs.get("organize", {})},
+                kwargs={
+                    "use_ray": use_ray,
+                    "progress_bar": progress_bar,
+                    **step_kwargs.get("organize", {}),
+                },
             )
             final_clusters = model.fluxMatrix.shape[0]
             self.set_note(
@@ -848,6 +858,7 @@ class modelWE(
                             "cross_validation_groups": cross_validation_groups,
                             "cross_validation_blocks": cross_validation_blocks,
                             "use_ray": use_ray,
+                            "progress_bar": progress_bar,
                             **step_kwargs.get("block_validation", {}),
                         },
                     )
@@ -871,7 +882,11 @@ class modelWE(
             live.refresh()
 
     def do_block_validation(
-        self, cross_validation_groups, cross_validation_blocks, use_ray=True
+        self,
+        cross_validation_groups,
+        cross_validation_blocks,
+        use_ray=True,
+        progress_bar=None,
     ):
         """
         One way to estimate the uncertainty of your model is to split your data into blocks, compute models over
@@ -926,57 +941,68 @@ class modelWE(
 
         validation_iterations = []
 
-        for group in range(cross_validation_groups):
+        with ProgressBar(progress_bar) as progress_bar:
 
-            group_iterations = []
+            task = progress_bar.add_task(description="Block validation", total=2)
 
-            for block in group_blocks[group]:
-                group_iterations.extend(range(*block_iterations[block]))
+            for group in range(cross_validation_groups):
 
-            validation_iterations.append(group_iterations)
+                group_iterations = []
 
-            # You're looking at this massive try block and judging me -- but don't worry.
-            #   The purpose of this is just to catch ANY error, and preface it with an explicit heads-up that it's coming
-            #   from the block validation. This is useful because errors may crop up only in the block-validation, and it
-            #   should be clear at a glance that it's not from the main model building, but only when the data is split up.
-            try:
-                log.info(
-                    f"Beginning analysis of cross-validation group {group + 1}/{cross_validation_groups}."
-                )
+                for block in group_blocks[group]:
+                    group_iterations.extend(range(*block_iterations[block]))
 
-                _model = validation_models[group]
+                validation_iterations.append(group_iterations)
 
-                # Get the flux matrix
-                _model.get_fluxMatrix(
-                    0, iters_to_use=validation_iterations[group], use_ray=use_ray
-                )
+                # You're looking at this massive try block and judging me -- but don't worry.
+                #   The purpose of this is just to catch ANY error, and preface it with an explicit heads-up that it's coming
+                #   from the block validation. This is useful because errors may crop up only in the block-validation, and it
+                #   should be clear at a glance that it's not from the main model building, but only when the data is split up.
+                try:
+                    log.info(
+                        f"Beginning analysis of cross-validation group {group + 1}/{cross_validation_groups}."
+                    )
 
-                # Clean it
-                _model.organize_fluxMatrix(use_ray=use_ray)
+                    _model = validation_models[group]
 
-                # Get tmatrix
-                _model.get_Tmatrix()
+                    # Get the flux matrix
+                    _model.get_fluxMatrix(
+                        0,
+                        iters_to_use=validation_iterations[group],
+                        use_ray=use_ray,
+                        progress_bar=progress_bar,
+                    )
 
-                # Get steady-state
-                _model.get_steady_state()
+                    # Clean it
+                    _model.organize_fluxMatrix(
+                        use_ray=use_ray, progress_bar=progress_bar
+                    )
 
-                # Get target flux
-                _model.get_steady_state_target_flux()
+                    # Get tmatrix
+                    _model.get_Tmatrix()
 
-                # Get FPT distribution?
-                pass
+                    # Get steady-state
+                    _model.get_steady_state()
 
-            except Exception as e:
+                    # Get target flux
+                    _model.get_steady_state_target_flux()
 
-                log.error("Error during block validation!")
-                log.exception(e)
+                    # Get FPT distribution?
+                    pass
 
-                # TODO: Would be nice to gracefully handle this and move on to the next validation group.
-                #   However, validation models are used in a number of places, and leaving a model with uninitialized
-                #   parameters will cause problems there.
-                #   Maybe a solution is to only populate self.validation_models with successfully generated ones, though
-                #   make sure having the length possibly change there is handled well.
-                raise modelWE.BlockValidationError(e)
+                except Exception as e:
+
+                    log.error("Error during block validation!")
+                    log.exception(e)
+
+                    # TODO: Would be nice to gracefully handle this and move on to the next validation group.
+                    #   However, validation models are used in a number of places, and leaving a model with uninitialized
+                    #   parameters will cause problems there.
+                    #   Maybe a solution is to only populate self.validation_models with successfully generated ones, though
+                    #   make sure having the length possibly change there is handled well.
+                    raise modelWE.BlockValidationError(e)
+
+                progress_bar.advance(task, 1)
 
         # Store the validation models, in case you want to analyze them.
         self.validation_iterations = validation_iterations
