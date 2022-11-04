@@ -24,16 +24,14 @@ SUPPORTED_MAPPERS = {RectilinearBinMapper, VoronoiBinMapper}
 
 @ray.remote
 class ClusteringActor:
-    def __init__(self, model, kmeans_model, iteration, processCoordinates):
+    def __init__(self, model, kmeans_model, processCoordinates):
         self.model = model
         self.kmeans_model = kmeans_model
-        self.iteration = iteration
         self.processCoordinates = processCoordinates
 
-    def discretize(self):
+    def discretize(self, iteration):
         model = self.model
         kmeans_model = self.kmeans_model
-        iteration = self.iteration
         processCoordinates = self.processCoordinates
         # model_id, kmeans_model_id, iteration, processCoordinates_id = arg
 
@@ -60,10 +58,9 @@ class ClusteringActor:
 
         return dtrajs, 1, iteration
 
-    def stratified_discretize(self):
+    def stratified_discretize(self, iteration):
         model = self.model
         kmeans_model = self.kmeans_model
-        iteration = self.iteration
         processCoordinates = self.processCoordinates
         # model_id, kmeans_model_id, iteration, processCoordinates_id = arg
 
@@ -233,8 +230,8 @@ class ClusteringMixin:
         return dtrajs, used_iters
 
     @ray.remote
-    def do_ray_discretization(actor: ClusteringActor):
-        return ray.get(actor.discretize.remote())
+    def do_ray_discretization(actor: ClusteringActor, iteration):
+        return ray.get(actor.discretize.remote(iteration))
 
 
     def cluster_coordinates(
@@ -516,7 +513,7 @@ class ClusteringMixin:
                 task_ids = []
 
                 cluster_actor = ClusteringActor.remote(
-                    self, cluster_model, iteration, self.processCoordinates
+                    self, cluster_model, self.processCoordinates
                 )
                 # max_inflight = 50
                 for iteration in tqdm.tqdm(
@@ -528,7 +525,7 @@ class ClusteringMixin:
                     #     num_ready = iteration - max_inflight
                     #     ray.wait(task_ids, num_returns=num_ready)
 
-                    _id = self.do_ray_discretization.remote(cluster_actor)
+                    _id = self.do_ray_discretization.remote(cluster_actor, iteration)
                     task_ids.append(_id)
 
                 # As they're completed, add them to dtrajs
@@ -1259,7 +1256,7 @@ class ClusteringMixin:
         clusters.model = None  # self.pre_discretization_model
 
         cluster_actor = ClusteringActor.remote(
-            self, clusters, iteration, self.processCoordinates
+            self, clusters, self.processCoordinates
         )
         # max_inflight = 50
         with ProgressBar(progress_bar) as progress_bar:
@@ -1267,7 +1264,7 @@ class ClusteringMixin:
                 description="Submitting discretization tasks", total=self.maxIter - 1
             )
             for iteration in range(1, self.maxIter):
-                _id = self.do_stratified_ray_discretization.remote(cluster_actor)
+                _id = self.do_stratified_ray_discretization.remote(cluster_actor, iteration)
                 task_ids.append(_id)
                 progress_bar.update(submit_task, advance=1)
 
@@ -1320,8 +1317,8 @@ class ClusteringMixin:
         log.debug("Discretization complete")
 
     @ray.remote
-    def do_stratified_ray_discretization(actor: ClusteringActor):
-        return ray.get(actor.stratified_discretize.remote())
+    def do_stratified_ray_discretization(actor: ClusteringActor, iteration):
+        return ray.get(actor.stratified_discretize.remote(iteration))
 
     @staticmethod
     def find_nearest_bin(bin_mapper, bin_idx, filled_bins):
