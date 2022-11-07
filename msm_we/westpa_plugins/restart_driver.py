@@ -234,6 +234,17 @@ class RestartDriver(HAMSMDriver):
         self.pcoord_cache = None
         self.model = None
 
+        # This is the base path to the west.h5 files read in the analysis
+        # By explicitly setting this, we can be flexible to having Ray workers on other filesystems,
+        #   as long as this path can be matched.
+        # We don't assume that each Ray worker is already in the correct working directory (which they
+        #   won't be, if they're running on a remote)
+        self.base_path = plugin_config.get(
+            "base_path",
+            os.getcwd(),
+        )
+        log.info(f"Setting base path to {self.base_path}")
+
     def get_original_bins(self):
         """
         Obtains the WE bins and their probabilities at the end of the previous iteration.
@@ -787,7 +798,9 @@ class RestartDriver(HAMSMDriver):
         for restart_number in usable_restarts:
             for run_number in range(1, 1 + restart_state["runs_completed"]):
 
-                west_file_path = f"restart{restart_number}/run{run_number}/west.h5"
+                west_file_path = (
+                    f"{self.base_path}/restart{restart_number}/run{run_number}/west.h5"
+                )
                 marathon_west_files.append(west_file_path)
 
         log.debug(f"WESTPA datafile for analysis are {marathon_west_files}")
@@ -902,8 +915,19 @@ class RestartDriver(HAMSMDriver):
             seg_idx = 0
 
             log.info(
-                f"Obtaining potential start structures ({len(model.cluster_structures.items())} bins avail)"
+                f"Obtaining potential start structures ({len(model.cluster_structures.items())} bins avail,"
+                f"{len(model.cluster_structure_weights)} weights avail,"
+                f"cluster mapping length is {len(model.cluster_mapping)},"
+                f"ss len is {len(ss_dist)} )"
+                f"model n clusters is {model.n_clusters} )"
             )
+
+            # unique_states = set()
+            # for dtraj in model.dtrajs:
+            #     unique_states.update(np.unique(model.dtrajs))
+            # log.info(len(unique_states))
+
+            log.info(model.cluster_mapping)
 
             # Can use these for sanity checks
             total_weight = 0.0
@@ -924,7 +948,8 @@ class RestartDriver(HAMSMDriver):
                 # Map a cluster number onto a cluster INDEX, because after cleaning the cluster numbers may no longer
                 # be consecutive.
                 bin_prob = ss_dist[
-                    model.cluster_mapping[msm_bin_idx]
+                    # model.cluster_mapping[msm_bin_idx]
+                    msm_bin_idx
                 ]  # / len(structures)
 
                 if bin_prob == 0:
