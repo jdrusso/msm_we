@@ -22,6 +22,9 @@ class HAMSMDriver:
                   tau: WESTPA resampling time in physical units
                   basis_pcoord_bounds: [[pcoord dim 0 lower bound, upper bound], [pcoord dim 1 lower, upper], ...]
                   target_pcoord_bounds: [[pcoord dim 0 lower bound, upper bound], [pcoord dim 1 lower, upper], ...]
+                  first_analysis_iter: Integer of the first iteration of the prior marathon to use for analysis. I.e.,
+                    setting this to 10 would use only iterations 10-end for haMSM construction. This can be useful for
+                    omitting some burn-in after a restart.
                   dim_reduce_method: A string specifying a dimensionality reduction method for
                     :meth:`msm_we.msm_we.modelWE.dimReduce`
                   featurization: An importable python method implementing a featurization
@@ -60,25 +63,21 @@ class HAMSMDriver:
         #   with data from multiple runs.
         self.h5file_paths = [self.data_manager.we_h5filename]
 
+        self.first_iter_to_use = self.plugin_config.get("first_analysis_iter", 1)
+
         self.dimreduce_use_weights = self.plugin_config.get(
             "dimreduce_use_weights", True
         )
 
-        self.dimreduce_var_cutoff = self.plugin_config.get(
-            "dimreduce_var_cutoff", None
-        )
+        self.dimreduce_var_cutoff = self.plugin_config.get("dimreduce_var_cutoff", None)
 
         self.cross_validation_groups = self.plugin_config.get(
             "cross_validation_groups", 2
         )
 
-        self.ray_address = self.plugin_config.get(
-            "ray_address", None
-        )
+        self.ray_address = self.plugin_config.get("ray_address", None)
 
-        self.ray_kwargs = self.plugin_config.get(
-            "ray_kwargs", {}
-        )
+        self.ray_kwargs = self.plugin_config.get("ray_kwargs", {})
 
     def construct_hamsm(self):
         """
@@ -109,7 +108,7 @@ class HAMSMDriver:
         ray_kwargs.update(self.ray_kwargs)
 
         if self.ray_address is not None:
-            ray_kwargs.update({'address':self.ray_address})
+            ray_kwargs.update({"address": self.ray_address})
 
         model = msm_we.modelWE()
         model.build_analyze_model(
@@ -122,11 +121,19 @@ class HAMSMDriver:
             n_clusters=clusters_per_stratum,
             tau=tau,
             ray_kwargs=ray_kwargs,
-            step_kwargs={"dimReduce": {"use_weights": self.dimreduce_use_weights, "variance_cutoff": self.dimreduce_var_cutoff}},
+            step_kwargs={
+                "dimReduce": {
+                    "use_weights": self.dimreduce_use_weights,
+                    "variance_cutoff": self.dimreduce_var_cutoff,
+                    "first_iter": self.first_iter_to_use,
+                    "first_rough_iter": self.first_iter_to_use,
+                },
+                "clustering": {"first_cluster_iter": self.first_iter_to_use},
+            },
             # For some reason if I don't specify fluxmatrix_iters, after the first time around
             # it'll keep using the arguments from the first time...
             # That's really alarming?
-            fluxmatrix_iters=[1, -1],
+            fluxmatrix_iters=[self.first_iter_to_use, -1],
             allow_validation_failure=True,  # Don't fail if a validation model fails
             cross_validation_groups=self.cross_validation_groups,
         )
