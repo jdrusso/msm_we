@@ -511,10 +511,12 @@ class ClusteringMixin:
 
                 # Submit all the discretization tasks to the cluster
                 task_ids = []
+                n_actors = int(ray.available_resources().get("CPU", 1))
 
-                cluster_actor = ClusteringActor.remote(
+                cluster_actors = [ClusteringActor.remote(
                     self, cluster_model, self.processCoordinates
-                )
+                ) for _ in range(n_actors)]
+
                 # max_inflight = 50
                 for iteration in tqdm.tqdm(
                     range(1, self.maxIter), desc="Submitting discretization tasks"
@@ -525,6 +527,7 @@ class ClusteringMixin:
                     #     num_ready = iteration - max_inflight
                     #     ray.wait(task_ids, num_returns=num_ready)
 
+                    cluster_actor = cluster_actors[(iteration - 1) % n_actors]
                     _id = self.do_ray_discretization.remote(cluster_actor, iteration)
                     task_ids.append(_id)
 
@@ -1240,6 +1243,7 @@ class ClusteringMixin:
         """
 
         self.check_connect_ray()
+        n_actors = int(ray.available_resources().get("CPU", 1))
 
         self.dtrajs = []
 
@@ -1255,15 +1259,16 @@ class ClusteringMixin:
         # It's set inside do_stratified_ray_discretization, though I could do it in either place.
         clusters.model = None  # self.pre_discretization_model
 
-        cluster_actor = ClusteringActor.remote(
+        cluster_actors = [ClusteringActor.remote(
             self, clusters, self.processCoordinates
-        )
+        ) for _ in range(n_actors)]
         # max_inflight = 50
         with ProgressBar(progress_bar) as progress_bar:
             submit_task = progress_bar.add_task(
                 description="Submitting discretization tasks", total=self.maxIter - 1
             )
             for iteration in range(1, self.maxIter):
+                cluster_actor = cluster_actors[(iteration - 1) % n_actors]
                 _id = self.do_stratified_ray_discretization.remote(cluster_actor, iteration)
                 task_ids.append(_id)
                 progress_bar.update(submit_task, advance=1)
