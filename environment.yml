@@ -26,3 +26,6 @@ dependencies:
    - ray
    - synd
    - .
+variables:
+  OMP_NUM_THREADS: 1
+  RAY_worker_register_timeout_seconds: 60
