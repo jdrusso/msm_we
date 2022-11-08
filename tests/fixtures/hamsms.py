@@ -152,7 +152,7 @@ def load_model(relative_path, regenerate_coords=False, compressed=False):
 
 @pytest.fixture(scope="session")
 def ray_cluster():
-    ray.init()
+    ray.init(num_cpus=1)
     yield None
     ray.shutdown()
 
