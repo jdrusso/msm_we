@@ -390,16 +390,34 @@ class AnalysisMixin:
         nBins = np.shape(self.targetRMSD_centers)[0]
         J = np.zeros(nBins)
         fluxMatrix = self.fluxMatrix.copy()
+
+        centers = self.targetRMSD_centers.copy()
+        centers[self.indBasis] = self.basis_bin_centers
+        centers[self.indTargets] = self.target_bin_centers
+
+        # TODO: This is an assumption! You may want to sort by other pcoords, or other dimensions of the pcoord.
+        pcoord_to_sort = 0
+        log.warning(
+            "Assuming fluxes should be sorted by pcoord dimension 0 -- this is currently built in to the code."
+        )
+        sorted_centers = np.argsort(centers[:, pcoord_to_sort])
+
+        ordered_flux_matrix = fluxMatrix[sorted_centers][:, sorted_centers].copy()
+
         for i in range(0, nBins - 1):
             indBack = range(i + 1)
             indForward = range(i + 1, nBins)
             JR = 0.0
             JF = 0.0
             for j in indBack:
-                JR = JR + np.sum(fluxMatrix[indForward, j * np.ones_like(indForward)])
+                JR = JR + np.sum(
+                    ordered_flux_matrix[indForward, j * np.ones_like(indForward)]
+                )
             for j in indForward:
-                JF = JF + np.sum(fluxMatrix[indBack, j * np.ones_like(indBack)])
-            J[i] = JR - JF
+                JF = JF + np.sum(
+                    ordered_flux_matrix[indBack, j * np.ones_like(indBack)]
+                )
+            J[sorted_centers[i]] = JR - JF
             self.J = J
 
     def get_flux_committor(self: "modelWE"):
@@ -431,7 +449,9 @@ class AnalysisMixin:
                 JR = JR + np.sum(fluxMatrix[indForward, j * np.ones_like(indForward)])
             for j in indForward:
                 JF = JF + np.sum(fluxMatrix[indBack, j * np.ones_like(indBack)])
-            J[i] = JR - JF
+
+            J[indq[i]] = JR - JF
+
             self.Jq = J.squeeze() / self.tau
             # sys.stdout.write("%s " % i)
 

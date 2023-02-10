@@ -308,6 +308,9 @@ class PlottingMixin:
             J = _model.J / _model.tau
 
             binCenters = _model.targetRMSD_centers[:, pcoord_to_use]
+            binCenters[_model.indTargets] = _model.target_bin_centers
+            binCenters[_model.indBasis] = _model.basis_bin_centers
+
             indPlus = np.where(J > 0.0)
             indMinus = np.where(J < 0.0)
 
