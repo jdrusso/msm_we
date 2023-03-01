@@ -226,23 +226,8 @@ class PlottingMixin:
             color="gray",
             label=f"Linear fit to flux profile\nm={slope:.1e}, b={intercept:.1e}\nr^2={r_value ** 2:.1e}\n",
         )
-        if self.slope_overcorrected:
-            log.warning(
-                "Flux profile appears to be overcorrected! In other words, the flux profile appears higher near the "
-                "target than the basis. "
-                "This suggests restarting may have driven the system past its true steady-state. "
-                "This WE run should be continued without restarting, and allowed to relax. "
-            )
 
-            ax.text(
-                0.5,
-                -0.25,
-                "WARNING: Possible flux overcorrection! WE should be continued without restarting now.",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-                weight="bold",
-            )
+        self.display_overcorrection_warning(ax)
 
         if own_ax:
             ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
@@ -399,23 +384,7 @@ class PlottingMixin:
             label=f"Linear fit (m={slope:.1e}, b={intercept:.1e}, r^2={r_value ** 2:.1e})",
         )
 
-        if self.slope_overcorrected:
-            log.warning(
-                "Flux profile appears to be overcorrected! In other words, the flux profile appears higher near the "
-                "target than the basis. "
-                "This suggests restarting may have driven the system past its true steady-state. "
-                "This WE run should be continued without restarting, and allowed to relax. "
-            )
-
-            ax.text(
-                0.5,
-                -0.25,
-                "WARNING: Possible flux overcorrection! WE should be continued without restarting now.",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-                weight="bold",
-            )
+        self.check_display_overcorrection_warning(ax)
 
         ax.set_yscale("log")
         ax.set_xlabel(f"Pcoord {pcoord_to_use}")
@@ -434,6 +403,27 @@ class PlottingMixin:
             plt.savefig(plot_filename)
 
         return ax
+
+    def display_overcorrection_warning(self, ax):
+
+        if not self.slope_overcorrected:
+            return
+
+        log.warning(
+            "Flux profile appears to be overcorrected! In other words, the flux profile appears higher near the "
+            "target than the basis. "
+            "This suggests restarting may have driven the system past its true steady-state. "
+            "This WE run should be continued without restarting, and allowed to relax. "
+        )
+        ax.text(
+            0.5,
+            -0.25,
+            "WARNING: Possible flux overcorrection! WE should be continued without restarting now.",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            weight="bold",
+        )
 
     def plot_committor(self: "modelWE"):
         fig = plt.figure(figsize=(8, 6))
