@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
- - numpy
+ - numpy<1.24
  - networkx
  - h5py<3.2
  - matplotlib
