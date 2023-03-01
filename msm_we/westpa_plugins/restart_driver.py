@@ -485,6 +485,12 @@ class RestartDriver(HAMSMDriver):
             bbox_inches="tight",
         )
 
+        coarse_flux_fig, ax = model.plot_coarse_flux_profile()
+        coarse_flux_fig.savefig(
+            f"{restart_directory}/coarse_flux_profile.pdf",
+            bbox_inches="tight",
+        )
+
     def init_we(self, initialization_state, pcoord_cache):
 
         start_time = time.perf_counter()

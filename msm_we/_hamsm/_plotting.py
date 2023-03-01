@@ -227,7 +227,7 @@ class PlottingMixin:
             label=f"Linear fit to flux profile\nm={slope:.1e}, b={intercept:.1e}\nr^2={r_value ** 2:.1e}\n",
         )
 
-        self.display_overcorrection_warning(ax)
+        self.check_display_overcorrection_warning(ax)
 
         if own_ax:
             ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
