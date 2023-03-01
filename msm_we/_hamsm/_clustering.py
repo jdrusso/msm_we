@@ -31,6 +31,8 @@ class ClusteringMixin:
     targetRMSD_centers = None
     targetRMSD_minmax = None
     targetRMSD_all = None
+    all_centers = None  # Includes target and basis state coordinates
+    sorted_centers = None
 
     pcoord_cache = None
     cluster_structures = None
@@ -1586,5 +1588,15 @@ class ClusteringMixin:
         self.targetRMSD_centers = cluster_pcoord_centers[pcoord_sort_indices]
         self.targetRMSD_minmax = cluster_pcoord_range[pcoord_sort_indices]
         self.targetRMSD_all = np.array(cluster_pcoord_all)[pcoord_sort_indices]
+
+        # Todo: Don't assume these will always be sorted by pcoord 0
+        log.info("Note: Sorting bins, assuming that pcoord 0 is meaningful for sorting")
+        bin_centers = self.targetRMSD_centers[:, 0]
+        bin_centers[self.indTargets] = self.target_bin_centers
+        bin_centers[self.indBasis] = self.basis_bin_centers
+
+        # All centers includes target/basis
+        self.all_centers = bin_centers
+        self.sorted_centers = np.argsort(bin_centers)
 
         return pcoord_sort_indices
