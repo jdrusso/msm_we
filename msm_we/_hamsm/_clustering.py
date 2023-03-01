@@ -1060,7 +1060,12 @@ class ClusteringMixin:
         )
 
         if len(empty_we_bins) > 0:
-            log.warning(f"All clusters were cleaned from bins {empty_we_bins}")
+
+            log.warning(
+                f"All clusters were cleaned from bins {empty_we_bins} "
+                f"(This is normal for the source/target WE bins, and this "
+                f"can be ignored if only those are listed here.)"
+            )
 
         for empty_we_bin in empty_we_bins:
             # Find the nearest non-empty bin

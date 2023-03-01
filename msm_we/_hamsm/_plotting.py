@@ -44,13 +44,13 @@ class PlottingMixin:
                 continue
 
             if not hasattr(_model, "q"):
-                log.warning(
+                log.info(
                     f"Committors have not yet been generated for {_label}, generating now."
                 )
                 _model.get_committor()
 
             if not hasattr(_model, "Jq"):
-                log.warning(
+                log.info(
                     f"Committor-fluxes have not yet been generated for {_label}, generating now."
                 )
                 _model.get_flux_committor()
@@ -144,13 +144,13 @@ class PlottingMixin:
                 continue
 
             if not hasattr(_model, "q"):
-                log.warning(
+                log.info(
                     f"Committors have not yet been generated for {_label}, generating now."
                 )
                 _model.get_committor()
 
             if not hasattr(_model, "Jq"):
-                log.warning(
+                log.info(
                     f"Committor-fluxes have not yet been generated for {_label}, generating now."
                 )
                 _model.get_flux_committor()
@@ -209,7 +209,7 @@ class PlottingMixin:
 
         # Plot linear fit
         if not hasattr(self, "fit_parameters"):
-            log.warning(
+            log.info(
                 "This appears to be a model from before flux profile curve-fits were implemented. Doing that "
                 "curve fit and recalculating the flux profile now."
             )
@@ -322,7 +322,7 @@ class PlottingMixin:
                 continue
 
             if not hasattr(_model, "J"):
-                log.warning(
+                log.info(
                     f"Fluxes have not yet been generated for {_label}, generating now."
                 )
                 _model.get_flux()
@@ -364,7 +364,7 @@ class PlottingMixin:
 
         # Plot linear fit
         if not hasattr(self, "fit_parameters"):
-            log.warning(
+            log.info(
                 "This appears to be a model from before flux profile curve-fits were implemented. Doing that "
                 "curve fit and recalculating the flux profile now."
             )
