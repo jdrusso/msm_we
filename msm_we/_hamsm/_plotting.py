@@ -390,7 +390,7 @@ class PlottingMixin:
 
         return ax
 
-    def draw_basis_target_boundaries(self, ax, pcoord_to_use=0):
+    def draw_basis_target_boundaries(self: "modelWE", ax, pcoord_to_use=0):
         [
             ax.axvline(
                 bound, color="r", linestyle="--", label=["", "Target boundary"][i == 0]
@@ -407,7 +407,7 @@ class PlottingMixin:
             for i, bound in enumerate(self.basis_pcoord_bounds[pcoord_to_use, :])
         ]
 
-    def check_display_overcorrection_warning(self, ax):
+    def check_display_overcorrection_warning(self: "modelWE", ax):
 
         if not self.slope_overcorrected:
             return
