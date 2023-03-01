@@ -300,21 +300,7 @@ class PlottingMixin:
         ]
 
         # Draw the basis/target boundaries in this pcoord
-        [
-            ax.axvline(
-                bound, color="r", linestyle="--", label=["", "Target boundary"][i == 0]
-            )
-            for i, bound in enumerate(self.target_pcoord_bounds[pcoord_to_use, :])
-        ]
-        [
-            ax.axvline(
-                bound,
-                color="b",
-                linestyle="--",
-                label=["", "Basis/Source boundary"][i == 0],
-            )
-            for i, bound in enumerate(self.basis_pcoord_bounds[pcoord_to_use, :])
-        ]
+        self.draw_basis_target_boundaries(ax, pcoord_to_use)
 
         for i, (_model, _label) in enumerate(zip(_models, _model_labels)):
 
@@ -403,6 +389,23 @@ class PlottingMixin:
             plt.savefig(plot_filename)
 
         return ax
+
+    def draw_basis_target_boundaries(self, ax, pcoord_to_use=0):
+        [
+            ax.axvline(
+                bound, color="r", linestyle="--", label=["", "Target boundary"][i == 0]
+            )
+            for i, bound in enumerate(self.target_pcoord_bounds[pcoord_to_use, :])
+        ]
+        [
+            ax.axvline(
+                bound,
+                color="b",
+                linestyle="--",
+                label=["", "Basis/Source boundary"][i == 0],
+            )
+            for i, bound in enumerate(self.basis_pcoord_bounds[pcoord_to_use, :])
+        ]
 
     def check_display_overcorrection_warning(self, ax):
 
@@ -511,7 +514,8 @@ class PlottingMixin:
 
         return new_net_fluxes, bin_boundaries
 
-    def plot_coarse_flux_profile(self: "modelWE"):
+    def plot_coarse_flux_profile(self: "modelWE", pcoord_to_use=0):
+        # TODO: Standardize this with the other plotting functions
 
         binCenters = self.all_centers
 
@@ -524,33 +528,43 @@ class PlottingMixin:
         is_backwards = np.argwhere(new_net_fluxes < 0)
         is_forward = np.argwhere(new_net_fluxes >= 0)
 
-        plt.scatter(
+        fig, ax = plt.subplots()
+
+        ax.scatter(
             bin_boundaries[is_backwards],
             abs(new_net_fluxes[is_backwards] / self.tau),
             color="b",
             marker=">",
             s=20,
+            label="Flux toward source/basis",
         )
 
-        plt.plot(
+        ax.plot(
             bin_boundaries[is_forward],
             new_net_fluxes[is_forward] / self.tau,
             "r<",
             alpha=1.0,
             linestyle="-",
             linewidth=1,
+            label="Flux toward target",
         )
 
+        self.check_display_overcorrection_warning(ax)
+        self.draw_basis_target_boundaries(ax, pcoord_to_use)
+
         sorted_centers = np.argsort(binCenters)
-        plt.plot(
+        ax.plot(
             binCenters[sorted_centers],
             slope * binCenters[sorted_centers] + intercept,
-            color="k",
+            color="gray",
             label=f"Linear fit (m={slope:.1e}, b={intercept:.1e}, r^2={r_value ** 2:.1e})",
         )
 
-        plt.ylabel("Flux (weight/second)")
-        plt.xlabel("Pcoord 0")
-        plt.yscale("log")
+        ax.set_ylabel("Flux (weight/second)")
+        ax.set_xlabel(f"Pcoord {pcoord_to_use}")
+        ax.set_yscale("log")
 
-        plt.legend(bbox_to_anchor=(0.5, -0.2), loc="upper center")
+        ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
+        fig.tight_layout()
+
+        return ax
