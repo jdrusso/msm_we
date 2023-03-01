@@ -207,6 +207,14 @@ class PlottingMixin:
         ax.set_ylabel("Flux (weight/second)")
         self.print_pseudocommittor_warning()
 
+        # Plot linear fit
+        if not hasattr(self, "fit_parameters"):
+            log.warning(
+                "This appears to be a model from before flux profile curve-fits were implemented. Doing that "
+                "curve fit and recalculating the flux profile now."
+            )
+            self.get_flux()
+
         slope = self.fit_parameters["slope"]
         intercept = self.fit_parameters["intercept"]
         r_value = self.fit_parameters["r_value"]
@@ -370,6 +378,13 @@ class PlottingMixin:
             )
 
         # Plot linear fit
+        if not hasattr(self, "fit_parameters"):
+            log.warning(
+                "This appears to be a model from before flux profile curve-fits were implemented. Doing that "
+                "curve fit and recalculating the flux profile now."
+            )
+            self.get_flux()
+
         slope = self.fit_parameters["slope"]
         intercept = self.fit_parameters["intercept"]
         r_value = self.fit_parameters["r_value"]
@@ -529,6 +544,5 @@ class PlottingMixin:
         plt.ylabel("Flux (weight/second)")
         plt.xlabel("Pcoord 0")
         plt.yscale("log")
-        plt.ylim([1e4, 2e8])
 
         plt.legend(bbox_to_anchor=(0.5, -0.2), loc="upper center")
