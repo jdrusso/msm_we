@@ -565,6 +565,5 @@ class PlottingMixin:
         ax.set_yscale("log")
 
         ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
-        fig.tight_layout()
 
-        return ax
+        return fig, ax
