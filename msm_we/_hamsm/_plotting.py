@@ -207,6 +207,35 @@ class PlottingMixin:
         ax.set_ylabel("Flux (weight/second)")
         self.print_pseudocommittor_warning()
 
+        slope = self.fit_parameters["slope"]
+        intercept = self.fit_parameters["intercept"]
+        r_value = self.fit_parameters["r_value"]
+        # Omit the first and last, because those bin centers may be weird for bins reaching to infinity
+        q_sort = np.argsort(self.q)[1:-1]
+        ax.plot(
+            self.q[q_sort],
+            slope * self.all_centers[q_sort] + intercept,
+            color="gray",
+            label=f"Linear fit to flux profile\nm={slope:.1e}, b={intercept:.1e}\nr^2={r_value ** 2:.1e}\n",
+        )
+        if self.slope_overcorrected:
+            log.warning(
+                "Flux profile appears to be overcorrected! In other words, the flux profile appears higher near the "
+                "target than the basis. "
+                "This suggests restarting may have driven the system past its true steady-state. "
+                "This WE run should be continued without restarting, and allowed to relax. "
+            )
+
+            ax.text(
+                0.5,
+                -0.175,
+                "WARNING: Possible flux overcorrection! WE should be continued without restarting now.",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+                weight="bold",
+            )
+
         if own_ax:
             ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
             fig.tight_layout()
@@ -338,6 +367,39 @@ class PlottingMixin:
                 "<",
                 label=f"{_label} flux toward source/basis",
                 **plot_args,
+            )
+
+        # Plot linear fit
+        slope = self.fit_parameters["slope"]
+        intercept = self.fit_parameters["intercept"]
+        r_value = self.fit_parameters["r_value"]
+        # Don't plot first and last points -- for bins spanning to infinity, these might be weird.
+        log.critical(
+            f"Doing linear fit from {self.sorted_centers[:10]} to {self.sorted_centers[-10:]}"
+        )
+        ax.plot(
+            self.all_centers[self.sorted_centers],
+            slope * self.all_centers[self.sorted_centers] + intercept,
+            color="gray",
+            label=f"Linear fit (m={slope:.1e}, b={intercept:.1e}, r^2={r_value ** 2:.1e})",
+        )
+
+        if self.slope_overcorrected:
+            log.warning(
+                "Flux profile appears to be overcorrected! In other words, the flux profile appears higher near the "
+                "target than the basis. "
+                "This suggests restarting may have driven the system past its true steady-state. "
+                "This WE run should be continued without restarting, and allowed to relax. "
+            )
+
+            ax.text(
+                0.5,
+                -0.175,
+                "WARNING: Possible flux overcorrection! WE should be continued without restarting now.",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+                weight="bold",
             )
 
         ax.set_yscale("log")
