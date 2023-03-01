@@ -1196,7 +1196,7 @@ class RestartDriver(HAMSMDriver):
             f"\nRun: \n\t w_init --tstate-file {tstates_filename} "
             + f"--bstate-file {bstates_filename} --sstate-file {sstates_filename} --segs-per-state {segs_per_state}\n"
         )
-        log.critical(f"Calling init_we with model {model}")
+        # log.critical(f"Calling init_we with model {model}")
 
         self.init_we(initialization_state, self.pcoord_cache)
 
