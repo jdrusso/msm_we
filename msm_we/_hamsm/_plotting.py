@@ -404,7 +404,7 @@ class PlottingMixin:
 
         return ax
 
-    def display_overcorrection_warning(self, ax):
+    def check_display_overcorrection_warning(self, ax):
 
         if not self.slope_overcorrected:
             return
@@ -445,6 +445,24 @@ class PlottingMixin:
         )
 
     def get_coarse_flux_profile(self: "modelWE", min_coarse_bins=10):
+        """
+        Computes a coarse-grained flux profile.
+        Specifically, this downsamples the bin in pcoord-space, and coarse-grains into those.
+        This is a more meaningful approach than grouping N consecutive bins, because bins may not be distributed
+        uniformly through pcoord-space.
+
+        Parameters
+        ----------
+        min_coarse_bins: int, Lower bound on number of coarse-bins
+
+        Returns
+        -------
+        (flux profile, coarse bin boundaries)
+
+        Notes
+        -------
+        This implements a more efficient (but equivalent) flux profile calculation than the one in get_flux().
+        """
 
         binCenters = self.all_centers
 
