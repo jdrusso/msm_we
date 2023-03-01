@@ -1121,6 +1121,8 @@ class ClusteringMixin:
         self.indTargets = np.array([self.n_clusters + 1])
         self.nBins = self.n_clusters + 2
 
+        self.update_sorted_cluster_centers()
+
         self.cluster_mapping = {x: x for x in range(self.n_clusters + 2)}
 
         # Sanity check that cleaning worked
@@ -1589,6 +1591,10 @@ class ClusteringMixin:
         self.targetRMSD_minmax = cluster_pcoord_range[pcoord_sort_indices]
         self.targetRMSD_all = np.array(cluster_pcoord_all)[pcoord_sort_indices]
 
+        return pcoord_sort_indices
+
+    def update_sorted_cluster_centers(self):
+
         # Todo: Don't assume these will always be sorted by pcoord 0
         log.info("Note: Sorting bins, assuming that pcoord 0 is meaningful for sorting")
         bin_centers = self.targetRMSD_centers[:, 0]
@@ -1598,5 +1604,3 @@ class ClusteringMixin:
         # All centers includes target/basis
         self.all_centers = bin_centers
         self.sorted_centers = np.argsort(bin_centers)
-
-        return pcoord_sort_indices
