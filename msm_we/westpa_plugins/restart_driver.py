@@ -392,10 +392,13 @@ class RestartDriver(HAMSMDriver):
         flux_pcoord_fig, flux_pcoord_ax = plt.subplots()
         model.plot_flux(ax=flux_pcoord_ax, suppress_validation=True)
         flux_pcoord_fig.text(
-            x=0.1,
-            y=-0.05,
+            x=0.5,
+            y=-0.15,
+            ha="center",
+            va="center",
             s="This flux profile should become flatter after restarting",
             fontsize=12,
+            transform=flux_pcoord_ax.transAxes,
         )
         flux_pcoord_ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
         flux_pcoord_fig.savefig(
@@ -405,12 +408,15 @@ class RestartDriver(HAMSMDriver):
         flux_pseudocomm_fig, flux_pseudocomm_ax = plt.subplots()
         model.plot_flux_committor(ax=flux_pseudocomm_ax, suppress_validation=True)
         flux_pseudocomm_fig.text(
-            x=0.1,
-            y=-0.05,
+            x=0.5,
+            y=-0.15,
+            ha="center",
+            va="center",
             s="This flux profile should become flatter after restarting."
             '\nThe x-axis is a "pseudo"committor, since it may be '
             "calculated from WE trajectories in the one-way ensemble.",
             fontsize=12,
+            transform=flux_pseudocomm_ax.transAxes,
         )
         flux_pseudocomm_ax.legend(bbox_to_anchor=(1.01, 1.0), loc="upper left")
         flux_pseudocomm_fig.savefig(

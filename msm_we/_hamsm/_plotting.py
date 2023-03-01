@@ -228,7 +228,7 @@ class PlottingMixin:
 
             ax.text(
                 0.5,
-                -0.175,
+                -0.25,
                 "WARNING: Possible flux overcorrection! WE should be continued without restarting now.",
                 ha="center",
                 va="center",
@@ -374,7 +374,7 @@ class PlottingMixin:
         intercept = self.fit_parameters["intercept"]
         r_value = self.fit_parameters["r_value"]
         # Don't plot first and last points -- for bins spanning to infinity, these might be weird.
-        log.critical(
+        log.debug(
             f"Doing linear fit from {self.sorted_centers[:10]} to {self.sorted_centers[-10:]}"
         )
         ax.plot(
@@ -394,7 +394,7 @@ class PlottingMixin:
 
             ax.text(
                 0.5,
-                -0.175,
+                -0.25,
                 "WARNING: Possible flux overcorrection! WE should be continued without restarting now.",
                 ha="center",
                 va="center",
