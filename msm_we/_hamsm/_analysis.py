@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import sparse
+from scipy.stats import linregress
 import sys
 import tqdm.auto as tqdm
 from msm_we._logging import log
@@ -17,6 +18,7 @@ class AnalysisMixin:
     pSS = None
     lagtime = None
     JtargetSS = None
+    fit_parameters = {}
 
     def get_Tmatrix(self: "modelWE"):
         """
@@ -419,6 +421,43 @@ class AnalysisMixin:
                 )
             J[sorted_centers[i]] = JR - JF
             self.J = J
+
+        # Now check if the flux profile is "tilted the wrong way".
+        #   It's been observed that with poor quality haMSMs, continued restarting can actually drive the system to
+        #   a *higher* flux than the steady-state. In other words, can drive the system to an incorrect, too-fast
+        #   steady-state.
+        #   If this happens, letting it run without restarting will allow it to relax back to the real steady-state.
+
+        slope, intercept, r_value, p_value, std_err = linregress(
+            self.all_centers, self.J / self.tau
+        )
+
+        self.fit_parameters = {
+            "slope": slope,
+            "intercept": intercept,
+            "r_value": r_value,
+            "p_value": p_value,
+            "std_err": std_err,
+        }
+
+        # Check if slope is overcorrected
+        target_before_basis = any(self.target_bin_centers < self.basis_bin_centers)
+
+        # Full disclosure: I originally wrote this as `slope_overcorrected = slope * (-1 * !target_before_basis) < 0`
+        #   and I want it to be on record that I didn't
+
+        if target_before_basis:
+            self.slope_overcorrected = slope < 0
+        else:
+            self.slope_overcorrected = slope > 0
+
+        if self.slope_overcorrected:
+            log.warning(
+                "Flux profile appears to be overcorrected! In other words, the flux profile appears higher near the "
+                "target than the basis. "
+                "This suggests restarting may have driven the system past its true steady-state. "
+                "This WE run should be continued without restarting, and allowed to relax. "
+            )
 
     def get_flux_committor(self: "modelWE"):
         """
