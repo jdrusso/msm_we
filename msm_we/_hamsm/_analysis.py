@@ -428,6 +428,12 @@ class AnalysisMixin:
         #   steady-state.
         #   If this happens, letting it run without restarting will allow it to relax back to the real steady-state.
 
+        if not hasattr(self, "all_centers") or self.all_centers is None:
+            log.warning(
+                "This model was built before the self.all_centers attribute was added. Populating it now..."
+            )
+            self.update_sorted_cluster_centers()
+
         slope, intercept, r_value, p_value, std_err = linregress(
             self.all_centers, self.J / self.tau
         )
