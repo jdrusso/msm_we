@@ -14,6 +14,9 @@ msm_we
         
 .. image:: https://codecov.io/github/jdrusso/msm_we/branch/main/graph/badge.svg?token=BGVJ3BY6S2 
         :target: https://codecov.io/github/jdrusso/msm_we
+        
+.. image:: https://zenodo.org/badge/344004587.svg
+        :target: https://zenodo.org/badge/latestdoi/344004587
 
 * Authors: John Russo, Jeremy Copperman
 * Free software: MIT license
