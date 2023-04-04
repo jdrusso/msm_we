@@ -5,7 +5,7 @@ channels:
 dependencies:
  - numpy<1.24
  - networkx
- - h5py<3.2
+ - h5py
  - matplotlib
  - mdtraj
  - pyemma
