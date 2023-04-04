@@ -23,7 +23,7 @@ jobs:
   test:
     name: Test on Linux, Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest 
-    timeout-minutes: 10
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -52,7 +52,7 @@ jobs:
       uses: mamba-org/provision-with-micromamba@main
       with:
         cache-env: true
-        cache-downloads: true
+        #cache-downloads: true
         environment-file: environment.yml
         extra-specs: |
           python=${{ matrix.python-version }}
